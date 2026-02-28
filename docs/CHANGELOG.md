@@ -1,5 +1,48 @@
 # Changelog
 
+## 2026-02-27
+
+### Additions and New Features
+- Created `moviemanager/ui/workers.py` with `Worker` and `ImageDownloadWorker` QRunnable
+  classes for running network/IO operations off the main thread
+- Added image preview in `ImageChooserDialog` that downloads and displays thumbnails
+  asynchronously when a URL is selected
+- Added drag-and-drop support on `MainWindow` to accept directory drops for scanning
+- Added window geometry and state persistence via `QSettings` (save on close, restore on open)
+- Added toolbar icons using `QStyle.standardIcon()` for Open, Scrape, Edit, Rename, Settings
+- Added tooltips to all toolbar buttons showing action name and keyboard shortcut
+- Added template variable help text below Path Template and File Template fields in Settings
+- Added "No results found" feedback label in `MovieChooserDialog` when TMDB returns zero results
+- When GUI launches without a directory argument, it now prompts the user to open a folder
+
+### Behavior or Interface Changes
+- Moved directory scanning, TMDB search, movie scraping, and artwork downloading to background
+  threads using `QThreadPool` and `Worker` classes to prevent UI freezing
+- Changed Scrape shortcut from `Ctrl+S` to `Ctrl+Shift+S` to avoid conflict with
+  standard Save convention
+- Added `F2` keyboard shortcut for Rename action
+- Connected `returnPressed` signal on search and year fields in `MovieChooserDialog` so
+  pressing Enter triggers a search
+- Extended movie table filter to match against year, genres, and director in addition to title
+- Changed plot text area height from fixed 120px max to 80-300px range for better readability
+- Set interactive column resize mode on movie table so users can manually adjust column widths
+- Replaced TMDB ID `QLineEdit` with `QSpinBox` in movie editor to prevent non-numeric input
+- Enhanced About dialog to show version from `pyproject.toml`, author, and license info
+
+### Fixes and Maintenance
+- Fixed `_rename_selected()` silently returning when no movie is selected; now shows
+  "Please select a movie first" message like Scrape and Edit do
+- Added error handling (`QMessageBox.critical`) around all network/API calls at the UI boundary
+  to prevent unhandled exceptions from crashing the app
+- Added unsaved-changes guard on movie editor Cancel: compares current field values to
+  original snapshot and shows "Discard changes?" confirmation when dirty
+- Added overwrite confirmation dialog before downloading artwork that would replace
+  an existing file
+- Added transient status bar messages ("Scan complete", "Scrape complete", "Rename complete",
+  "Metadata saved") with 3-second timeout after successful operations
+- Moved `time.sleep(random.random())` rate limiting from main thread into background
+  download worker to prevent UI freezing
+
 ## 2026-02-28
 
 ### Additions and New Features

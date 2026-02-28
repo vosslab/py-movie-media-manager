@@ -27,7 +27,7 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 
 	#============================================
 	def set_filter(self, text: str) -> None:
-		"""Filter movies by title substring."""
+		"""Filter movies by substring match (#10)."""
 		self.beginResetModel()
 		self._filter_text = text.lower()
 		self._apply_filter()
@@ -35,14 +35,33 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 
 	#============================================
 	def _apply_filter(self) -> None:
-		"""Apply current filter to movie list."""
+		"""Apply current filter to movie list.
+
+		Matches against title, year, and genres (#10).
+		"""
 		if not self._filter_text:
 			self._filtered = list(self._movies)
-		else:
-			self._filtered = [
-				m for m in self._movies
-				if self._filter_text in m.title.lower()
-			]
+			return
+		filtered = []
+		for m in self._movies:
+			# check title
+			if self._filter_text in m.title.lower():
+				filtered.append(m)
+				continue
+			# check year
+			if self._filter_text in m.year.lower():
+				filtered.append(m)
+				continue
+			# check genres (joined as comma-separated string)
+			genres_str = ", ".join(m.genres).lower()
+			if self._filter_text in genres_str:
+				filtered.append(m)
+				continue
+			# check director
+			if self._filter_text in m.director.lower():
+				filtered.append(m)
+				continue
+		self._filtered = filtered
 
 	#============================================
 	def get_movie(self, row: int):

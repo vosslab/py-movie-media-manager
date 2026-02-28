@@ -37,7 +37,12 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 			PySide6.QtWidgets.QAbstractItemView.SelectionMode.SingleSelection
 		)
 		self._table_view.setSortingEnabled(True)
-		self._table_view.horizontalHeader().setStretchLastSection(True)
+		# allow user to manually resize columns (#17)
+		header = self._table_view.horizontalHeader()
+		header.setStretchLastSection(True)
+		header.setSectionResizeMode(
+			PySide6.QtWidgets.QHeaderView.ResizeMode.Interactive
+		)
 		self._splitter.addWidget(self._table_view)
 		# detail panel
 		self._detail = (
@@ -56,7 +61,7 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 	def set_movies(self, movies: list) -> None:
 		"""Load movies into the table."""
 		self._table_model.set_movies(movies)
-		# auto-resize columns
+		# auto-resize columns to fit content
 		self._table_view.resizeColumnsToContents()
 
 	#============================================

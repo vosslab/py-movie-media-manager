@@ -4,6 +4,9 @@
 import PySide6.QtWidgets
 import PySide6.QtCore
 
+# local repo modules
+import moviemanager.ui.workers
+
 
 #============================================
 class MovieChooserDialog(PySide6.QtWidgets.QDialog):
@@ -15,6 +18,7 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		self._api = api
 		self._selected_result = None
 		self._results = []
+		self._pool = PySide6.QtCore.QThreadPool()
 		self.setWindowTitle(f"Scrape - {movie.title}")
 		self.resize(700, 500)
 		self._setup_ui()
@@ -32,15 +36,28 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		search_layout = PySide6.QtWidgets.QHBoxLayout()
 		self._search_field = PySide6.QtWidgets.QLineEdit()
 		self._search_field.setPlaceholderText("Movie title...")
+		# connect Enter key to search (#4)
+		self._search_field.returnPressed.connect(self._do_search)
 		search_layout.addWidget(self._search_field)
 		self._year_field = PySide6.QtWidgets.QLineEdit()
 		self._year_field.setPlaceholderText("Year")
 		self._year_field.setMaximumWidth(80)
+		# connect Enter key on year field too (#4)
+		self._year_field.returnPressed.connect(self._do_search)
 		search_layout.addWidget(self._year_field)
-		search_btn = PySide6.QtWidgets.QPushButton("Search")
-		search_btn.clicked.connect(self._do_search)
-		search_layout.addWidget(search_btn)
+		self._search_btn = PySide6.QtWidgets.QPushButton("Search")
+		self._search_btn.clicked.connect(self._do_search)
+		search_layout.addWidget(self._search_btn)
 		layout.addLayout(search_layout)
+		# no-results label (hidden by default) (#11)
+		self._no_results_label = PySide6.QtWidgets.QLabel(
+			"No results found. Try a different search."
+		)
+		self._no_results_label.setAlignment(
+			PySide6.QtCore.Qt.AlignmentFlag.AlignCenter
+		)
+		self._no_results_label.hide()
+		layout.addWidget(self._no_results_label)
 		# results table
 		self._results_table = PySide6.QtWidgets.QTableWidget()
 		self._results_table.setColumnCount(5)
@@ -65,9 +82,9 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		# buttons
 		btn_layout = PySide6.QtWidgets.QHBoxLayout()
 		btn_layout.addStretch()
-		ok_btn = PySide6.QtWidgets.QPushButton("Scrape Selected")
-		ok_btn.clicked.connect(self._accept_selection)
-		btn_layout.addWidget(ok_btn)
+		self._ok_btn = PySide6.QtWidgets.QPushButton("Scrape Selected")
+		self._ok_btn.clicked.connect(self._accept_selection)
+		btn_layout.addWidget(self._ok_btn)
 		cancel_btn = PySide6.QtWidgets.QPushButton("Cancel")
 		cancel_btn.clicked.connect(self.reject)
 		btn_layout.addWidget(cancel_btn)
@@ -75,14 +92,38 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 
 	#============================================
 	def _do_search(self):
-		"""Search TMDB with current text."""
+		"""Search TMDB with current text in a background thread."""
 		title = self._search_field.text().strip()
 		year = self._year_field.text().strip()
 		if not title:
 			return
-		results = self._api.search_movie(title, year)
+		# disable search button while working
+		self._search_btn.setEnabled(False)
+		self._search_btn.setText("Searching...")
+		self.setCursor(PySide6.QtCore.Qt.CursorShape.WaitCursor)
+		# run search in background thread (#1)
+		worker = moviemanager.ui.workers.Worker(
+			self._api.search_movie, title, year
+		)
+		worker.signals.finished.connect(self._on_search_done)
+		worker.signals.error.connect(self._on_search_error)
+		self._pool.start(worker)
+
+	#============================================
+	def _on_search_done(self, results) -> None:
+		"""Handle search results from background thread."""
+		self.unsetCursor()
+		self._search_btn.setEnabled(True)
+		self._search_btn.setText("Search")
 		self._results = results
 		self._results_table.setRowCount(len(results))
+		# show/hide no-results label (#11)
+		if not results:
+			self._no_results_label.show()
+			self._results_table.hide()
+			return
+		self._no_results_label.hide()
+		self._results_table.show()
 		for row, result in enumerate(results):
 			self._results_table.setItem(
 				row, 0,
@@ -114,6 +155,17 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		self._results_table.resizeColumnsToContents()
 
 	#============================================
+	def _on_search_error(self, error_text: str) -> None:
+		"""Handle search error from background thread (#2)."""
+		self.unsetCursor()
+		self._search_btn.setEnabled(True)
+		self._search_btn.setText("Search")
+		PySide6.QtWidgets.QMessageBox.critical(
+			self, "Search Error",
+			f"TMDB search failed:\n{error_text}"
+		)
+
+	#============================================
 	def _accept_selection(self):
 		"""Accept the selected result and scrape."""
 		row = self._results_table.currentRow()
@@ -124,9 +176,34 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 			)
 			return
 		result = self._results[row]
-		# scrape the movie with the selected TMDB ID
-		self._api.scrape_movie(self._movie, tmdb_id=result.tmdb_id)
+		# scrape in background thread (#1)
+		self._ok_btn.setEnabled(False)
+		self._ok_btn.setText("Scraping...")
+		self.setCursor(PySide6.QtCore.Qt.CursorShape.WaitCursor)
+		worker = moviemanager.ui.workers.Worker(
+			self._api.scrape_movie,
+			self._movie, tmdb_id=result.tmdb_id
+		)
+		worker.signals.finished.connect(self._on_scrape_done)
+		worker.signals.error.connect(self._on_scrape_error)
+		self._pool.start(worker)
+
+	#============================================
+	def _on_scrape_done(self, result) -> None:
+		"""Handle scrape completion."""
+		self.unsetCursor()
 		self.accept()
+
+	#============================================
+	def _on_scrape_error(self, error_text: str) -> None:
+		"""Handle scrape error (#2)."""
+		self.unsetCursor()
+		self._ok_btn.setEnabled(True)
+		self._ok_btn.setText("Scrape Selected")
+		PySide6.QtWidgets.QMessageBox.critical(
+			self, "Scrape Error",
+			f"Failed to scrape movie:\n{error_text}"
+		)
 
 	#============================================
 	def _on_double_click(self, index):

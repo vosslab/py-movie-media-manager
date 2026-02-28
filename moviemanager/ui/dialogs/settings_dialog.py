@@ -67,10 +67,26 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		rename_layout.addRow(
 			"Path Template:", self._path_template_edit
 		)
+		# help text for path template variables (#12)
+		path_help = PySide6.QtWidgets.QLabel(
+			"Variables: {title}, {year}, {rating}, "
+			"{certification}, {genre}"
+		)
+		path_help.setStyleSheet("color: gray; font-size: 11px;")
+		path_help.setWordWrap(True)
+		rename_layout.addRow("", path_help)
 		self._file_template_edit = PySide6.QtWidgets.QLineEdit()
 		rename_layout.addRow(
 			"File Template:", self._file_template_edit
 		)
+		# help text for file template variables (#12)
+		file_help = PySide6.QtWidgets.QLabel(
+			"Variables: {title}, {year}, {rating}, "
+			"{resolution}, {codec}, {audio}"
+		)
+		file_help.setStyleSheet("color: gray; font-size: 11px;")
+		file_help.setWordWrap(True)
+		rename_layout.addRow("", file_help)
 		tabs.addTab(rename_widget, "Renamer")
 		# Artwork tab
 		artwork_widget = PySide6.QtWidgets.QWidget()

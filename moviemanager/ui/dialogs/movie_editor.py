@@ -21,6 +21,8 @@ class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 		self.resize(600, 700)
 		self._setup_ui()
 		self._load_movie()
+		# snapshot of original values for dirty checking (#7)
+		self._original_values = self._get_field_values()
 
 	#============================================
 	def _setup_ui(self):
@@ -45,7 +47,10 @@ class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 		form_layout.addRow("Year:", self._year_edit)
 		self._imdb_edit = PySide6.QtWidgets.QLineEdit()
 		form_layout.addRow("IMDB ID:", self._imdb_edit)
-		self._tmdb_edit = PySide6.QtWidgets.QLineEdit()
+		# use QSpinBox for TMDB ID to prevent non-numeric input (#14)
+		self._tmdb_edit = PySide6.QtWidgets.QSpinBox()
+		self._tmdb_edit.setRange(0, 999999999)
+		self._tmdb_edit.setSpecialValueText("")
 		self._tmdb_edit.setMaximumWidth(120)
 		form_layout.addRow("TMDB ID:", self._tmdb_edit)
 		self._tagline_edit = PySide6.QtWidgets.QLineEdit()
@@ -104,6 +109,54 @@ class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 		layout.addLayout(btn_layout)
 
 	#============================================
+	def _get_field_values(self) -> dict:
+		"""Snapshot current form values for dirty checking (#7)."""
+		values = {
+			"title": self._title_edit.text(),
+			"original_title": self._original_title_edit.text(),
+			"sort_title": self._sort_title_edit.text(),
+			"year": self._year_edit.text(),
+			"imdb_id": self._imdb_edit.text(),
+			"tmdb_id": self._tmdb_edit.value(),
+			"tagline": self._tagline_edit.text(),
+			"plot": self._plot_edit.toPlainText(),
+			"runtime": self._runtime_edit.value(),
+			"rating": self._rating_edit.value(),
+			"certification": self._certification_edit.text(),
+			"director": self._director_edit.text(),
+			"writer": self._writer_edit.text(),
+			"studio": self._studio_edit.text(),
+			"genres": self._genres_edit.text(),
+			"tags": self._tags_edit.text(),
+			"country": self._country_edit.text(),
+			"languages": self._languages_edit.text(),
+			"watched": self._watched_check.isChecked(),
+		}
+		return values
+
+	#============================================
+	def _is_dirty(self) -> bool:
+		"""Check if any field has been modified since load (#7)."""
+		current = self._get_field_values()
+		return current != self._original_values
+
+	#============================================
+	def reject(self) -> None:
+		"""Override reject to warn about unsaved changes (#7)."""
+		if self._is_dirty():
+			reply = PySide6.QtWidgets.QMessageBox.question(
+				self, "Discard Changes?",
+				"You have unsaved changes.\n"
+				"Are you sure you want to discard them?",
+				PySide6.QtWidgets.QMessageBox.StandardButton.Yes
+				| PySide6.QtWidgets.QMessageBox.StandardButton.No,
+			)
+			yes_btn = PySide6.QtWidgets.QMessageBox.StandardButton.Yes
+			if reply != yes_btn:
+				return
+		super().reject()
+
+	#============================================
 	def _load_movie(self):
 		"""Populate form fields from movie."""
 		m = self._movie
@@ -112,8 +165,8 @@ class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 		self._sort_title_edit.setText(m.sort_title)
 		self._year_edit.setText(m.year)
 		self._imdb_edit.setText(m.imdb_id)
-		tmdb_text = str(m.tmdb_id) if m.tmdb_id else ""
-		self._tmdb_edit.setText(tmdb_text)
+		# set TMDB ID via spinbox (#14)
+		self._tmdb_edit.setValue(m.tmdb_id if m.tmdb_id else 0)
 		self._tagline_edit.setText(m.tagline)
 		self._plot_edit.setText(m.plot)
 		self._runtime_edit.setValue(m.runtime)
@@ -137,8 +190,8 @@ class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 		m.sort_title = self._sort_title_edit.text()
 		m.year = self._year_edit.text()
 		m.imdb_id = self._imdb_edit.text()
-		tmdb_text = self._tmdb_edit.text().strip()
-		m.tmdb_id = int(tmdb_text) if tmdb_text.isdigit() else 0
+		# TMDB ID is now a QSpinBox, always an int (#14)
+		m.tmdb_id = self._tmdb_edit.value()
 		m.tagline = self._tagline_edit.text()
 		m.plot = self._plot_edit.toPlainText()
 		m.runtime = self._runtime_edit.value()
