@@ -1,0 +1,10 @@
+cinemagoer  # IMDB data extraction (formerly IMDbPY)
+lxml  # Fast XML and HTML parsing with XPath support
+pillow  # Image I/O and basic image processing (PIL fork)
+pymediainfo  # Codec and resolution detection from media files
+PySide6  # Qt for Python GUI framework
+pyyaml  # YAML parsing and serialization
+requests  # Simple HTTP library
+rich  # Pretty console output, logging, progress bars, and tracebacks
+tabulate  # Pretty print tables in plain text
+tmdbv3api  # TMDB v3 API wrapper for movie metadata

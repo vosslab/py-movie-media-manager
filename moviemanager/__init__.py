@@ -1,0 +1,1 @@
+"""Movie media manager library."""

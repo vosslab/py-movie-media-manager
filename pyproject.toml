@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "movie-media-manager"
+version = "26.02b1"
+description = "Python movie media manager inspired by tinyMediaManager"
+requires-python = ">=3.12"
+license = "GPL-3.0-or-later"
+authors = [
+	{name = "Neil Voss", url = "https://bsky.app/profile/neilvosslab.bsky.social"},
+]
+dependencies = [
+	"cinemagoer",
+	"lxml",
+	"pillow",
+	"pymediainfo",
+	"PySide6",
+	"pyyaml",
+	"requests",
+	"rich",
+	"tabulate",
+	"tmdbv3api",
+]
+
+[project.scripts]
+movie-organizer = "movie_organizer:main"
+
+[tool.setuptools.packages.find]
+include = ["moviemanager*"]
