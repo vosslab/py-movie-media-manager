@@ -1,9 +1,15 @@
 """Facade providing all movie operations for CLI and GUI."""
 
+# Standard Library
+import os
+
 # local repo modules
 import moviemanager.core.movie.movie_list
+import moviemanager.core.movie.renamer
 import moviemanager.core.movie.scanner
+import moviemanager.core.nfo.writer
 import moviemanager.core.settings
+import moviemanager.scraper.tmdb_scraper
 
 
 #============================================
@@ -24,6 +30,7 @@ class MovieAPI:
 			settings = moviemanager.core.settings.Settings()
 		self._settings = settings
 		self._movie_list = moviemanager.core.movie.movie_list.MovieList()
+		self._scraper = None
 
 	#============================================
 	def scan_directory(self, root_path: str) -> list:
@@ -61,6 +68,23 @@ class MovieAPI:
 		return result
 
 	#============================================
+	def _ensure_tmdb_scraper(self) -> None:
+		"""Create the TmdbScraper if not already initialized.
+
+		Raises:
+			ValueError: If no TMDB API key is configured.
+		"""
+		if self._scraper is not None:
+			return
+		api_key = self._settings.tmdb_api_key
+		if not api_key:
+			raise ValueError("TMDB API key is not configured")
+		self._scraper = moviemanager.scraper.tmdb_scraper.TmdbScraper(
+			api_key=api_key,
+			language=self._settings.scrape_language,
+		)
+
+	#============================================
 	def search_movie(self, title: str, year: str = "") -> list:
 		"""Search for movie metadata by title.
 
@@ -71,20 +95,63 @@ class MovieAPI:
 		Returns:
 			List of SearchResult instances from the scraper.
 		"""
-		# scraper integration will be wired in M3
-		result = []
+		self._ensure_tmdb_scraper()
+		result = self._scraper.search(title, year)
 		return result
 
 	#============================================
 	def scrape_movie(self, movie, tmdb_id: int = 0) -> None:
 		"""Fetch and apply metadata from TMDB to a movie.
 
+		Maps MediaMetadata fields onto the Movie object, marks it
+		as scraped, and writes a Kodi-format NFO file.
+
 		Args:
 			movie: Movie instance to update with scraped metadata.
-			tmdb_id: Optional TMDB ID to fetch directly.
+			tmdb_id: TMDB ID to fetch metadata for.
 		"""
-		# scraper integration will be wired in M3
-		pass
+		self._ensure_tmdb_scraper()
+		metadata = self._scraper.get_metadata(tmdb_id=tmdb_id)
+		# map MediaMetadata fields to the Movie object
+		movie.title = metadata.title or movie.title
+		movie.original_title = metadata.original_title or movie.original_title
+		movie.year = metadata.year or movie.year
+		movie.plot = metadata.plot
+		movie.tagline = metadata.tagline
+		movie.runtime = metadata.runtime
+		movie.rating = metadata.rating
+		movie.votes = metadata.votes
+		movie.genres = metadata.genres
+		movie.director = metadata.director
+		movie.writer = metadata.writer
+		movie.studio = metadata.studio
+		movie.country = metadata.country
+		movie.spoken_languages = metadata.spoken_languages
+		movie.imdb_id = metadata.imdb_id
+		movie.tmdb_id = metadata.tmdb_id
+		movie.poster_url = metadata.poster_url
+		movie.fanart_url = metadata.fanart_url
+		movie.certification = metadata.certification
+		movie.release_date = metadata.release_date
+		# convert CastMember dataclasses to dicts for NFO writer
+		movie.actors = [
+			{"name": a.name, "role": a.role, "tmdb_id": a.tmdb_id}
+			for a in metadata.actors
+		]
+		movie.scraped = True
+		# build NFO path from first video file basename
+		nfo_path = ""
+		video_file = movie.video_file
+		if video_file:
+			base, _ = os.path.splitext(video_file.filename)
+			nfo_path = os.path.join(movie.path, base + ".nfo")
+		else:
+			# fallback: use movie title
+			safe_title = movie.title or "movie"
+			nfo_path = os.path.join(movie.path, safe_title + ".nfo")
+		# write the NFO file
+		moviemanager.core.nfo.writer.write_nfo(movie, nfo_path)
+		movie.nfo_path = nfo_path
 
 	#============================================
 	def rename_movie(
@@ -105,8 +172,14 @@ class MovieAPI:
 		Returns:
 			List of (source, destination) path tuples.
 		"""
-		# renamer integration will be wired in M3
-		result = []
+		# use settings templates as defaults
+		if not path_template:
+			path_template = self._settings.path_template
+		if not file_template:
+			file_template = self._settings.file_template
+		result = moviemanager.core.movie.renamer.rename_movie(
+			movie, path_template, file_template, dry_run=dry_run,
+		)
 		return result
 
 	#============================================

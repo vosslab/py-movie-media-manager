@@ -2,6 +2,7 @@
 """Movie media manager CLI tool."""
 
 # Standard Library
+import os
 import argparse
 
 # PIP3 modules
@@ -136,38 +137,124 @@ def cmd_info(args: argparse.Namespace) -> None:
 	"""
 	settings = moviemanager.core.settings.load_settings(args.config_file)
 	api = moviemanager.api.movie_api.MovieAPI(settings)
-	api.scan_directory(args.directory)
+	movies = api.scan_directory(args.directory)
 	console = rich.console.Console()
 	console.print(f"Total movies:    {api.get_movie_count()}")
 	console.print(f"Scraped:         {api.get_scraped_count()}")
 	console.print(f"Unscraped:       {api.get_unscraped_count()}")
+	# count movies with artwork files
+	poster_count = sum(1 for m in movies if m.poster_url)
+	fanart_count = sum(1 for m in movies if m.fanart_url)
+	console.print(f"With poster:     {poster_count}")
+	console.print(f"With fanart:     {fanart_count}")
 
 
 #============================================
 def cmd_scrape(args: argparse.Namespace) -> None:
-	"""Placeholder for scrape command.
+	"""Scrape metadata from TMDB for unscraped movies.
 
 	Args:
 		args: Parsed command-line arguments.
 	"""
+	settings = moviemanager.core.settings.load_settings(args.config_file)
+	# override tmdb key from CLI if provided
+	if args.tmdb_key:
+		settings.tmdb_api_key = args.tmdb_key
+	api = moviemanager.api.movie_api.MovieAPI(settings)
+	api.scan_directory(args.directory)
+	unscraped = api.get_unscraped()
 	console = rich.console.Console()
-	console.print(
-		"[yellow]Scrape command requires TMDB API key"
-		" and will be fully wired in M3.[/yellow]"
-	)
+	if not unscraped:
+		console.print("All movies are already scraped.")
+		return
+	console.print(f"Found {len(unscraped)} unscraped movies.\n")
+	for movie in unscraped:
+		console.print(f"Searching: {movie.title} ({movie.year})")
+		results = api.search_movie(movie.title, movie.year)
+		if not results:
+			console.print("  No results found, skipping.\n")
+			continue
+		# display results table
+		table = rich.table.Table(title="Search Results")
+		table.add_column("#", style="bold")
+		table.add_column("Title", style="cyan")
+		table.add_column("Year", style="green")
+		table.add_column("TMDB ID", style="yellow")
+		for idx, sr in enumerate(results[:10], start=1):
+			table.add_row(
+				str(idx), sr.title, sr.year, str(sr.tmdb_id)
+			)
+		console.print(table)
+		# select result
+		chosen_id = 0
+		if args.batch_mode:
+			# auto-select first result in batch mode
+			chosen_id = results[0].tmdb_id
+			console.print(f"  Batch: auto-selected '{results[0].title}'")
+		else:
+			# interactive: prompt user to pick
+			choice = input("Pick a number (0 to skip): ").strip()
+			if choice.isdigit() and 1 <= int(choice) <= len(results[:10]):
+				chosen_id = results[int(choice) - 1].tmdb_id
+			else:
+				console.print("  Skipped.\n")
+				continue
+		# scrape the chosen movie
+		api.scrape_movie(movie, chosen_id)
+		console.print(f"  Scraped: {movie.title} ({movie.year})\n")
 
 
 #============================================
 def cmd_rename(args: argparse.Namespace) -> None:
-	"""Placeholder for rename command.
+	"""Rename movie files according to a template.
 
 	Args:
 		args: Parsed command-line arguments.
 	"""
+	settings = moviemanager.core.settings.load_settings(args.config_file)
+	# override template from CLI if provided
+	if args.template:
+		settings.path_template = args.template
+		settings.file_template = args.template
+	api = moviemanager.api.movie_api.MovieAPI(settings)
+	movies = api.scan_directory(args.directory)
 	console = rich.console.Console()
-	console.print(
-		"[yellow]Rename command will be fully wired in M3.[/yellow]"
-	)
+	if not movies:
+		console.print("No movies found.")
+		return
+	# preview renames (always dry_run first)
+	all_pairs = []
+	for movie in movies:
+		pairs = api.rename_movie(movie, dry_run=True)
+		all_pairs.extend(pairs)
+	if not all_pairs:
+		console.print("No renames needed.")
+		return
+	# show preview table
+	table = rich.table.Table(title="Rename Preview")
+	table.add_column("Source", style="cyan")
+	table.add_column("Destination", style="green")
+	for source, dest in all_pairs:
+		table.add_row(
+			os.path.basename(source), os.path.basename(dest)
+		)
+	console.print(table)
+	# if dry run, stop here
+	if args.dry_run:
+		console.print("\nDry run -- no files moved.")
+		return
+	# prompt user for confirmation
+	answer = input("Proceed with rename? [y/N] ").strip().lower()
+	if answer != "y":
+		console.print("Aborted.")
+		return
+	# execute renames
+	for movie in movies:
+		pairs = api.rename_movie(movie, dry_run=False)
+		for source, dest in pairs:
+			console.print(f"  Moved: {os.path.basename(source)}"
+				f" -> {os.path.basename(dest)}")
+	console.print(f"\nRenamed {len(movies)} movies.")
 
 
 #============================================

@@ -1,11 +1,5 @@
 """Tests for the movie directory scanner."""
 
-# Standard Library
-import os
-
-# PIP3 modules
-import pytest
-
 # local repo modules
 import moviemanager.core.movie.scanner
 import moviemanager.core.models.movie
@@ -19,7 +13,7 @@ def _touch(path: str) -> None:
 	Args:
 		path: Full file path to create.
 	"""
-	with open(path, "w") as f:
+	with open(path, "w"):
 		pass
 
 

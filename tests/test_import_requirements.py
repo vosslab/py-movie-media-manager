@@ -31,7 +31,7 @@ IMPORT_REQUIREMENT_ALIASES = {
 	"cv2": "opencv-python",
 	"google": "google-api-python-client",
 	"googleapiclient": "google-api-python-client",
-	"imdb": "IMDbPY",
+	"imdb": "cinemagoer",
 	"image": "pillow",
 	"imagedraw": "pillow",
 	"imagetk": "pillow",
