@@ -123,6 +123,10 @@ class ImdbScraper(moviemanager.scraper.interfaces.MetadataProvider):
 		# extract country
 		countries = movie_obj.get("countries", [])
 		country = ", ".join(countries)
+		# extract poster URL from cinemagoer data
+		poster_url = movie_obj.get("full-size cover url", "") or ""
+		if not poster_url:
+			poster_url = movie_obj.get("cover url", "") or ""
 		# format imdb_id with tt prefix
 		formatted_imdb_id = f"tt{int(movie_obj.movieID):07d}"
 		metadata = moviemanager.scraper.types.MediaMetadata(
@@ -140,6 +144,7 @@ class ImdbScraper(moviemanager.scraper.interfaces.MetadataProvider):
 			actors=actors,
 			country=country,
 			imdb_id=formatted_imdb_id,
+			poster_url=poster_url,
 			media_source="imdb",
 		)
 		return metadata

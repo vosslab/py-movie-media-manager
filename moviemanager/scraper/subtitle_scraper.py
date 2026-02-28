@@ -1,7 +1,6 @@
 """OpenSubtitles REST API client for subtitle search and download."""
 
 # Standard Library
-import os
 import time
 import random
 

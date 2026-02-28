@@ -114,8 +114,8 @@ class MovieAPI:
 		return result
 
 	#============================================
-	def scrape_movie(self, movie, tmdb_id: int = 0) -> None:
-		"""Fetch and apply metadata from TMDB to a movie.
+	def scrape_movie(self, movie, tmdb_id: int = 0, imdb_id: str = "") -> None:
+		"""Fetch and apply metadata to a movie from the active scraper.
 
 		Maps MediaMetadata fields onto the Movie object, marks it
 		as scraped, and writes a Kodi-format NFO file.
@@ -123,9 +123,12 @@ class MovieAPI:
 		Args:
 			movie: Movie instance to update with scraped metadata.
 			tmdb_id: TMDB ID to fetch metadata for.
+			imdb_id: IMDB ID to fetch metadata for.
 		"""
 		self._ensure_scraper()
-		metadata = self._scraper.get_metadata(tmdb_id=tmdb_id)
+		metadata = self._scraper.get_metadata(
+			tmdb_id=tmdb_id, imdb_id=imdb_id
+		)
 		# map MediaMetadata fields to the Movie object
 		movie.title = metadata.title or movie.title
 		movie.original_title = metadata.original_title or movie.original_title

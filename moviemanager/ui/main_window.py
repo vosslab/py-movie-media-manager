@@ -478,7 +478,15 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			)
 			if results:
 				best = results[0]
-				self._api.scrape_movie(movie, tmdb_id=best.tmdb_id)
+				# use tmdb_id or imdb_id depending on provider
+				if best.tmdb_id:
+					self._api.scrape_movie(
+						movie, tmdb_id=best.tmdb_id
+					)
+				elif best.imdb_id:
+					self._api.scrape_movie(
+						movie, imdb_id=best.imdb_id
+					)
 				scraped_count += 1
 		progress.setValue(len(unscraped))
 		# refresh table

@@ -3,6 +3,44 @@
 ## 2026-02-27
 
 ### Additions and New Features
+- Created `moviemanager/ui/menu_builder.py` with YAML-driven menu and shortcut construction
+  from `moviemanager/ui/menu_config.yaml`; replaces hardcoded menu setup in main_window.py
+- Created `moviemanager/ui/theme.py` with dark/light/system palette support and
+  `apply_theme()` function
+- Added dark mode toggle: View > Dark Mode menu item toggles between dark and system theme,
+  persists preference in settings
+- Added YAML menu configuration (`menu_config.yaml`) defining all menus, shortcuts, and
+  checkable/storable actions
+- Added new settings fields: `theme`, `scraper_provider`, `last_directory`,
+  `download_trailer`, `download_subtitles`, `subtitle_languages`, `opensubtitles_api_key`
+- Added scraper provider selection (IMDB/TMDB) in settings; IMDB is default and needs no key;
+  TMDB falls back to IMDB when key is missing
+- Added "Get Key" buttons next to TMDB, Fanart.tv, and OpenSubtitles API key fields in settings
+  dialog, opening provider sign-up pages in browser
+- Added theme combobox (System/Light/Dark) to API Keys settings tab
+- Added trailer and subtitle download checkboxes and subtitle language field to Downloads tab
+- Renamed "Artwork" tab to "Downloads" in settings dialog; now includes trailer and subtitle
+  options alongside artwork checkboxes
+- Added toolbar Settings (SP_DialogApplyButton) and Quit (SP_DialogCloseButton) buttons
+  pushed to the right with a flexible spacer
+- Added last-directory memory: saves `last_directory` on scan, offers to reopen on next launch
+  if no CLI directory was provided
+- Added `setOrganizationName` and `setOrganizationDomain` calls before QApplication creation
+  for proper macOS app identification
+- Applied saved theme on application startup via `moviemanager.ui.theme.apply_theme()`
+- Added poster URL extraction to IMDB scraper from cinemagoer `full-size cover url` /
+  `cover url` fields
+- Added `imdb_id` parameter to `MovieAPI.scrape_movie()` for IMDB-based scraping
+- Updated batch scrape and movie chooser to pass `imdb_id` when TMDB ID is unavailable
+- Added stub methods `_download_trailer()` and `_download_subtitles()` to MainWindow for
+  menu wiring
+- Added `trailer_url` field to Movie dataclass and `subtitle_urls` field to MediaMetadata
+- Added TMDB trailer extraction: `get_metadata()` now requests videos and extracts YouTube trailer URL
+- Added `trailer_url` mapping from MediaMetadata to Movie in `scrape_movie()`
+- Added `download_trailer()` method to MovieAPI using yt-dlp for trailer downloads
+- Created `moviemanager/scraper/subtitle_scraper.py` with SubtitleScraper class for OpenSubtitles
+  REST API (search and download by IMDB ID)
+- Added `download_subtitles()` method to MovieAPI for downloading subtitles grouped by language
 - Added `edit` CLI subcommand to modify movie metadata fields (title, year, genre, director,
   rating) and write NFO files from the command line
 - Added `artwork` CLI subcommand to batch-download poster.jpg and fanart.jpg for scraped movies

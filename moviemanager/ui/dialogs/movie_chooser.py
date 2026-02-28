@@ -181,9 +181,15 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		self._ok_btn.setEnabled(False)
 		self._ok_btn.setText("Scraping...")
 		self.setCursor(PySide6.QtCore.Qt.CursorShape.WaitCursor)
+		# pass imdb_id when using IMDB provider (tmdb_id will be 0)
+		scrape_kwargs = {}
+		if result.tmdb_id:
+			scrape_kwargs["tmdb_id"] = result.tmdb_id
+		elif result.imdb_id:
+			scrape_kwargs["imdb_id"] = result.imdb_id
 		worker = moviemanager.ui.workers.Worker(
 			self._api.scrape_movie,
-			self._movie, tmdb_id=result.tmdb_id
+			self._movie, **scrape_kwargs
 		)
 		worker.signals.finished.connect(self._on_scrape_done)
 		worker.signals.error.connect(self._on_scrape_error)
