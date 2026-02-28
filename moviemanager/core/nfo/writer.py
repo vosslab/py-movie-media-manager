@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Write Movie data models to Kodi-format NFO XML files."""
 
 # Standard Library

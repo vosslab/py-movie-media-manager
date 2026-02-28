@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Application settings loaded from a YAML config file."""
 
 # Standard Library

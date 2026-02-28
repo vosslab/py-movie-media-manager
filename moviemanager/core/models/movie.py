@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Complete movie metadata model."""
 
 # Standard Library

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Data model for a named collection of related movies."""
 
 # Standard Library

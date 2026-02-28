@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Utility functions for filename parsing and validation."""
 
 # Standard Library

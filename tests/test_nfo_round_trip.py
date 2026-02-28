@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Round-trip tests for NFO reader and writer."""
 
 # local repo modules

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Data model for a single media file (video, subtitle, artwork, etc.)."""
 
 # Standard Library

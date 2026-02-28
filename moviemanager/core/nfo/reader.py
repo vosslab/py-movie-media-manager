@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Read Kodi-format NFO XML files into Movie data models."""
 
 # Standard Library

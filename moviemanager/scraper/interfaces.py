@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Abstract base classes for scraper providers."""
 
 # Standard Library

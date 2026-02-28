@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Constants and enumerations for movie media manager."""
 
 # Standard Library

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Dataclasses for scraper layer data exchange."""
 
 # Standard Library
