@@ -1,0 +1,68 @@
+menus:
+  - label: "&File"
+    items:
+      - label: "&Open Directory..."
+        shortcut: "Ctrl+O"
+        action: "open_directory"
+      - separator: true
+      - label: "&Settings..."
+        shortcut: "Ctrl+,"
+        action: "show_settings"
+      - separator: true
+      - label: "&Quit"
+        shortcut: "Ctrl+Q"
+        action: "quit"
+  - label: "&Edit"
+    items:
+      - label: "&Undo Last Rename"
+        shortcut: "Ctrl+Z"
+        action: "undo_last_rename"
+        enabled: false
+        store_as: "undo_rename_action"
+  - label: "&Movie"
+    items:
+      - label: "&Scrape Selected"
+        shortcut: "Ctrl+Shift+S"
+        action: "scrape_selected"
+      - label: "&Edit Selected"
+        shortcut: "Ctrl+E"
+        action: "edit_selected"
+      - label: "&Rename Selected"
+        shortcut: "F2"
+        action: "rename_selected"
+      - separator: true
+      - label: "Select &All"
+        shortcut: "Ctrl+A"
+        action: "select_all"
+      - label: "Select &None"
+        action: "select_none"
+      - label: "Select &Unscraped"
+        action: "select_unscraped"
+      - separator: true
+      - label: "Scrape All &Unscraped"
+        action: "batch_scrape_unscraped"
+      - separator: true
+      - label: "Download &Trailer"
+        action: "download_trailer"
+      - label: "Download &Subtitles"
+        action: "download_subtitles"
+  - label: "&View"
+    items:
+      - label: "&Dark Mode"
+        action: "toggle_dark_mode"
+        checkable: true
+        store_as: "dark_mode_action"
+  - label: "&Help"
+    items:
+      - label: "&About"
+        shortcut: "F1"
+        action: "show_about"
+shortcuts:
+  - key: "Ctrl+F"
+    action: "focus_search"
+  - key: "Escape"
+    action: "on_escape"
+  - key: "Ctrl+R"
+    action: "rescan"
+  - key: "Return"
+    action: "edit_selected"

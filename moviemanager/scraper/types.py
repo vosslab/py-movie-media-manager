@@ -68,6 +68,7 @@ class MediaMetadata:
 	logo_url: str = ""
 	discart_url: str = ""
 	trailer_url: str = ""
+	subtitle_urls: list = dataclasses.field(default_factory=list)
 	media_source: str = ""
 	movie_set_name: str = ""
 	movie_set_tmdb_id: int = 0

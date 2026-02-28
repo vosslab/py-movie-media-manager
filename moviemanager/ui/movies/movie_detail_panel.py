@@ -4,11 +4,76 @@
 import os
 
 # PIP3 modules
+import PySide6.QtGui
 import PySide6.QtWidgets
 import PySide6.QtCore
 
 # local repo modules
 import moviemanager.ui.widgets.image_label
+
+
+MEDIA_COLUMNS = ["Filename", "Type", "Size", "Resolution"]
+
+
+#============================================
+class MediaFileTableModel(PySide6.QtCore.QAbstractTableModel):
+	"""Table model for the media files list."""
+
+	def __init__(self, parent=None):
+		super().__init__(parent)
+		self._files = []
+
+	#============================================
+	def set_files(self, media_files: list) -> None:
+		"""Replace the media file list."""
+		self.beginResetModel()
+		self._files = list(media_files)
+		self.endResetModel()
+
+	#============================================
+	def rowCount(self, parent=None) -> int:
+		"""Return number of rows."""
+		return len(self._files)
+
+	#============================================
+	def columnCount(self, parent=None) -> int:
+		"""Return number of columns."""
+		return len(MEDIA_COLUMNS)
+
+	#============================================
+	def headerData(self, section, orientation, role=None):
+		"""Return header data for the given section."""
+		if role is None:
+			role = PySide6.QtCore.Qt.ItemDataRole.DisplayRole
+		if orientation == PySide6.QtCore.Qt.Orientation.Horizontal:
+			if role == PySide6.QtCore.Qt.ItemDataRole.DisplayRole:
+				return MEDIA_COLUMNS[section]
+		return None
+
+	#============================================
+	def data(self, index, role=None):
+		"""Return data for the given index and role."""
+		if role is None:
+			role = PySide6.QtCore.Qt.ItemDataRole.DisplayRole
+		if not index.isValid():
+			return None
+		if role != PySide6.QtCore.Qt.ItemDataRole.DisplayRole:
+			return None
+		mf = self._files[index.row()]
+		col = index.column()
+		if col == 0:
+			return mf.filename
+		if col == 1:
+			return mf.file_type.value
+		if col == 2:
+			# calculate size in megabytes
+			size_mb = mf.filesize / (1024 * 1024) if mf.filesize else 0
+			if size_mb > 0:
+				return f"{size_mb:.1f} MB"
+			return ""
+		if col == 3:
+			return mf.resolution_label
+		return None
 
 
 #============================================
@@ -68,17 +133,23 @@ class MovieDetailPanel(PySide6.QtWidgets.QTabWidget):
 
 	#============================================
 	def _setup_media_tab(self):
-		"""Create the media files tab with a table widget."""
+		"""Create the media files tab with a QTableView and model (#21)."""
 		layout = PySide6.QtWidgets.QVBoxLayout(self._media_widget)
-		self._media_table = PySide6.QtWidgets.QTableWidget()
-		self._media_table.setColumnCount(4)
-		self._media_table.setHorizontalHeaderLabels(
-			["Filename", "Type", "Size", "Resolution"]
+		self._media_model = MediaFileTableModel()
+		self._media_view = PySide6.QtWidgets.QTableView()
+		self._media_view.setModel(self._media_model)
+		self._media_view.setSelectionBehavior(
+			PySide6.QtWidgets.QAbstractItemView
+			.SelectionBehavior.SelectRows
 		)
-		self._media_table.setEditTriggers(
-			PySide6.QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
+		self._media_view.setEditTriggers(
+			PySide6.QtWidgets.QAbstractItemView
+			.EditTrigger.NoEditTriggers
 		)
-		layout.addWidget(self._media_table)
+		# stretch the last column
+		header = self._media_view.horizontalHeader()
+		header.setStretchLastSection(True)
+		layout.addWidget(self._media_view)
 
 	#============================================
 	def set_movie(self, movie) -> None:
@@ -103,28 +174,9 @@ class MovieDetailPanel(PySide6.QtWidgets.QTabWidget):
 		else:
 			self._poster_label.set_image("")
 			self._fanart_label.set_image("")
-		# media files
-		self._media_table.setRowCount(len(movie.media_files))
-		for row, mf in enumerate(movie.media_files):
-			self._media_table.setItem(
-				row, 0,
-				PySide6.QtWidgets.QTableWidgetItem(mf.filename)
-			)
-			self._media_table.setItem(
-				row, 1,
-				PySide6.QtWidgets.QTableWidgetItem(mf.file_type.value)
-			)
-			# calculate size in megabytes
-			size_mb = mf.filesize / (1024 * 1024) if mf.filesize else 0
-			size_text = f"{size_mb:.1f} MB" if size_mb > 0 else ""
-			self._media_table.setItem(
-				row, 2,
-				PySide6.QtWidgets.QTableWidgetItem(size_text)
-			)
-			self._media_table.setItem(
-				row, 3,
-				PySide6.QtWidgets.QTableWidgetItem(mf.resolution_label)
-			)
+		# media files via model
+		self._media_model.set_files(movie.media_files)
+		self._media_view.resizeColumnsToContents()
 
 	#============================================
 	def _clear(self) -> None:
@@ -138,4 +190,4 @@ class MovieDetailPanel(PySide6.QtWidgets.QTabWidget):
 		self._plot_text.clear()
 		self._poster_label.set_image("")
 		self._fanart_label.set_image("")
-		self._media_table.setRowCount(0)
+		self._media_model.set_files([])

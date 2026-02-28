@@ -75,6 +75,8 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		self._results_table.horizontalHeader().setStretchLastSection(
 			True
 		)
+		# elide overview text and show full text in tooltip
+		self._results_table.setWordWrap(False)
 		self._results_table.doubleClicked.connect(
 			self._on_double_click
 		)
@@ -144,14 +146,13 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 				row, 3,
 				PySide6.QtWidgets.QTableWidgetItem(score_text)
 			)
-			# truncate overview for display
+			# show truncated overview with full text in tooltip
 			overview = result.overview
-			if len(overview) > 100:
-				overview = overview[:100] + "..."
-			self._results_table.setItem(
-				row, 4,
-				PySide6.QtWidgets.QTableWidgetItem(overview)
+			overview_item = PySide6.QtWidgets.QTableWidgetItem(
+				overview
 			)
+			overview_item.setToolTip(overview)
+			self._results_table.setItem(row, 4, overview_item)
 		self._results_table.resizeColumnsToContents()
 
 	#============================================

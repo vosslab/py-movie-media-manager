@@ -37,20 +37,36 @@ class Worker(PySide6.QtCore.QRunnable):
 		self.args = args
 		self.kwargs = kwargs
 		self.signals = WorkerSignals()
+		self._cancelled = False
 		self.setAutoDelete(True)
+
+	#============================================
+	def cancel(self) -> None:
+		"""Request cancellation of this worker."""
+		self._cancelled = True
+
+	#============================================
+	@property
+	def is_cancelled(self) -> bool:
+		"""Return whether cancellation was requested."""
+		return self._cancelled
 
 	#============================================
 	def run(self) -> None:
 		"""Execute the function and emit finished or error."""
+		if self._cancelled:
+			return
 		try:
 			result = self.fn(*self.args, **self.kwargs)
-			self.signals.finished.emit(result)
+			if not self._cancelled:
+				self.signals.finished.emit(result)
 		except Exception:
-			# capture full traceback for debugging
-			buf = io.StringIO()
-			traceback.print_exc(file=buf)
-			error_text = buf.getvalue()
-			self.signals.error.emit(error_text)
+			if not self._cancelled:
+				# capture full traceback for debugging
+				buf = io.StringIO()
+				traceback.print_exc(file=buf)
+				error_text = buf.getvalue()
+				self.signals.error.emit(error_text)
 
 
 #============================================
@@ -67,15 +83,25 @@ class ImageDownloadWorker(PySide6.QtCore.QRunnable):
 		self._url = url
 		self._timeout = timeout
 		self.signals = WorkerSignals()
+		self._cancelled = False
 		self.setAutoDelete(True)
+
+	#============================================
+	def cancel(self) -> None:
+		"""Request cancellation of this worker."""
+		self._cancelled = True
 
 	#============================================
 	def run(self) -> None:
 		"""Download the image and emit raw bytes or error."""
+		if self._cancelled:
+			return
 		try:
 			response = requests.get(
 				self._url, timeout=self._timeout
 			)
+			if self._cancelled:
+				return
 			if response.status_code == 200:
 				self.signals.finished.emit(response.content)
 			else:
@@ -85,4 +111,5 @@ class ImageDownloadWorker(PySide6.QtCore.QRunnable):
 				)
 				self.signals.error.emit(error_msg)
 		except Exception:
-			self.signals.error.emit(traceback.format_exc())
+			if not self._cancelled:
+				self.signals.error.emit(traceback.format_exc())

@@ -108,7 +108,7 @@ class TmdbScraper(
 		# rate-limit courtesy pause
 		time.sleep(random.random())
 		detail = self._tmdb_movie.details(
-			tmdb_id, append_to_response="credits,releases"
+			tmdb_id, append_to_response="credits,releases,videos"
 		)
 		# extract basic fields with safe defaults
 		release_date = getattr(detail, "release_date", "") or ""
@@ -175,6 +175,19 @@ class TmdbScraper(
 		fanart_url = f"{_ORIGINAL_BASE}{backdrop_path}" if backdrop_path else ""
 		# certification from US release info
 		certification = _extract_us_certification(detail)
+		# extract trailer URL from videos
+		videos = getattr(detail, "videos", None)
+		trailer_url = ""
+		if videos:
+			results_list = getattr(videos, "results", []) or []
+			for video in results_list:
+				# handle both dict and object API responses
+				site = video.get("site", "") if isinstance(video, dict) else getattr(video, "site", "")
+				vtype = video.get("type", "") if isinstance(video, dict) else getattr(video, "type", "")
+				key = video.get("key", "") if isinstance(video, dict) else getattr(video, "key", "")
+				if site == "YouTube" and vtype == "Trailer" and key:
+					trailer_url = f"https://www.youtube.com/watch?v={key}"
+					break
 		metadata = moviemanager.scraper.types.MediaMetadata(
 			title=getattr(detail, "title", ""),
 			original_title=getattr(detail, "original_title", ""),
@@ -197,6 +210,7 @@ class TmdbScraper(
 			fanart_url=fanart_url,
 			certification=certification,
 			release_date=release_date,
+			trailer_url=trailer_url,
 		)
 		return metadata
 

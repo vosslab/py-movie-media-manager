@@ -3,6 +3,69 @@
 ## 2026-02-27
 
 ### Additions and New Features
+- Added `edit` CLI subcommand to modify movie metadata fields (title, year, genre, director,
+  rating) and write NFO files from the command line
+- Added `artwork` CLI subcommand to batch-download poster.jpg and fanart.jpg for scraped movies
+  using `MovieAPI.download_artwork()` method
+- Added `list` CLI subcommand with `--filter` title substring and `--unscraped` flags for
+  filtered movie listing with rich table output
+- Added `download_artwork()` method to `MovieAPI` for downloading poster and fanart images
+  based on settings and available URLs
+- Added `rich.progress.track()` progress bars to `cmd_scrape()` and `cmd_rename()` batch loops
+- Added empty state widget with folder icon, instruction text, and "Open Folder" button when no
+  directory is loaded; uses QStackedWidget to swap between empty state and table content
+- Added checkbox column (column 0) to the movie table for multi-select; includes
+  check_all/uncheck_all/check_unscraped methods and Select All/None/Unscraped in Movie menu
+- Added workflow Status column replacing NFO/Scraped columns; shows compact S/N/A indicators
+  (Scraped/NFO/Artwork) with color coding (green=all done, orange=partial, gray=none) and tooltips
+- Added right-click context menu on movie table with Scrape/Edit/Rename/Show in Finder actions
+- Added double-click on movie row to open editor dialog
+- Added rename preview dialog (`rename_preview.py`) with 2-column table (Current/New) replacing
+  the QMessageBox.question approach
+- Added rename undo: Edit > Undo Last Rename (Ctrl+Z) reverses file moves; history clears on
+  directory change
+- Added batch scrape: Movie > Scrape All Unscraped with QProgressDialog, auto-selects best
+  TMDB match per movie, supports cancellation
+- Added Cancel button to status bar for cancelling background operations
+- Added `has_poster` property to Movie model checking for poster.jpg on disk
+- Created `MediaFileTableModel` (QAbstractTableModel) in movie_detail_panel.py replacing
+  QTableWidget with QTableView for the Media Files tab (#21)
+- Added operation cancellation to Worker and ImageDownloadWorker with `cancel()` method
+  and `_cancelled` flag
+- Added scan progress reporting via progress_callback parameter in scanner.scan_directory
+
+### Behavior or Interface Changes
+- Toolbar now shows text-under-icon layout with 32x32 icons; workflow order is
+  Open -> Scrape -> Edit -> Rename; Settings button removed from toolbar (kept in File menu)
+- Movie table vertical header (row numbers) hidden; fixed row heights derived from font metrics
+- Table selection mode changed from SingleSelection to ExtendedSelection for multi-select
+- Settings dialog moved from toolbar-only to File > Settings with Ctrl+, shortcut
+- Window title now shows current directory path after scan
+- Help text in settings dialog uses palette-aware PlaceholderText color role instead of
+  hardcoded gray (#23)
+- ImageLabel shows "No artwork" placeholder text when image is missing or path is empty
+- Movie chooser overview column now uses tooltip for full text instead of truncating
+- Column widths and sort state persist across sessions via QSettings
+- Error dialogs now show friendly summary (last traceback line) with expandable detail text
+
+### Additions and New Features (keyboard shortcuts)
+- Ctrl+A: Check all movies
+- Ctrl+F: Focus search/filter field
+- Escape: Clear filter text
+- Ctrl+,: Open Settings (macOS convention)
+- Ctrl+R: Re-scan current directory
+- Return/Enter: Open editor for selected movie
+- F1: Open About dialog
+
+### Fixes and Maintenance
+- Added dirty state indicator (" *" in title bar) to movie editor dialog, connected to all
+  field change signals
+- Replaced hardcoded `color: gray; font-size: 11px` stylesheet in settings_dialog.py with
+  palette-aware font scaling and PlaceholderText foreground role (#23)
+
+## 2026-02-27
+
+### Additions and New Features
 - Created `moviemanager/ui/workers.py` with `Worker` and `ImageDownloadWorker` QRunnable
   classes for running network/IO operations off the main thread
 - Added image preview in `ImageChooserDialog` that downloads and displays thumbnails

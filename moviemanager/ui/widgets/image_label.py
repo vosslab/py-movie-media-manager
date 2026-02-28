@@ -23,8 +23,14 @@ class ImageLabel(PySide6.QtWidgets.QLabel):
 	def set_image(self, path: str) -> None:
 		"""Load and display an image from file path."""
 		if not path or not os.path.exists(path):
-			self.clear()
+			# show placeholder text for missing artwork
 			self._pixmap = None
+			self.clear()
+			self.setText("No artwork")
+			# use palette placeholder color for the text
+			self.setForegroundRole(
+				PySide6.QtGui.QPalette.ColorRole.PlaceholderText
+			)
 			return
 		self._pixmap = PySide6.QtGui.QPixmap(path)
 		self._update_scaled()

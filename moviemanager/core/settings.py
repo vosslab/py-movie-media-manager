@@ -36,6 +36,23 @@ class Settings:
 	# scanner options
 	skip_hidden_dirs: bool = True
 
+	# appearance
+	theme: str = "system"
+
+	# scraper provider ("imdb" or "tmdb")
+	scraper_provider: str = "imdb"
+
+	# last opened directory
+	last_directory: str = ""
+
+	# trailer/subtitle options
+	download_trailer: bool = True
+	download_subtitles: bool = False
+	subtitle_languages: str = "en"
+
+	# OpenSubtitles API key (stored in user .config)
+	opensubtitles_api_key: str = ""
+
 	# artwork options
 	download_poster: bool = True
 	download_fanart: bool = True

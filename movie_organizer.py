@@ -7,10 +7,12 @@ import argparse
 
 # PIP3 modules
 import rich.console
+import rich.progress
 import rich.table
 
 # local repo modules
 import moviemanager.api.movie_api
+import moviemanager.core.nfo.writer
 import moviemanager.core.settings
 
 
@@ -97,6 +99,75 @@ def parse_args():
 	)
 	rename_parser.set_defaults(dry_run=True)
 
+	# edit subcommand
+	edit_parser = subparsers.add_parser(
+		'edit', help='Edit movie metadata'
+	)
+	edit_parser.add_argument(
+		'-d', '--directory', dest='directory', required=True,
+		help='Movie directory'
+	)
+	edit_parser.add_argument(
+		'--title', dest='title', default='',
+		help='Set movie title'
+	)
+	edit_parser.add_argument(
+		'--year', dest='year', default='',
+		help='Set movie year'
+	)
+	edit_parser.add_argument(
+		'--genre', dest='genre', default='',
+		help='Add genre to movie'
+	)
+	edit_parser.add_argument(
+		'--director', dest='director', default='',
+		help='Set movie director'
+	)
+	edit_parser.add_argument(
+		'--rating', dest='rating', type=float, default=0.0,
+		help='Set movie rating'
+	)
+
+	# artwork subcommand
+	artwork_parser = subparsers.add_parser(
+		'artwork', help='Download artwork for movies'
+	)
+	artwork_parser.add_argument(
+		'-d', '--directory', dest='directory', required=True,
+		help='Movie directory'
+	)
+	artwork_parser.add_argument(
+		'--trailer', dest='download_trailer',
+		action='store_true',
+		help='Also download trailers'
+	)
+	artwork_parser.add_argument(
+		'--subtitles', dest='download_subtitles',
+		action='store_true',
+		help='Also download subtitles'
+	)
+	artwork_parser.set_defaults(download_trailer=False)
+	artwork_parser.set_defaults(download_subtitles=False)
+
+	# list subcommand
+	list_parser = subparsers.add_parser(
+		'list', help='List movies with filtering'
+	)
+	list_parser.add_argument(
+		'-d', '--directory', dest='directory', required=True,
+		help='Movie directory'
+	)
+	list_parser.add_argument(
+		'-f', '--filter', dest='filter_text', default='',
+		help='Filter movies by title substring'
+	)
+	list_parser.add_argument(
+		'-u', '--unscraped', dest='unscraped_only',
+		action='store_true',
+		help='Show only unscraped movies'
+	)
+	list_parser.set_defaults(unscraped_only=False)
+
 	args = parser.parse_args()
 	return args
 
@@ -168,7 +239,7 @@ def cmd_scrape(args: argparse.Namespace) -> None:
 		console.print("All movies are already scraped.")
 		return
 	console.print(f"Found {len(unscraped)} unscraped movies.\n")
-	for movie in unscraped:
+	for movie in rich.progress.track(unscraped, description="Scraping..."):
 		console.print(f"Searching: {movie.title} ({movie.year})")
 		results = api.search_movie(movie.title, movie.year)
 		if not results:
@@ -224,7 +295,7 @@ def cmd_rename(args: argparse.Namespace) -> None:
 		return
 	# preview renames (always dry_run first)
 	all_pairs = []
-	for movie in movies:
+	for movie in rich.progress.track(movies, description="Generating preview..."):
 		pairs = api.rename_movie(movie, dry_run=True)
 		all_pairs.extend(pairs)
 	if not all_pairs:
@@ -258,6 +329,130 @@ def cmd_rename(args: argparse.Namespace) -> None:
 
 
 #============================================
+def cmd_edit(args: argparse.Namespace) -> None:
+	"""Edit metadata fields on a movie and write NFO.
+
+	Args:
+		args: Parsed command-line arguments.
+	"""
+	settings = moviemanager.core.settings.load_settings(args.config_file)
+	api = moviemanager.api.movie_api.MovieAPI(settings)
+	movies = api.scan_directory(args.directory)
+	console = rich.console.Console()
+	if not movies:
+		console.print("No movies found.")
+		return
+	# select movie to edit
+	movie = None
+	if len(movies) == 1:
+		movie = movies[0]
+	else:
+		# print list and ask user which one
+		for idx, m in enumerate(movies, start=1):
+			console.print(f"  {idx}. {m.title} ({m.year})")
+		choice = input(f"Pick a movie (1-{len(movies)}): ").strip()
+		if choice.isdigit() and 1 <= int(choice) <= len(movies):
+			movie = movies[int(choice) - 1]
+		else:
+			console.print("Invalid choice.")
+			return
+	# update fields from CLI flags
+	if args.title:
+		movie.title = args.title
+	if args.year:
+		movie.year = args.year
+	if args.genre:
+		if args.genre not in movie.genres:
+			movie.genres.append(args.genre)
+	if args.director:
+		movie.director = args.director
+	if args.rating:
+		movie.rating = args.rating
+	# build NFO path from video file or title
+	nfo_path = ""
+	video_file = movie.video_file
+	if video_file:
+		base, _ = os.path.splitext(video_file.filename)
+		nfo_path = os.path.join(movie.path, base + ".nfo")
+	else:
+		safe_title = movie.title or "movie"
+		nfo_path = os.path.join(movie.path, safe_title + ".nfo")
+	# write the NFO file
+	moviemanager.core.nfo.writer.write_nfo(movie, nfo_path)
+	movie.nfo_path = nfo_path
+	console.print(f"Updated: {movie.title} ({movie.year})")
+	console.print(f"NFO written: {nfo_path}")
+
+
+#============================================
+def cmd_artwork(args: argparse.Namespace) -> None:
+	"""Download artwork for scraped movies.
+
+	Args:
+		args: Parsed command-line arguments.
+	"""
+	settings = moviemanager.core.settings.load_settings(args.config_file)
+	api = moviemanager.api.movie_api.MovieAPI(settings)
+	movies = api.scan_directory(args.directory)
+	console = rich.console.Console()
+	# filter to scraped movies only
+	scraped_movies = [m for m in movies if m.scraped]
+	if not scraped_movies:
+		console.print("No scraped movies found.")
+		return
+	console.print(f"Found {len(scraped_movies)} scraped movies.\n")
+	total_downloaded = 0
+	for movie in rich.progress.track(
+		scraped_movies, description="Downloading artwork..."
+	):
+		downloaded = api.download_artwork(movie)
+		for path in downloaded:
+			console.print(f"  Downloaded: {os.path.basename(path)}"
+				f" for '{movie.title}'")
+		total_downloaded += len(downloaded)
+	console.print(f"\nDownloaded {total_downloaded} artwork files.")
+
+
+#============================================
+def cmd_list(args: argparse.Namespace) -> None:
+	"""List movies with optional filtering.
+
+	Args:
+		args: Parsed command-line arguments.
+	"""
+	settings = moviemanager.core.settings.load_settings(args.config_file)
+	api = moviemanager.api.movie_api.MovieAPI(settings)
+	movies = api.scan_directory(args.directory)
+	console = rich.console.Console()
+	# apply filters
+	if args.unscraped_only:
+		movies = [m for m in movies if not m.scraped]
+	if args.filter_text:
+		filter_lower = args.filter_text.lower()
+		movies = [m for m in movies if filter_lower in m.title.lower()]
+	if not movies:
+		console.print("No movies match the filters.")
+		return
+	# build table
+	table = rich.table.Table(title="Movie Library")
+	table.add_column("Title", style="cyan")
+	table.add_column("Year", style="green")
+	table.add_column("Rating", style="yellow")
+	table.add_column("NFO", style="magenta")
+	table.add_column("Scraped", style="blue")
+	for movie in movies:
+		rating_str = f"{movie.rating:.1f}" if movie.rating else "-"
+		nfo_status = "Yes" if movie.has_nfo else "No"
+		scraped_status = "Yes" if movie.scraped else "No"
+		table.add_row(
+			movie.title, movie.year, rating_str,
+			nfo_status, scraped_status
+		)
+	console.print(table)
+	console.print(f"\nShowing {len(movies)} movies.")
+
+
+#============================================
 def main():
 	"""Main entry point for the CLI."""
 	args = parse_args()
@@ -271,6 +466,9 @@ def main():
 		'info': cmd_info,
 		'scrape': cmd_scrape,
 		'rename': cmd_rename,
+		'edit': cmd_edit,
+		'artwork': cmd_artwork,
+		'list': cmd_list,
 	}
 	cmd_func = commands.get(args.command)
 	if cmd_func:

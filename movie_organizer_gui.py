@@ -10,6 +10,7 @@ import PySide6.QtWidgets
 
 # local repo modules
 import moviemanager.ui.main_window
+import moviemanager.ui.theme
 import moviemanager.core.settings
 
 
@@ -38,6 +39,10 @@ def main():
 	settings = moviemanager.core.settings.load_settings(args.config_file)
 	app = PySide6.QtWidgets.QApplication(sys.argv)
 	app.setApplicationName("Movie Media Manager")
+	app.setOrganizationName("MovieMediaManager")
+	app.setOrganizationDomain("moviemediamanager.local")
+	# apply saved theme preference
+	moviemanager.ui.theme.apply_theme(app, settings.theme)
 	window = moviemanager.ui.main_window.MainWindow(settings, args.directory)
 	window.show()
 	exit_code = app.exec()

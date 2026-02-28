@@ -36,7 +36,7 @@ def detect_artwork_files(dir_path: str) -> dict:
 
 
 #============================================
-def scan_directory(root_path: str) -> list:
+def scan_directory(root_path: str, progress_callback=None) -> list:
 	"""Recursively scan a directory tree for movie files.
 
 	Walks root_path, skipping hidden directories and directories listed
@@ -45,13 +45,23 @@ def scan_directory(root_path: str) -> list:
 
 	Args:
 		root_path: Root directory path to begin scanning.
+		progress_callback: Optional callable(current, message) for progress.
 
 	Returns:
 		List of Movie objects discovered during the scan.
 	"""
 	movies = []
+	dirs_processed = 0
 
 	for dirpath, dirnames, filenames in os.walk(root_path):
+		dirs_processed += 1
+		if progress_callback:
+			# report progress with directory count
+			rel_path = os.path.relpath(dirpath, root_path)
+			progress_callback(
+				dirs_processed,
+				f"Scanning: {rel_path}"
+			)
 		# skip hidden directories and directories in SKIP_DIRS
 		# modify dirnames in-place to prevent os.walk from descending
 		dirnames[:] = [

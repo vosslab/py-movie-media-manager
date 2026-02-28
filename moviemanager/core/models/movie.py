@@ -1,6 +1,7 @@
 """Complete movie metadata model."""
 
 # Standard Library
+import os
 import dataclasses
 
 # local repo modules
@@ -125,6 +126,7 @@ class Movie:
 	multi_movie_dir: bool = False
 	is_disc: bool = False
 	# trailers
+	trailer_url: str = ""
 	trailer: list = dataclasses.field(default_factory=list)
 	# media files
 	media_files: list = dataclasses.field(default_factory=list)
@@ -157,3 +159,16 @@ class Movie:
 		"""
 		result = bool(self.nfo_path)
 		return result
+
+	#============================================
+	@property
+	def has_poster(self) -> bool:
+		"""Return whether poster.jpg exists in the movie directory.
+
+		Returns:
+			True if poster.jpg is found on disk.
+		"""
+		if not self.path:
+			return False
+		poster_path = os.path.join(self.path, "poster.jpg")
+		return os.path.isfile(poster_path)

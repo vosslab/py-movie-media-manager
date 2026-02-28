@@ -1,6 +1,7 @@
 """Application settings dialog."""
 
 # PIP3 modules
+import PySide6.QtGui
 import PySide6.QtWidgets
 
 # local repo modules
@@ -72,7 +73,15 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 			"Variables: {title}, {year}, {rating}, "
 			"{certification}, {genre}"
 		)
-		path_help.setStyleSheet("color: gray; font-size: 11px;")
+		# use palette-aware styling instead of hardcoded colors (#23)
+		path_help_font = path_help.font()
+		path_help_font.setPointSizeF(
+			path_help_font.pointSizeF() * 0.85
+		)
+		path_help.setFont(path_help_font)
+		path_help.setForegroundRole(
+			PySide6.QtGui.QPalette.ColorRole.PlaceholderText
+		)
 		path_help.setWordWrap(True)
 		rename_layout.addRow("", path_help)
 		self._file_template_edit = PySide6.QtWidgets.QLineEdit()
@@ -84,7 +93,15 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 			"Variables: {title}, {year}, {rating}, "
 			"{resolution}, {codec}, {audio}"
 		)
-		file_help.setStyleSheet("color: gray; font-size: 11px;")
+		# use palette-aware styling instead of hardcoded colors (#23)
+		file_help_font = file_help.font()
+		file_help_font.setPointSizeF(
+			file_help_font.pointSizeF() * 0.85
+		)
+		file_help.setFont(file_help_font)
+		file_help.setForegroundRole(
+			PySide6.QtGui.QPalette.ColorRole.PlaceholderText
+		)
 		file_help.setWordWrap(True)
 		rename_layout.addRow("", file_help)
 		tabs.addTab(rename_widget, "Renamer")

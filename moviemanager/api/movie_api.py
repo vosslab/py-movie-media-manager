@@ -2,6 +2,12 @@
 
 # Standard Library
 import os
+import time
+import random
+import subprocess
+
+# PIP3 modules
+import requests
 
 # local repo modules
 import moviemanager.core.movie.movie_list
@@ -9,6 +15,7 @@ import moviemanager.core.movie.renamer
 import moviemanager.core.movie.scanner
 import moviemanager.core.nfo.writer
 import moviemanager.core.settings
+import moviemanager.scraper.imdb_scraper
 import moviemanager.scraper.tmdb_scraper
 
 
@@ -33,16 +40,19 @@ class MovieAPI:
 		self._scraper = None
 
 	#============================================
-	def scan_directory(self, root_path: str) -> list:
+	def scan_directory(self, root_path: str, progress_callback=None) -> list:
 		"""Scan a directory for movie files and add them to the library.
 
 		Args:
 			root_path: Root directory path to scan.
+			progress_callback: Optional callable(current, message) for progress.
 
 		Returns:
 			List of Movie instances discovered during the scan.
 		"""
-		movies = moviemanager.core.movie.scanner.scan_directory(root_path)
+		movies = moviemanager.core.movie.scanner.scan_directory(
+			root_path, progress_callback=progress_callback
+		)
 		for movie in movies:
 			self._movie_list.add(movie)
 		return movies
@@ -68,21 +78,25 @@ class MovieAPI:
 		return result
 
 	#============================================
-	def _ensure_tmdb_scraper(self) -> None:
-		"""Create the TmdbScraper if not already initialized.
+	def _ensure_scraper(self) -> None:
+		"""Create the scraper based on settings provider preference.
 
-		Raises:
-			ValueError: If no TMDB API key is configured.
+		Uses IMDB scraper (no key needed) or TMDB scraper (key required).
+		Falls back to IMDB if TMDB key is missing.
 		"""
 		if self._scraper is not None:
 			return
-		api_key = self._settings.tmdb_api_key
-		if not api_key:
-			raise ValueError("TMDB API key is not configured")
-		self._scraper = moviemanager.scraper.tmdb_scraper.TmdbScraper(
-			api_key=api_key,
-			language=self._settings.scrape_language,
-		)
+		provider = self._settings.scraper_provider
+		if provider == "tmdb":
+			api_key = self._settings.tmdb_api_key
+			if api_key:
+				self._scraper = moviemanager.scraper.tmdb_scraper.TmdbScraper(
+					api_key=api_key,
+					language=self._settings.scrape_language,
+				)
+				return
+			# fall back to IMDB if no TMDB key
+		self._scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
 
 	#============================================
 	def search_movie(self, title: str, year: str = "") -> list:
@@ -95,7 +109,7 @@ class MovieAPI:
 		Returns:
 			List of SearchResult instances from the scraper.
 		"""
-		self._ensure_tmdb_scraper()
+		self._ensure_scraper()
 		result = self._scraper.search(title, year)
 		return result
 
@@ -110,7 +124,7 @@ class MovieAPI:
 			movie: Movie instance to update with scraped metadata.
 			tmdb_id: TMDB ID to fetch metadata for.
 		"""
-		self._ensure_tmdb_scraper()
+		self._ensure_scraper()
 		metadata = self._scraper.get_metadata(tmdb_id=tmdb_id)
 		# map MediaMetadata fields to the Movie object
 		movie.title = metadata.title or movie.title
@@ -133,6 +147,7 @@ class MovieAPI:
 		movie.fanart_url = metadata.fanart_url
 		movie.certification = metadata.certification
 		movie.release_date = metadata.release_date
+		movie.trailer_url = metadata.trailer_url
 		# convert CastMember dataclasses to dicts for NFO writer
 		movie.actors = [
 			{"name": a.name, "role": a.role, "tmdb_id": a.tmdb_id}
@@ -183,6 +198,44 @@ class MovieAPI:
 		return result
 
 	#============================================
+	def download_artwork(self, movie) -> list:
+		"""Download artwork files for a movie.
+
+		Downloads poster and fanart images to the movie directory
+		based on settings and available URLs.
+
+		Args:
+			movie: Movie instance with artwork URLs.
+
+		Returns:
+			list: Paths of downloaded artwork files.
+		"""
+		downloaded = []
+		if not movie.path:
+			return downloaded
+		# download poster
+		if self._settings.download_poster and movie.poster_url:
+			poster_path = os.path.join(movie.path, "poster.jpg")
+			if not os.path.exists(poster_path):
+				time.sleep(random.random())
+				response = requests.get(movie.poster_url, timeout=30)
+				response.raise_for_status()
+				with open(poster_path, "wb") as f:
+					f.write(response.content)
+				downloaded.append(poster_path)
+		# download fanart
+		if self._settings.download_fanart and movie.fanart_url:
+			fanart_path = os.path.join(movie.path, "fanart.jpg")
+			if not os.path.exists(fanart_path):
+				time.sleep(random.random())
+				response = requests.get(movie.fanart_url, timeout=30)
+				response.raise_for_status()
+				with open(fanart_path, "wb") as f:
+					f.write(response.content)
+				downloaded.append(fanart_path)
+		return downloaded
+
+	#============================================
 	def get_movie_count(self) -> int:
 		"""Return the total number of movies in the library.
 
@@ -211,3 +264,82 @@ class MovieAPI:
 		"""
 		result = len(self._movie_list.get_unscraped())
 		return result
+
+	#============================================
+	def download_trailer(self, movie) -> str:
+		"""Download a movie trailer using yt-dlp.
+
+		Args:
+			movie: Movie instance with trailer_url set.
+
+		Returns:
+			str: Path to downloaded trailer file, or empty string.
+		"""
+		if not movie.trailer_url or not movie.path:
+			return ""
+		output_path = os.path.join(movie.path, "trailer.mp4")
+		# skip if trailer already exists
+		if os.path.exists(output_path):
+			return output_path
+		cmd = [
+			"yt-dlp",
+			"-o", output_path,
+			"--format", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4",
+			"--no-playlist",
+			movie.trailer_url,
+		]
+		subprocess.run(cmd, check=True, timeout=300)
+		return output_path
+
+	#============================================
+	def download_subtitles(self, movie, languages: str = "en") -> list:
+		"""Download subtitles for a movie from OpenSubtitles.
+
+		Args:
+			movie: Movie instance with imdb_id set.
+			languages: Comma-separated language codes.
+
+		Returns:
+			list: Paths of downloaded subtitle files.
+		"""
+		if not movie.imdb_id or not movie.path:
+			return []
+		api_key = self._settings.opensubtitles_api_key
+		if not api_key:
+			raise ValueError(
+				"OpenSubtitles API key is not configured. "
+				"Set it in Settings > API Keys."
+			)
+		import moviemanager.scraper.subtitle_scraper
+		scraper = moviemanager.scraper.subtitle_scraper.SubtitleScraper(
+			api_key
+		)
+		results = scraper.search(
+			imdb_id=movie.imdb_id, languages=languages
+		)
+		if not results:
+			return []
+		# group by language, take best per language (highest download count)
+		downloaded = []
+		by_lang = {}
+		for r in results:
+			lang = r.get("language", "en")
+			if lang not in by_lang:
+				by_lang[lang] = r
+			elif r.get("download_count", 0) > by_lang[lang].get("download_count", 0):
+				by_lang[lang] = r
+		for lang, best in by_lang.items():
+			file_id = best.get("file_id", 0)
+			if not file_id:
+				continue
+			# name subtitle file with language code
+			srt_filename = f"subtitles.{lang}.srt"
+			srt_path = os.path.join(movie.path, srt_filename)
+			# skip if already exists
+			if os.path.exists(srt_path):
+				downloaded.append(srt_path)
+				continue
+			result_path = scraper.download(file_id, srt_path)
+			if result_path:
+				downloaded.append(result_path)
+		return downloaded

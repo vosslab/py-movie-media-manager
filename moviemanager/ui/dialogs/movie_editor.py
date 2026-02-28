@@ -23,6 +23,10 @@ class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 		self._load_movie()
 		# snapshot of original values for dirty checking (#7)
 		self._original_values = self._get_field_values()
+		# base window title (without dirty marker)
+		self._base_title = self.windowTitle()
+		# connect change signals for dirty state indicator
+		self._connect_dirty_signals()
 
 	#============================================
 	def _setup_ui(self):
@@ -107,6 +111,45 @@ class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 		cancel_btn.clicked.connect(self.reject)
 		btn_layout.addWidget(cancel_btn)
 		layout.addLayout(btn_layout)
+
+	#============================================
+	def _connect_dirty_signals(self) -> None:
+		"""Connect field change signals to update dirty indicator."""
+		# QLineEdit fields
+		line_edits = [
+			self._title_edit, self._original_title_edit,
+			self._sort_title_edit, self._year_edit,
+			self._imdb_edit, self._tagline_edit,
+			self._certification_edit, self._director_edit,
+			self._writer_edit, self._studio_edit,
+			self._genres_edit, self._tags_edit,
+			self._country_edit, self._languages_edit,
+		]
+		for edit in line_edits:
+			edit.textChanged.connect(self._on_field_changed)
+		# QTextEdit
+		self._plot_edit.textChanged.connect(self._on_field_changed)
+		# QSpinBox / QDoubleSpinBox
+		self._tmdb_edit.valueChanged.connect(self._on_field_changed)
+		self._runtime_edit.valueChanged.connect(
+			self._on_field_changed
+		)
+		self._rating_edit.valueChanged.connect(
+			self._on_field_changed
+		)
+		# QCheckBox
+		self._watched_check.stateChanged.connect(
+			self._on_field_changed
+		)
+
+	#============================================
+	def _on_field_changed(self, *_args) -> None:
+		"""Update window title to show dirty state."""
+		if self._is_dirty():
+			if not self.windowTitle().endswith(" *"):
+				self.setWindowTitle(self._base_title + " *")
+		else:
+			self.setWindowTitle(self._base_title)
 
 	#============================================
 	def _get_field_values(self) -> dict:
