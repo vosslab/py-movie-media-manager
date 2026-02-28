@@ -1,4 +1,4 @@
-cinemagoer  # IMDB data extraction (formerly IMDbPY)
+curl_cffi  # HTTP client using libcurl via cffi, for browser-like TLS
 lxml  # Fast XML and HTML parsing with XPath support
 pillow  # Image I/O and basic image processing (PIL fork)
 pymediainfo  # Codec and resolution detection from media files

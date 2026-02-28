@@ -55,6 +55,8 @@ class MediaMetadata:
 	studio: str = ""
 	genres: list = dataclasses.field(default_factory=list)
 	tags: list = dataclasses.field(default_factory=list)
+	# parental guide severity levels by category
+	parental_guide: dict = dataclasses.field(default_factory=dict)
 	# list of CastMember
 	actors: list = dataclasses.field(default_factory=list)
 	producers: list = dataclasses.field(default_factory=list)

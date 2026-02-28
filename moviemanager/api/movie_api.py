@@ -2,6 +2,7 @@
 
 # Standard Library
 import os
+import re
 import time
 import random
 import subprocess
@@ -114,6 +115,86 @@ class MovieAPI:
 		return result
 
 	#============================================
+	def search_movie_with_fallback(
+		self, title: str, year: str = ""
+	) -> tuple:
+		"""Search with fallback strategies when initial search fails.
+
+		Tries progressively broader searches:
+		1. title + year (exact)
+		2. title only (drop year)
+		3. simplified title (remove parenthetical text, articles)
+
+		Args:
+			title: Movie title to search for.
+			year: Optional release year to narrow results.
+
+		Returns:
+			tuple: (results list, strategy description string).
+		"""
+		# strategy 1: title + year
+		if year:
+			results = self.search_movie(title, year)
+			if results:
+				strategy = f"title + year: {title} ({year})"
+				return (results, strategy)
+			# strategy 2: title only (drop year)
+			results = self.search_movie(title)
+			if results:
+				strategy = f"title only: {title}"
+				return (results, strategy)
+		else:
+			results = self.search_movie(title)
+			if results:
+				strategy = f"title: {title}"
+				return (results, strategy)
+		# strategy 3: simplified title
+		simplified = _simplify_title(title)
+		if simplified != title.lower().strip():
+			results = self.search_movie(simplified)
+			if results:
+				strategy = f"simplified: {simplified}"
+				return (results, strategy)
+		# nothing found
+		return ([], "no results")
+
+	#============================================
+	@staticmethod
+	def compute_match_confidence(
+		query_title: str, query_year: str,
+		result_title: str, result_year: str,
+	) -> float:
+		"""Compute confidence score for a search result match.
+
+		Compares query title/year against a search result to estimate
+		how likely the result is the correct movie.
+
+		Args:
+			query_title: Original movie title from the library.
+			query_year: Original movie year from the library.
+			result_title: Title from the search result.
+			result_year: Year from the search result.
+
+		Returns:
+			float: Confidence score from 0.0 to 1.0.
+		"""
+		qt = query_title.lower().strip()
+		rt = result_title.lower().strip()
+		# exact title and year match
+		if qt == rt and query_year and query_year == result_year:
+			return 1.0
+		# exact title match, no year or year mismatch
+		if qt == rt:
+			return 0.7
+		# substring match (result contains query or vice versa)
+		if qt in rt or rt in qt:
+			if query_year and query_year == result_year:
+				return 0.6
+			return 0.4
+		# no meaningful match
+		return 0.2
+
+	#============================================
 	def scrape_movie(self, movie, tmdb_id: int = 0, imdb_id: str = "") -> None:
 		"""Fetch and apply metadata to a movie from the active scraper.
 
@@ -151,6 +232,7 @@ class MovieAPI:
 		movie.certification = metadata.certification
 		movie.release_date = metadata.release_date
 		movie.trailer_url = metadata.trailer_url
+		movie.parental_guide = metadata.parental_guide
 		# convert CastMember dataclasses to dicts for NFO writer
 		movie.actors = [
 			{"name": a.name, "role": a.role, "tmdb_id": a.tmdb_id}
@@ -346,3 +428,30 @@ class MovieAPI:
 			if result_path:
 				downloaded.append(result_path)
 		return downloaded
+
+
+#============================================
+def _simplify_title(title: str) -> str:
+	"""Simplify a movie title for broader search matching.
+
+	Removes parenthetical text, leading articles, and extra whitespace.
+
+	Args:
+		title: Original movie title.
+
+	Returns:
+		str: Simplified title string.
+	"""
+	# remove parenthetical text like "(Extended Cut)" or "(2020)"
+	simplified = re.sub(r"\s*\(.*?\)", "", title)
+	# strip leading articles
+	simplified = re.sub(r"^(The|A|An)\s+", "", simplified, flags=re.IGNORECASE)
+	# collapse whitespace and strip
+	simplified = re.sub(r"\s+", " ", simplified).strip()
+	return simplified
+
+
+# simple assertion for _simplify_title
+assert _simplify_title("The Matrix (1999)") == "Matrix"
+assert _simplify_title("A Beautiful Mind") == "Beautiful Mind"
+assert _simplify_title("Clerks") == "Clerks"

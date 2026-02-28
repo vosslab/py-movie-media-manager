@@ -102,6 +102,8 @@ class Movie:
 	# classification
 	genres: list = dataclasses.field(default_factory=list)
 	tags: list = dataclasses.field(default_factory=list)
+	# parental guide severity levels by category
+	parental_guide: dict = dataclasses.field(default_factory=dict)
 	# media
 	media_source: str = ""
 	video_3d: bool = False

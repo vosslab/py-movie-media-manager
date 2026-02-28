@@ -186,6 +186,25 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 		return self._table_model.get_checked_movies()
 
 	#============================================
+	def get_selected_movies(self) -> list:
+		"""Return list of Movie objects for all selected rows.
+
+		Uses the table view's selection model to find rows selected
+		via Shift-click or Cmd-click (ExtendedSelection mode).
+
+		Returns:
+			List of Movie objects for all selected rows.
+		"""
+		selection = self._table_view.selectionModel()
+		selected_rows = selection.selectedRows()
+		movies = []
+		for index in selected_rows:
+			movie = self._table_model.get_movie(index.row())
+			if movie:
+				movies.append(movie)
+		return movies
+
+	#============================================
 	def get_checked_count(self) -> int:
 		"""Return number of checked rows."""
 		return self._table_model.get_checked_count()
@@ -264,7 +283,7 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 		)
 		settings.setValue(
 			"movieTable/sortOrder",
-			int(header.sortIndicatorOrder())
+			header.sortIndicatorOrder().value,
 		)
 
 	#============================================

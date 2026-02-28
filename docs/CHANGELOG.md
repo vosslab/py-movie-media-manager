@@ -1,8 +1,122 @@
 # Changelog
 
-## 2026-02-27
+## 2026-02-28
+
+### Fixes and Maintenance
+- Fixed batch mode never triggering from row selection in `_scrape_selected()`:
+  added fallback to selection model when fewer than 2 checkboxes are toggled,
+  so Shift/Cmd-click multi-select now activates batch mode
+- Fixed pre-existing `TypeError` in `MoviePanel.save_table_state()` where
+  `int(header.sortIndicatorOrder())` failed with PySide6 `SortOrder` enum;
+  changed to use `.value` attribute
 
 ### Additions and New Features
+- Added `get_selected_movies()` method to `MoviePanel` that returns Movie
+  objects for all rows selected via the table view's selection model
+- Added `tests/test_gui_smoke.py` with 8 smoke tests covering the full
+  scan/scrape/rename pipeline (5 API-level, 3 GUI-level with pytest-qt):
+  scan detection, metadata scraping with mocked IMDB, file renaming,
+  end-to-end pipeline, MainWindow scan, and MovieChooserDialog batch/single mode
+
+## 2026-02-27
+
+### Fixes and Maintenance
+- Fixed `AttributeError` crash in `MovieChooserDialog` when selecting search results:
+  replaced non-existent `QTableWidget.currentRowChanged` signal with `currentCellChanged`
+  and a lambda to extract the row index
+- Fixed `TypeError: unhashable type: 'Movie'` in `_on_scrape_done` by using `movie.path`
+  as the dict key in `_batch_results` instead of the unhashable `Movie` dataclass instance
+
+### Additions and New Features
+- Redesigned `MovieChooserDialog` with a horizontal `QSplitter` split-pane layout: 3-column
+  results table (Title, Year, Rating) on the left, poster preview pane with title, year, and
+  overview detail labels on the right; dialog widened to 900x550
+- Added `set_image_data(data: bytes)` method to `ImageLabel` widget for loading poster images
+  from raw bytes downloaded via HTTP
+- Added poster download on selection change in movie chooser using `ImageDownloadWorker`;
+  cancels in-flight downloads when selection changes to avoid stale images
+- Redesigned movie chooser button row: single mode shows Cancel + OK; batch mode shows
+  Abort Queue + Back + Cancel + OK with spacer between left and right groups
+- Auto-selects first search result after search to immediately populate the preview pane
+- Added Ctrl-C signal handling to GUI: `signal.signal(signal.SIGINT, signal.SIG_DFL)` plus
+  a 200ms QTimer to allow Python signal processing during the Qt event loop
+- Added `curl_cffi` session reuse in IMDB scraper (`self._session`) for connection
+  pooling across search and metadata requests; added HTTP 429 rate-limit detection
+  in `_fetch_page()` with a specific warning log before raising `ConnectionError`
+- Added `_upgrade_poster_url()` to IMDB scraper that strips resize parameters from
+  poster URLs using regex `._V1_[^.]+\.jpg` to get full-resolution images; applied
+  in both detail and search result parsing
+- Added `_extract_cast_roles()` to enrich actor objects with character names from
+  `mainColumnData.castV2` in `__NEXT_DATA__`; added `html.unescape()` decoding for
+  JSON-LD actor names to match `__NEXT_DATA__` plain-text names
+- Added `_extract_producers()` to parse producer credits from `principalCredits`
+  in `__NEXT_DATA__` where `category.id == "producer"`; builds `CastMember` objects
+  with `department="Production"`
+- Added unit tests for poster URL upgrade, actor character roles, poster URL in
+  metadata, and producers extraction in `tests/test_scraper_imdb.py`
+- Added live test assertions for poster URL (no resize params), actor roles (at
+  least one with non-empty role), and producers (lenient) in
+  `tests/test_scraper_imdb_live.py::test_get_metadata_clerks`
+- Added `_parse_next_data_detail()` and `_extract_next_data_fields()` to IMDB
+  scraper for parsing `__NEXT_DATA__` on detail pages; extracts original_title,
+  tagline, country, spoken_languages, studio, top250, and keyword tags from
+  `aboveTheFoldData` and `mainColumnData` sections
+- Added 7 unit tests for __NEXT_DATA__ detail field extraction in
+  `tests/test_scraper_imdb.py` (original_title, tagline, country/languages,
+  studio, top250, tags, graceful degradation without __NEXT_DATA__)
+- Added live test assertions for country, spoken_languages, and tags in
+  `tests/test_scraper_imdb_live.py::test_get_metadata_clerks`
+- Added parental guide severity level scraping to IMDB scraper; fetches the
+  `/title/ttXXXX/parentalguide/` page and parses category severity summaries
+  (Sex & Nudity, Violence & Gore, Profanity, Alcohol/Drugs/Smoking,
+  Frightening & Intense Scenes) into a `parental_guide` dict field
+- Added `parental_guide` dict field to `MediaMetadata` dataclass in
+  `moviemanager/scraper/types.py` and `Movie` dataclass in
+  `moviemanager/core/models/movie.py`
+- Added `_fetch_page_safe()` helper in IMDB scraper for graceful HTTP failure
+  handling without try/except blocks
+- Added `_parse_parental_guide()` function to parse __NEXT_DATA__ JSON from
+  the IMDB parental guide page
+- Added unit tests for parental guide parsing and failure degradation in
+  `tests/test_scraper_imdb.py`
+- Added live test `test_get_metadata_clerks_parental_guide` in
+  `tests/test_scraper_imdb_live.py`
+- Rewrote `moviemanager/scraper/imdb_scraper.py` to use `curl_cffi` with browser impersonation
+  and direct JSON parsing (`__NEXT_DATA__` for search, JSON-LD for movie details), replacing
+  the broken cinemagoer library entirely
+- Added `search_movie_with_fallback()` to `MovieAPI` with three-strategy fallback: title+year,
+  title only, simplified title (removes parenthetical text and leading articles)
+- Added `compute_match_confidence()` static method to `MovieAPI` for scoring search result
+  matches; batch scrape now skips low-confidence matches (< 0.7) and shows summary
+- Added batch navigation to `MovieChooserDialog` with Previous/Skip buttons, position indicator
+  in title bar (e.g. "2/4"), and auto-advance on scrape success
+- Added "Try broader search" button in movie chooser when initial search returns no results
+- Added `-l`/`--open-last` flag to `movie_organizer_gui.py` that silently opens the last used
+  directory, bypassing the reopen confirmation popup
+- Created `tests/test_scraper_imdb_live.py` with live IMDB tests for Clerks (1994, tt0109445)
+  marked with `@pytest.mark.slow`
+- Added `[tool.pytest.ini_options]` markers config to `pyproject.toml` for slow test marker
+
+### Behavior or Interface Changes
+- IMDB scraper now reuses a single `curl_cffi` session across all requests for better
+  connection pooling; HTTP 429 responses produce a specific rate-limit warning log
+- IMDB scraper poster URLs are now upgraded to full resolution by stripping resize
+  parameters (e.g. `._V1_UY300_.jpg` becomes `._V1_.jpg`)
+- IMDB scraper actor objects now include character role names extracted from
+  `__NEXT_DATA__` `castV2` data; JSON-LD actor names are HTML-entity-decoded for
+  reliable matching
+- `MovieAPI.scrape_movie()` now maps `parental_guide` and producer fields from
+  `MediaMetadata` onto `Movie` objects
+- IMDB scraper no longer depends on cinemagoer; uses `curl_cffi` for HTTP and parses IMDB
+  embedded JSON directly, fixing TLS fingerprint blocking and broken HTML parsers
+- Batch scrape (GUI and CLI) now uses confidence scoring: only auto-selects results with
+  confidence >= 0.7; shows summary dialog with scraped/skipped/no-results counts
+- GUI Scrape button now detects multiple checked movies and opens chooser in batch mode
+  with Previous/Skip/Next navigation instead of single-movie mode
+- CLI `scrape` command now tries fallback search strategies when initial search returns empty
+- Movie chooser results table ID column now shows IMDB ID or TMDB ID (whichever is available)
+- Replaced `cinemagoer` with `curl_cffi` in `pyproject.toml` dependencies and
+  `pip_requirements.txt`
 - Created `moviemanager/ui/menu_builder.py` with YAML-driven menu and shortcut construction
   from `moviemanager/ui/menu_config.yaml`; replaces hardcoded menu setup in main_window.py
 - Created `moviemanager/ui/theme.py` with dark/light/system palette support and

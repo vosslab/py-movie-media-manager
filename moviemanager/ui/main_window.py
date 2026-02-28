@@ -266,27 +266,54 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 
 	#============================================
 	def _scrape_selected(self):
-		"""Scrape metadata for selected movie."""
-		movie = self._movie_panel.get_selected_movie()
-		if not movie:
-			PySide6.QtWidgets.QMessageBox.information(
-				self, "No Selection",
-				"Please select a movie first."
-			)
-			return
-		# import and show movie chooser dialog
+		"""Scrape metadata for selected or checked movies.
+
+		If multiple movies are checked, opens the chooser dialog in
+		batch mode with Previous/Skip/Next navigation. Otherwise
+		opens it for the single selected movie.
+		"""
 		import moviemanager.ui.dialogs.movie_chooser
-		dialog = moviemanager.ui.dialogs.movie_chooser.MovieChooserDialog(
-			movie, self._api, self
-		)
+		# check if multiple movies are checked or selected
+		checked_movies = self._movie_panel.get_checked_movies()
+		# fall back to row selection if fewer than 2 checked
+		if len(checked_movies) <= 1:
+			selected = self._movie_panel.get_selected_movies()
+			if len(selected) > 1:
+				checked_movies = selected
+		if len(checked_movies) > 1:
+			# batch mode: pass movies as a list
+			dialog = moviemanager.ui.dialogs.movie_chooser.MovieChooserDialog(
+				checked_movies[0], self._api, self,
+				movie_list=checked_movies,
+			)
+		else:
+			# single movie mode
+			movie = self._movie_panel.get_selected_movie()
+			if not movie:
+				PySide6.QtWidgets.QMessageBox.information(
+					self, "No Selection",
+					"Please select a movie first."
+				)
+				return
+			dialog = moviemanager.ui.dialogs.movie_chooser.MovieChooserDialog(
+				movie, self._api, self
+			)
 		if dialog.exec() == PySide6.QtWidgets.QDialog.DialogCode.Accepted:
 			# refresh table
 			self._movie_panel.set_movies(self._api.get_movies())
 			scraped = self._api.get_scraped_count()
 			total = self._api.get_movie_count()
 			self._status.set_movie_count(total, scraped)
-			# transient success message (#24)
-			self._status.showMessage("Scrape complete", 3000)
+			# show summary for batch mode
+			if len(checked_movies) > 1:
+				batch_results = dialog.get_batch_results()
+				count = sum(1 for v in batch_results.values() if v)
+				self._status.showMessage(
+					f"Batch scrape: {count}/{len(checked_movies)} scraped",
+					5000,
+				)
+			else:
+				self._status.showMessage("Scrape complete", 3000)
 
 	#============================================
 	def _edit_selected(self):
@@ -446,7 +473,11 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 
 	#============================================
 	def _batch_scrape_unscraped(self) -> None:
-		"""Scrape all unscraped movies using auto-select best match."""
+		"""Scrape all unscraped movies using auto-select best match.
+
+		Uses confidence scoring to only auto-select high-confidence
+		matches (>= 0.7). Shows a summary of results when done.
+		"""
 		movies = self._api.get_movies()
 		unscraped = [m for m in movies if not m.scraped]
 		if not unscraped:
@@ -464,7 +495,11 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			PySide6.QtCore.Qt.WindowModality.WindowModal
 		)
 		progress.setMinimumDuration(0)
+		# confidence threshold for auto-select
+		confidence_threshold = 0.7
 		scraped_count = 0
+		skipped_low_confidence = []
+		no_results_list = []
 		for i, movie in enumerate(unscraped):
 			if progress.wasCanceled():
 				break
@@ -476,27 +511,53 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			results = self._api.search_movie(
 				movie.title, movie.year
 			)
-			if results:
-				best = results[0]
-				# use tmdb_id or imdb_id depending on provider
-				if best.tmdb_id:
-					self._api.scrape_movie(
-						movie, tmdb_id=best.tmdb_id
-					)
-				elif best.imdb_id:
-					self._api.scrape_movie(
-						movie, imdb_id=best.imdb_id
-					)
-				scraped_count += 1
+			if not results:
+				no_results_list.append(movie.title)
+				continue
+			best = results[0]
+			# check confidence before auto-selecting
+			confidence = moviemanager.api.movie_api.MovieAPI.compute_match_confidence(
+				movie.title, movie.year,
+				best.title, best.year,
+			)
+			if confidence < confidence_threshold:
+				skipped_low_confidence.append(
+					f"{movie.title} -> {best.title} ({confidence:.1f})"
+				)
+				continue
+			# use tmdb_id or imdb_id depending on provider
+			if best.tmdb_id:
+				self._api.scrape_movie(
+					movie, tmdb_id=best.tmdb_id
+				)
+			elif best.imdb_id:
+				self._api.scrape_movie(
+					movie, imdb_id=best.imdb_id
+				)
+			scraped_count += 1
 		progress.setValue(len(unscraped))
 		# refresh table
 		self._movie_panel.set_movies(self._api.get_movies())
 		scraped = self._api.get_scraped_count()
 		total = self._api.get_movie_count()
 		self._status.set_movie_count(total, scraped)
-		self._status.showMessage(
-			f"Batch scrape complete: {scraped_count} movies scraped",
-			3000
+		# show summary dialog
+		summary_parts = [f"Scraped: {scraped_count}"]
+		if skipped_low_confidence:
+			summary_parts.append(
+				f"Skipped (low confidence): {len(skipped_low_confidence)}"
+			)
+		if no_results_list:
+			summary_parts.append(
+				f"No results: {len(no_results_list)}"
+			)
+		summary_text = "\n".join(summary_parts)
+		# add detail about skipped movies
+		if skipped_low_confidence:
+			summary_text += "\n\nLow confidence matches:\n"
+			summary_text += "\n".join(skipped_low_confidence[:20])
+		PySide6.QtWidgets.QMessageBox.information(
+			self, "Batch Scrape Complete", summary_text
 		)
 
 	#============================================

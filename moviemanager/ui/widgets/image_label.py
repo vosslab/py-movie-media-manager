@@ -36,6 +36,35 @@ class ImageLabel(PySide6.QtWidgets.QLabel):
 		self._update_scaled()
 
 	#============================================
+	def set_image_data(self, data: bytes) -> None:
+		"""Load and display an image from raw bytes.
+
+		Args:
+			data: Raw image bytes (e.g. from HTTP response).
+		"""
+		if not data:
+			self._pixmap = None
+			self.clear()
+			self.setText("No artwork")
+			self.setForegroundRole(
+				PySide6.QtGui.QPalette.ColorRole.PlaceholderText
+			)
+			return
+		pixmap = PySide6.QtGui.QPixmap()
+		# load the raw image bytes into a QPixmap
+		loaded = pixmap.loadFromData(data)
+		if not loaded or pixmap.isNull():
+			self._pixmap = None
+			self.clear()
+			self.setText("Invalid image")
+			self.setForegroundRole(
+				PySide6.QtGui.QPalette.ColorRole.PlaceholderText
+			)
+			return
+		self._pixmap = pixmap
+		self._update_scaled()
+
+	#============================================
 	def _update_scaled(self) -> None:
 		"""Scale pixmap to fit label size."""
 		if self._pixmap and not self._pixmap.isNull():

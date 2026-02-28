@@ -242,6 +242,14 @@ def cmd_scrape(args: argparse.Namespace) -> None:
 	for movie in rich.progress.track(unscraped, description="Scraping..."):
 		console.print(f"Searching: {movie.title} ({movie.year})")
 		results = api.search_movie(movie.title, movie.year)
+		# try fallback search strategies if no results
+		strategy = ""
+		if not results:
+			results, strategy = api.search_movie_with_fallback(
+				movie.title, movie.year
+			)
+			if strategy and results:
+				console.print(f"  Fallback ({strategy})")
 		if not results:
 			console.print("  No results found, skipping.\n")
 			continue
@@ -250,28 +258,46 @@ def cmd_scrape(args: argparse.Namespace) -> None:
 		table.add_column("#", style="bold")
 		table.add_column("Title", style="cyan")
 		table.add_column("Year", style="green")
-		table.add_column("TMDB ID", style="yellow")
+		table.add_column("ID", style="yellow")
 		for idx, sr in enumerate(results[:10], start=1):
-			table.add_row(
-				str(idx), sr.title, sr.year, str(sr.tmdb_id)
-			)
+			# show whichever ID is available
+			id_text = str(sr.tmdb_id) if sr.tmdb_id else sr.imdb_id
+			table.add_row(str(idx), sr.title, sr.year, id_text)
 		console.print(table)
 		# select result
-		chosen_id = 0
+		chosen_result = None
 		if args.batch_mode:
-			# auto-select first result in batch mode
-			chosen_id = results[0].tmdb_id
-			console.print(f"  Batch: auto-selected '{results[0].title}'")
+			best = results[0]
+			# check confidence before auto-selecting
+			confidence = moviemanager.api.movie_api.MovieAPI.compute_match_confidence(
+				movie.title, movie.year,
+				best.title, best.year,
+			)
+			if confidence >= 0.7:
+				chosen_result = best
+				console.print(
+					f"  Batch: auto-selected '{best.title}'"
+					f" (confidence: {confidence:.1f})"
+				)
+			else:
+				console.print(
+					f"  Skipped: low confidence {confidence:.1f}"
+					f" for '{best.title}'\n"
+				)
+				continue
 		else:
 			# interactive: prompt user to pick
 			choice = input("Pick a number (0 to skip): ").strip()
 			if choice.isdigit() and 1 <= int(choice) <= len(results[:10]):
-				chosen_id = results[int(choice) - 1].tmdb_id
+				chosen_result = results[int(choice) - 1]
 			else:
 				console.print("  Skipped.\n")
 				continue
-		# scrape the chosen movie
-		api.scrape_movie(movie, chosen_id)
+		# scrape the chosen movie using available ID
+		if chosen_result.tmdb_id:
+			api.scrape_movie(movie, tmdb_id=chosen_result.tmdb_id)
+		elif chosen_result.imdb_id:
+			api.scrape_movie(movie, imdb_id=chosen_result.imdb_id)
 		console.print(f"  Scraped: {movie.title} ({movie.year})\n")
 
 
