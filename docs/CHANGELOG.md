@@ -3,6 +3,23 @@
 ## 2026-03-03
 
 ### Additions and New Features
+- Added `get_chosen_movies()` to `MoviePanel` for unified batch operation resolution:
+  checked (2+) > selected (2+) > single checked > single selected > empty.
+- Added "Check Selected" button that converts highlighted rows into checkboxes (additive).
+- Added `check_movies()` to `MovieTableModel` for programmatic additive checking.
+- Added [docs/MOVIE_ORGANIZATION_UI_UX_WORKFLOW.md](MOVIE_ORGANIZATION_UI_UX_WORKFLOW.md)
+  documenting checkbox vs row selection, resolution order, and button bar reference.
+
+### Behavior or Interface Changes
+- Renamed all "Select X" buttons to "Check X" (Check All, Check None, Check Unmatched,
+  Check Unorganized, Check No PG, Check No Artwork, Check No Subs) to clarify they toggle
+  checkboxes, not row highlighting.
+- Updated `_scrape_selected()`, `_rename_selected()`, `_download_content()`,
+  `_fetch_parental_guides()`, and `_refresh_metadata()` in `MainWindow` to use
+  `get_chosen_movies()` instead of inline checked/selected logic.
+- `_fetch_parental_guides()` and `_refresh_metadata()` now respect row selection in addition
+  to checkboxes; previously they only checked checkboxes and fell back to all movies.
+
 - Added parental guide color bar to the movie edit dialog below the poster. Shows 5 colored
   circles (S&N, V&G, Prof, A&D, F&I) with severity colors reused from `status_delegate.py`,
   tooltips with full category names, and the `parental_guide_checked` date.
@@ -117,6 +134,9 @@
   download jobs are now covered by the existing TaskAPI active-count check.
 
 ### Fixes and Maintenance
+- Fixed `_fetch_parental_guides()` using all movies instead of only the checked ones. When
+  movies were checked but none passed the `scraped and imdb_id` filter, the fallback incorrectly
+  queried all movies. Now the fallback to all movies only triggers when no movies are checked.
 - Fixed rename settings (resolution, video codec, audio codec, channels checkboxes) being ignored
   during actual renames. `MovieAPI.rename_movie()` now calls `build_file_template()` to assemble
   the file template with media tokens, matching the settings dialog preview behavior.

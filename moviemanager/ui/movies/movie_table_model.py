@@ -321,6 +321,25 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 		)
 
 	#============================================
+	def check_movies(self, movies: list) -> None:
+		"""Add the given movies to the checked set (additive).
+
+		Does not uncheck anything first -- only adds to the checked set.
+
+		Args:
+			movies: List of Movie objects to check.
+		"""
+		for movie in movies:
+			self._checked.add(id(movie))
+		# notify views the checkbox column changed
+		top = self.index(0, 0)
+		bottom = self.index(self.rowCount() - 1, 0)
+		self.dataChanged.emit(top, bottom)
+		self.checked_changed.emit(
+			len(self._checked), len(self._filtered)
+		)
+
+	#============================================
 	def get_checked_movies(self) -> list:
 		"""Return list of checked Movie objects."""
 		checked = []

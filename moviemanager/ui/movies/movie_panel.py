@@ -107,42 +107,48 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 		# search field
 		self._search = moviemanager.ui.widgets.search_field.SearchField()
 		layout.addWidget(self._search)
-		# selection buttons row
+		# checkbox buttons row
 		sel_layout = PySide6.QtWidgets.QHBoxLayout()
-		sel_all_btn = PySide6.QtWidgets.QPushButton("Select All")
+		sel_all_btn = PySide6.QtWidgets.QPushButton("Check All")
 		sel_all_btn.setMaximumWidth(100)
 		sel_all_btn.clicked.connect(self.check_all)
 		sel_layout.addWidget(sel_all_btn)
-		sel_none_btn = PySide6.QtWidgets.QPushButton("Select None")
+		sel_none_btn = PySide6.QtWidgets.QPushButton("Check None")
 		sel_none_btn.setMaximumWidth(100)
 		sel_none_btn.clicked.connect(self.uncheck_all)
 		sel_layout.addWidget(sel_none_btn)
+		sel_selected_btn = PySide6.QtWidgets.QPushButton(
+			"Check Selected"
+		)
+		sel_selected_btn.setMaximumWidth(120)
+		sel_selected_btn.clicked.connect(self.check_selected)
+		sel_layout.addWidget(sel_selected_btn)
 		sel_unmatched_btn = PySide6.QtWidgets.QPushButton(
-			"Select Unmatched"
+			"Check Unmatched"
 		)
 		sel_unmatched_btn.setMaximumWidth(130)
 		sel_unmatched_btn.clicked.connect(self.check_unscraped)
 		sel_layout.addWidget(sel_unmatched_btn)
 		sel_unorg_btn = PySide6.QtWidgets.QPushButton(
-			"Select Unorganized"
+			"Check Unorganized"
 		)
 		sel_unorg_btn.setMaximumWidth(140)
 		sel_unorg_btn.clicked.connect(self.check_unorganized)
 		sel_layout.addWidget(sel_unorg_btn)
 		sel_no_pg_btn = PySide6.QtWidgets.QPushButton(
-			"Select No PG"
+			"Check No PG"
 		)
 		sel_no_pg_btn.setMaximumWidth(110)
 		sel_no_pg_btn.clicked.connect(self.check_no_parental_guide)
 		sel_layout.addWidget(sel_no_pg_btn)
 		sel_no_art_btn = PySide6.QtWidgets.QPushButton(
-			"Select No Artwork"
+			"Check No Artwork"
 		)
 		sel_no_art_btn.setMaximumWidth(130)
 		sel_no_art_btn.clicked.connect(self.check_no_artwork)
 		sel_layout.addWidget(sel_no_art_btn)
 		sel_no_subs_btn = PySide6.QtWidgets.QPushButton(
-			"Select No Subs"
+			"Check No Subs"
 		)
 		sel_no_subs_btn.setMaximumWidth(120)
 		sel_no_subs_btn.clicked.connect(self.check_no_subtitles)
@@ -361,6 +367,43 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 			if movie:
 				movies.append(movie)
 		return movies
+
+	#============================================
+	def get_chosen_movies(self) -> list:
+		"""Return movies chosen for batch operations.
+
+		Unified resolution order:
+		  checked (2+) > selected (2+) > single checked > single selected > empty.
+
+		Returns:
+			List of Movie objects to act on.
+		"""
+		checked = self.get_checked_movies()
+		selected = self.get_selected_movies()
+		# prefer checked if 2 or more
+		if len(checked) >= 2:
+			return checked
+		# fall back to selected if 2 or more
+		if len(selected) >= 2:
+			return selected
+		# single checked
+		if len(checked) == 1:
+			return checked
+		# single selected
+		if len(selected) == 1:
+			return selected
+		return []
+
+	#============================================
+	def check_selected(self) -> None:
+		"""Add highlighted rows to the checked set (additive).
+
+		Takes the currently selected (highlighted) rows and checks them
+		without unchecking anything else.
+		"""
+		selected = self.get_selected_movies()
+		if selected:
+			self._table_model.check_movies(selected)
 
 	#============================================
 	def get_checked_count(self) -> int:

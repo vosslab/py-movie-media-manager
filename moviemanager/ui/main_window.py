@@ -616,13 +616,8 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		batch mode with Previous/Skip/Next navigation. Otherwise
 		opens it for the single selected movie.
 		"""
-		# check if multiple movies are checked or selected
-		checked_movies = self._movie_panel.get_checked_movies()
-		# fall back to row selection if fewer than 2 checked
-		if len(checked_movies) <= 1:
-			selected = self._movie_panel.get_selected_movies()
-			if len(selected) > 1:
-				checked_movies = selected
+		# unified resolution: checked > selected > single
+		checked_movies = self._movie_panel.get_chosen_movies()
 		if len(checked_movies) > 1:
 			# batch mode: pass movies as a list
 			dialog = moviemanager.ui.dialogs.movie_chooser.MovieChooserDialog(
@@ -690,12 +685,8 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		rename pairs for all checked movies and shows a combined
 		preview dialog. Falls back to single-movie mode.
 		"""
-		# collect checked or selected movies for batch
-		checked_movies = self._movie_panel.get_checked_movies()
-		if len(checked_movies) <= 1:
-			selected = self._movie_panel.get_selected_movies()
-			if len(selected) > 1:
-				checked_movies = selected
+		# unified resolution: checked > selected > single
+		checked_movies = self._movie_panel.get_chosen_movies()
 		# batch mode: multiple movies
 		if len(checked_movies) > 1:
 			self._rename_batch(checked_movies)
@@ -1201,15 +1192,16 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 	def _refresh_metadata(self) -> None:
 		"""Re-fetch metadata from IMDB/TMDB for matched movies.
 
-		Collects checked movies that are already scraped, or falls
-		back to all scraped movies if none are checked. Launches a
-		background worker to re-scrape each with cache bypass.
+		Uses get_chosen_movies() to resolve checked/selected movies,
+		filtering to scraped movies. Falls back to all scraped movies
+		if nothing is chosen. Launches a background worker to re-scrape
+		each with cache bypass.
 		"""
-		# collect checked scraped movies, or fall back to all scraped
-		checked_movies = self._movie_panel.get_checked_movies()
-		scraped = [m for m in checked_movies if m.scraped]
+		# unified resolution: checked > selected > empty
+		chosen = self._movie_panel.get_chosen_movies()
+		scraped = [m for m in chosen if m.scraped]
 		if not scraped:
-			# fall back to all scraped movies
+			# nothing chosen; fall back to all scraped movies
 			all_movies = self._api.get_movies()
 			scraped = [m for m in all_movies if m.scraped]
 		if not scraped:
@@ -1300,16 +1292,21 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 	def _fetch_parental_guides(self) -> None:
 		"""Fetch parental guide data from IMDB for matched movies.
 
-		Collects checked scraped movies with imdb_id, or falls back
-		to all scraped movies with imdb_id. Submits a background job.
+		Uses get_chosen_movies() to resolve checked/selected movies,
+		filtering to scraped movies with imdb_id. Falls back to all
+		scraped movies with imdb_id only when nothing is chosen.
+		Submits a background job.
 		"""
-		# collect checked scraped movies, or fall back to all scraped
-		checked_movies = self._movie_panel.get_checked_movies()
-		candidates = [
-			m for m in checked_movies
-			if m.scraped and m.imdb_id
-		]
-		if not candidates:
+		# unified resolution: checked > selected > empty
+		chosen = self._movie_panel.get_chosen_movies()
+		if chosen:
+			# user explicitly chose movies; only use those
+			candidates = [
+				m for m in chosen
+				if m.scraped and m.imdb_id
+			]
+		else:
+			# nothing chosen; fall back to all scraped movies
 			all_movies = self._api.get_movies()
 			candidates = [
 				m for m in all_movies
@@ -1438,19 +1435,10 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 					"Check the Jobs dialog for progress."
 				)
 				return
-		# collect checked or selected movies
-		checked_movies = self._movie_panel.get_checked_movies()
-		if len(checked_movies) <= 1:
-			selected = self._movie_panel.get_selected_movies()
-			if len(selected) > 1:
-				checked_movies = selected
+		# unified resolution: checked > selected > single
+		chosen = self._movie_panel.get_chosen_movies()
 		# filter to scraped movies only
-		scraped_movies = [m for m in checked_movies if m.scraped]
-		# fall back to single selected movie
-		if not scraped_movies:
-			movie = self._movie_panel.get_selected_movie()
-			if movie and movie.scraped:
-				scraped_movies = [movie]
+		scraped_movies = [m for m in chosen if m.scraped]
 		if not scraped_movies:
 			PySide6.QtWidgets.QMessageBox.information(
 				self, "No Matched Movies",
