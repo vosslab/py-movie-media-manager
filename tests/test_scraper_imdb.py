@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Unit tests for the IMDB GraphQL scraper with mocked network calls.
 
 Tests cover search, get_metadata, parental guide parsing, cast extraction,
@@ -606,3 +605,65 @@ def test_top250_above_range():
 	}}
 	metadata = moviemanager.scraper.imdb_scraper._parse_graphql_metadata(data, "tt0000002")
 	assert metadata.top250 == 0
+
+
+#============================================
+# Tests for get_parental_guide
+#============================================
+
+def test_get_parental_guide_mocked():
+	"""get_parental_guide returns parsed category-to-severity mapping."""
+	mock_graphql_response = {
+		"data": {
+			"title": {
+				"parentsGuide": {
+					"categories": [
+						{"category": {"text": "Sex & Nudity"}, "severity": {"text": "Mild"}},
+						{"category": {"text": "Violence & Gore"}, "severity": {"text": "Moderate"}},
+						{"category": {"text": "Profanity"}, "severity": {"text": "Mild"}},
+					]
+				}
+			}
+		}
+	}
+	mock_response = MockResponse(200, mock_graphql_response)
+	with unittest.mock.patch.object(
+		moviemanager.scraper.imdb_scraper.curl_cffi.requests.Session,
+		"post",
+		return_value=mock_response,
+	):
+		scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
+		guide = scraper.get_parental_guide("tt0109445")
+	assert len(guide) == 3
+	assert guide["Sex & Nudity"] == "Mild"
+	assert guide["Violence & Gore"] == "Moderate"
+	assert guide["Profanity"] == "Mild"
+
+
+#============================================
+def test_get_parental_guide_empty_id():
+	"""get_parental_guide returns empty dict when no imdb_id is given."""
+	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
+	guide = scraper.get_parental_guide("")
+	assert guide == {}
+
+
+#============================================
+def test_get_parental_guide_no_data():
+	"""get_parental_guide returns empty dict when no guide data exists."""
+	mock_graphql_response = {
+		"data": {
+			"title": {
+				"parentsGuide": None
+			}
+		}
+	}
+	mock_response = MockResponse(200, mock_graphql_response)
+	with unittest.mock.patch.object(
+		moviemanager.scraper.imdb_scraper.curl_cffi.requests.Session,
+		"post",
+		return_value=mock_response,
+	):
+		scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
+		guide = scraper.get_parental_guide("tt0000001")
+	assert guide == {}

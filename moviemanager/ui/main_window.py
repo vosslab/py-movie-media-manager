@@ -610,11 +610,8 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 				no_results_list.append(movie.title)
 				continue
 			best = results[0]
-			# check confidence before auto-selecting
-			confidence = moviemanager.api.movie_api.MovieAPI.compute_match_confidence(
-				movie.title, movie.year,
-				best.title, best.year,
-			)
+			# use pre-computed match confidence from search
+			confidence = best.match_confidence
 			if confidence < confidence_threshold:
 				skipped_low_confidence.append(
 					f"{movie.title} -> {best.title} ({confidence:.1f})"

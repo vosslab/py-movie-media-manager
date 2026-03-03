@@ -29,8 +29,10 @@ class SearchResult:
 	imdb_id: str = ""
 	overview: str = ""
 	poster_url: str = ""
-	# relevance score
+	# relevance score from provider (e.g. IMDB/TMDB aggregate rating)
 	score: float = 0.0
+	# computed match confidence (0.0-1.0) for how well this matches query
+	match_confidence: float = 0.0
 
 
 #============================================

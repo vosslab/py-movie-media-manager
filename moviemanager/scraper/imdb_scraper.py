@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """IMDB scraper using the GraphQL API with curl_cffi transport."""
 
 # Standard Library
@@ -57,6 +56,18 @@ _METADATA_QUERY = """query GetTitle($id: ID!) {
       }
     }
     keywords(first: 20) { edges { node { text } } }
+    parentsGuide {
+      categories {
+        category { text }
+        severity { text }
+      }
+    }
+  }
+}"""
+
+# GraphQL query for fetching only parental guide data
+_PARENTAL_GUIDE_QUERY = """query ParentalGuide($id: ID!) {
+  title(id: $id) {
     parentsGuide {
       categories {
         category { text }
@@ -528,6 +539,25 @@ class ImdbScraper(moviemanager.scraper.interfaces.MetadataProvider):
 		)
 		metadata = _parse_graphql_metadata(data, imdb_id)
 		return metadata
+
+	#============================================
+	def get_parental_guide(self, imdb_id: str) -> dict:
+		"""Fetch only parental guide data for a movie.
+
+		Args:
+			imdb_id: IMDB movie ID (tt format).
+
+		Returns:
+			dict: Category name to severity string mapping.
+		"""
+		if not imdb_id:
+			return {}
+		data = _fetch_graphql(
+			_PARENTAL_GUIDE_QUERY, {"id": imdb_id}, self._session,
+		)
+		title_data = data.get("title", {}) or {}
+		guide = _parse_graphql_parental_guide(title_data)
+		return guide
 
 
 # simple assertion for _upgrade_poster_url

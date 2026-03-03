@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Dialog for solving IMDB AWS WAF challenges via embedded browser."""
 
 # Standard Library

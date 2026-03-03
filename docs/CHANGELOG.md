@@ -3,6 +3,36 @@
 ## 2026-03-03
 
 ### Additions and New Features
+- Created `moviemanager/api/match_confidence.py` with API-agnostic Bayesian-inspired
+  match confidence scoring. Uses four weighted signals: title similarity (0.50 weight
+  via `difflib.SequenceMatcher`), year proximity (0.25 weight via Gaussian bell curve
+  with sigma=2), token overlap (0.15 weight via Jaccard similarity), and popularity
+  prior (0.10 weight from provider rating). Includes exact-match bonus and low-similarity
+  clamp. Works with plain strings/floats, no scraper type dependencies.
+- Added `match_confidence` field to `SearchResult` dataclass in
+  `moviemanager/scraper/types.py` for storing computed match scores.
+- Updated `MovieAPI.search_movie()` to compute match confidence for each result and
+  sort results by confidence descending, so the best match is always first.
+- Renamed "Rating" column to "Match" in the movie chooser results table, now displaying
+  confidence percentages with color coding (green >= 70%, yellow 40-69%, red < 40%).
+- Added pre-match view to `MovieChooserDialog`: when a movie already has scraped
+  metadata, the dialog shows existing match info (title, year, IDs, rating, director,
+  genres, certification, runtime, poster) with "Keep Match" and "Re-match" buttons
+  instead of immediately searching. "Keep Match" advances without re-scraping;
+  "Re-match" switches to normal search mode.
+- Added TMDB-primary scraper mode with IMDB parental guide supplement:
+  `MovieAPI._ensure_scraper()` now auto-detects TMDB when a TMDB API key
+  is configured, using TMDB for search and metadata with IMDB GraphQL as
+  a supplement for parental guide data only. Falls back to IMDB-only when
+  no TMDB key is available.
+- Added `_PARENTAL_GUIDE_QUERY` GraphQL constant and `get_parental_guide()`
+  method to `ImdbScraper` for fetching only parental guide severity data
+  without pulling full movie metadata.
+- Added parental guide supplement logic in `MovieAPI.scrape_movie()`: when
+  using TMDB as the primary scraper and the metadata lacks parental guide
+  data, the IMDB supplement scraper fetches it automatically.
+- Updated `_apply_configured_imdb_browser_cookies()` to apply browser
+  cookies to both the primary IMDB scraper and the IMDB supplement scraper.
 - Rebuilt IMDB scraper from scratch using IMDB's GraphQL API
   (`graphql.imdb.com`) instead of HTML scraping. The GraphQL endpoint
   currently bypasses AWS WAF challenges that blocked all HTML endpoints.
@@ -23,6 +53,12 @@
   "AWS WAF challenge" text, triggering the existing challenge dialog flow.
 
 ### Fixes and Maintenance
+- Fixed batch mode premature close in `MovieChooserDialog`: the `_on_scrape_done()`
+  callback unconditionally called `self.accept()`, closing the dialog when ANY
+  background scrape finished even if the user was still working on later movies.
+  Now tracks in-flight scrapes with `_pending_scrape_count` and only closes when
+  the last movie's scrape completes. Non-last movie scrape errors are silently
+  recorded instead of showing disruptive popups mid-batch.
 - Root-caused IMDB `HTTP 202` search failures to AWS WAF challenge responses
   (`x-amzn-waf-action: challenge`) on IMDB HTML endpoints such as `/find/`.
 - Changed `ImdbScraper.search()` to query IMDB suggestion JSON endpoint
@@ -52,8 +88,28 @@
 - IMDB provider now prefers TMDB poster URLs by default (when a TMDB API key is
   configured): top search results are rewritten to TMDB poster URLs, and scrape
   metadata poster URLs are replaced with the TMDB poster when an imdb_id match exists.
+- Added a hard decode cap for artwork images: `ImageLabel` now constrains source
+  images so the largest dimension is at most 4096 pixels before creating the pixmap,
+  preventing Qt allocation-limit failures on oversized posters.
+
+### Behavior or Interface Changes
+- `MovieAPI.compute_match_confidence()` now delegates to the standalone
+  `moviemanager.api.match_confidence` module instead of using its own inline logic.
+  The static method signature is preserved for backward compatibility.
+- `_batch_scrape_unscraped()` in `main_window.py` now uses pre-computed
+  `best.match_confidence` from search results instead of calling
+  `MovieAPI.compute_match_confidence()` separately.
+- TMDB scraper selection is now automatic based on API key presence; the
+  `scraper_provider` setting is no longer checked. TMDB key exists = TMDB primary.
 
 ### Developer Tests and Notes
+- Created `tests/test_match_confidence.py` with 12 tests covering: exact match,
+  year off-by-1, article normalization, different titles, token reorder, missing
+  year, popularity tiebreaker, original title matching, empty titles, score bounds,
+  internal `_normalize_title()`, and Gaussian `_year_proximity()` bell curve.
+- Added 3 unit tests for `get_parental_guide()` method in `tests/test_scraper_imdb.py`:
+  mocked GraphQL response parsing, empty IMDB ID handling, and null guide data handling.
+  Test suite now has 32 tests.
 - Added `tests/test_scraper_imdb.py` with 29 unit tests covering GraphQL metadata
   parsing, search result filtering, parental guide extraction, cast/producer mapping,
   WAF detection, poster URL cleanup, cookie injection, and top250 handling.

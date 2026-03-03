@@ -12,6 +12,7 @@ import logging
 import requests
 
 # local repo modules
+import moviemanager.api.match_confidence
 import moviemanager.core.movie.movie_list
 import moviemanager.core.movie.renamer
 import moviemanager.core.movie.scanner
@@ -46,6 +47,7 @@ class MovieAPI:
 		self._settings = settings
 		self._movie_list = moviemanager.core.movie.movie_list.MovieList()
 		self._scraper = None
+		self._imdb_scraper = None
 		self._imdb_cookies_loaded_spec = ""
 		self._tmdb_lookup_scraper = None
 		self._tmdb_lookup_spec = ""
@@ -91,24 +93,27 @@ class MovieAPI:
 
 	#============================================
 	def _ensure_scraper(self) -> None:
-		"""Create the scraper based on settings provider preference.
+		"""Create the scraper, preferring TMDB when API key exists.
 
-		Uses IMDB scraper (no key needed) or TMDB scraper (key required).
-		Falls back to IMDB if TMDB key is missing.
+		Uses TMDB for search and metadata when a TMDB API key is
+		configured, with IMDB as a supplement for parental guide data.
+		Falls back to IMDB-only when no TMDB key is available.
 		"""
 		if self._scraper is not None:
 			self._apply_configured_imdb_browser_cookies()
 			return
-		provider = self._settings.scraper_provider
-		if provider == "tmdb":
-			api_key = self._settings.tmdb_api_key
-			if api_key:
-				self._scraper = moviemanager.scraper.tmdb_scraper.TmdbScraper(
-					api_key=api_key,
-					language=self._settings.scrape_language,
-				)
-				return
-			# fall back to IMDB if no TMDB key
+		# auto-detect: use TMDB when API key exists
+		api_key = self._settings.tmdb_api_key
+		if api_key:
+			self._scraper = moviemanager.scraper.tmdb_scraper.TmdbScraper(
+				api_key=api_key,
+				language=self._settings.scrape_language,
+			)
+			# IMDB supplement for parental guide data
+			self._imdb_scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
+			self._apply_configured_imdb_browser_cookies()
+			return
+		# fallback: IMDB only (no TMDB key)
 		self._scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
 		self._apply_configured_imdb_browser_cookies()
 
@@ -147,11 +152,7 @@ class MovieAPI:
 
 	#============================================
 	def _apply_configured_imdb_browser_cookies(self) -> None:
-		"""Load and apply browser cookies to the IMDB scraper, if configured."""
-		if not isinstance(
-			self._scraper, moviemanager.scraper.imdb_scraper.ImdbScraper
-		):
-			return
+		"""Load and apply browser cookies to IMDB scrapers, if configured."""
 		spec = self._configured_imdb_browser_cookie_spec()
 		if not spec:
 			return
@@ -163,7 +164,16 @@ class MovieAPI:
 				"No IMDB cookies found from browser spec: %s", spec
 			)
 			return
-		self._scraper.set_cookies(cookies)
+		# apply to primary scraper if it is an IMDB scraper
+		if isinstance(
+			self._scraper, moviemanager.scraper.imdb_scraper.ImdbScraper
+		):
+			self._scraper.set_cookies(cookies)
+		# also apply to IMDB supplement scraper if active
+		if (self._imdb_scraper is not None
+				and isinstance(self._imdb_scraper,
+					moviemanager.scraper.imdb_scraper.ImdbScraper)):
+			self._imdb_scraper.set_cookies(cookies)
 		self._imdb_cookies_loaded_spec = spec
 
 	#============================================
@@ -224,25 +234,49 @@ class MovieAPI:
 			result.poster_url = poster_url
 
 	#============================================
-	def search_movie(self, title: str, year: str = "") -> list:
+	def search_movie(
+		self, title: str, year: str = "",
+		query_title: str = "", query_year: str = "",
+	) -> list:
 		"""Search for movie metadata by title.
+
+		Computes match confidence for each result and sorts
+		by confidence descending so the best match is first.
 
 		Args:
 			title: Movie title to search for.
 			year: Optional release year to narrow results.
+			query_title: Original title for scoring (defaults to title).
+			query_year: Original year for scoring (defaults to year).
 
 		Returns:
-			List of SearchResult instances from the scraper.
+			List of SearchResult instances sorted by match confidence.
 		"""
 		self._ensure_scraper()
-		result = self._scraper.search(title, year)
+		results = self._scraper.search(title, year)
 		if isinstance(
 			self._scraper, moviemanager.scraper.imdb_scraper.ImdbScraper
 		):
-			prefetch_results = result[:_TMDB_POSTER_PREFETCH_LIMIT]
+			prefetch_results = results[:_TMDB_POSTER_PREFETCH_LIMIT]
 			for item in prefetch_results:
 				self._prefer_tmdb_poster(item)
-		return result
+		# compute match confidence for each result
+		ref_title = query_title or title
+		ref_year = query_year or year
+		for r in results:
+			r.match_confidence = (
+				moviemanager.api.match_confidence.compute_match_confidence(
+					ref_title, ref_year,
+					r.title, r.year,
+					result_original_title=r.original_title,
+					result_score=r.score,
+				)
+			)
+		# sort by confidence descending (best match first)
+		results.sort(
+			key=lambda r: r.match_confidence, reverse=True
+		)
+		return results
 
 	#============================================
 	def apply_imdb_cookies(self, cookies: list) -> bool:
@@ -314,8 +348,7 @@ class MovieAPI:
 	) -> float:
 		"""Compute confidence score for a search result match.
 
-		Compares query title/year against a search result to estimate
-		how likely the result is the correct movie.
+		Delegates to the API-agnostic match_confidence module.
 
 		Args:
 			query_title: Original movie title from the library.
@@ -326,21 +359,11 @@ class MovieAPI:
 		Returns:
 			float: Confidence score from 0.0 to 1.0.
 		"""
-		qt = query_title.lower().strip()
-		rt = result_title.lower().strip()
-		# exact title and year match
-		if qt == rt and query_year and query_year == result_year:
-			return 1.0
-		# exact title match, no year or year mismatch
-		if qt == rt:
-			return 0.7
-		# substring match (result contains query or vice versa)
-		if qt in rt or rt in qt:
-			if query_year and query_year == result_year:
-				return 0.6
-			return 0.4
-		# no meaningful match
-		return 0.2
+		score = moviemanager.api.match_confidence.compute_match_confidence(
+			query_title, query_year,
+			result_title, result_year,
+		)
+		return score
 
 	#============================================
 	def scrape_movie(self, movie, tmdb_id: int = 0, imdb_id: str = "") -> None:
@@ -369,6 +392,19 @@ class MovieAPI:
 				metadata.tmdb_id = tmdb_match_id
 			if tmdb_poster_url:
 				metadata.poster_url = tmdb_poster_url
+		# supplement parental guide from IMDB when using TMDB
+		if (self._imdb_scraper is not None
+				and not metadata.parental_guide
+				and metadata.imdb_id):
+			try:
+				guide = self._imdb_scraper.get_parental_guide(
+					metadata.imdb_id
+				)
+				metadata.parental_guide = guide
+			except Exception as err:
+				_LOG.warning(
+					"IMDB parental guide fetch failed: %s", err
+				)
 		# map MediaMetadata fields to the Movie object
 		movie.title = metadata.title or movie.title
 		movie.original_title = metadata.original_title or movie.original_title

@@ -1,11 +1,9 @@
-#!/usr/bin/env python3
 """Unit tests for the browser cookie loader with mocked file system."""
 
 # Standard Library
 import os
 import sys
 import sqlite3
-import tempfile
 import unittest.mock
 
 # PIP3 modules

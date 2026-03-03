@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Smoke tests covering scan/scrape/rename pipeline and GUI batch mode."""
 
 # Standard Library
