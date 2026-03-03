@@ -140,7 +140,15 @@ def write_nfo(
 	if movie.certification:
 		_add_text_element(root, "mpaa", movie.certification)
 
-	# 17. id (imdb_id)
+	# 17. parental_guide (advisory categories and severities)
+	if movie.parental_guide:
+		pg_elem = lxml.etree.SubElement(root, "parental_guide")
+		for category, severity in sorted(movie.parental_guide.items()):
+			advisory = lxml.etree.SubElement(pg_elem, "advisory")
+			advisory.set("category", category)
+			advisory.text = severity
+
+	# 18. id (imdb_id)
 	if movie.imdb_id:
 		_add_text_element(root, "id", movie.imdb_id)
 

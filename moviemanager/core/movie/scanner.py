@@ -236,6 +236,9 @@ def _merge_nfo_into_movie(
 	# movie set
 	if nfo_movie.movie_set:
 		movie.movie_set = nfo_movie.movie_set
+	# parental guide
+	if nfo_movie.parental_guide:
+		movie.parental_guide.update(nfo_movie.parental_guide)
 	# state
 	if nfo_movie.watched:
 		movie.watched = nfo_movie.watched

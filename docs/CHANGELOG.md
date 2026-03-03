@@ -3,6 +3,10 @@
 ## 2026-03-03
 
 ### Additions and New Features
+- Persist parents guide severity data in NFO files. Writer emits `<parental_guide>`
+  with `<advisory category="...">` children, reader parses them back, and scanner
+  merges them on startup. Data now survives app restarts instead of being discarded
+  every session. Added round-trip test in `tests/test_nfo_round_trip.py`.
 - Created `moviemanager/ui/imdb_browser_transport.py` with `ImdbBrowserTransport`
   class that uses `QWebEnginePage` (Chromium engine) to load IMDB pages. The browser
   engine solves AWS WAF JavaScript challenges automatically, bypassing blocks that
@@ -39,6 +43,21 @@
   CAPTCHA fallback flow.
 
 ### Behavior or Interface Changes
+- Redesigned prematch view in `MovieChooserDialog` to show a structured metadata
+  card with poster, rating, director, genres, certification, runtime, IDs, and
+  plot instead of a plain text summary. Uses `QFrame` with `StyledPanel` border
+  and a banner row with checkmark icon for visual distinction.
+- Replaced small "Re-match" button with prominent "Find Different Match" button
+  in prematch view.
+- Added "Keep Original Match" button that appears in search mode when user came
+  from prematch, allowing return to the original match without re-scraping.
+- Added matched/unmatched indicator in batch progress label (e.g. "Movie 2 of 5
+  (matched)").
+- Prematch poster uses a movie-specific cache file named
+  `{video_basename}-poster.jpg` (e.g. `The.Dark.Knight.2008.BluRay.x264-poster.jpg`)
+  instead of the generic `poster.jpg` which is ambiguous in multi-movie directories
+  and before the organize step. Downloads from `poster_url` on first view and
+  caches to disk for instant loading on subsequent opens.
 - IMDB search now uses CDN suggestion API instead of GraphQL. The suggestion API
   is faster and has no WAF protection, eliminating search failures from JavaScript
   challenges. Result format is slightly different: no plot overview, scores derived
@@ -60,6 +79,19 @@
   to maintain the PySide6 import guard on core/scraper/api packages.
 
 ### Fixes and Maintenance
+- Fixed GUI crash on launch (Bus error / QPainter segfault) caused by
+  `_on_scan_progress_callback()` in `main_window.py` directly calling GUI
+  widget methods from the scanner worker thread. Changed to emit the worker's
+  `signals.progress` signal instead, which marshals the update to the main
+  thread via Qt's signal-slot mechanism.
+- Fixed batch match count including in-flight "pending" scrapes as matched by
+  using `is True` check instead of truthiness (which counted `"pending"` strings).
+- Fixed progress bar showing current position instead of completed count in batch
+  mode. Now uses `self._current_index` (0-based completed) instead of `pos`
+  (1-based current).
+- Added failed scrape count display in batch mode match count label (e.g. "3
+  matched, 1 failed") in both `_on_scrape_done()` and `_on_scrape_error()`.
+- Added Escape key tooltip to Skip/Cancel buttons for discoverability.
 - Removed GraphQL queries (`_METADATA_QUERY`, `_SEARCH_QUERY`,
   `_PARENTAL_GUIDE_QUERY`) and `_fetch_graphql()` from `imdb_scraper.py`.
   Replaced with CDN suggestion API for search and HTML parsing for metadata.
@@ -71,6 +103,11 @@
   persist in the transport's profile.
 
 ### Developer Tests and Notes
+- Added `TestChooserDialogPrematchMode` test class to `tests/test_gui_smoke.py`
+  with 4 tests: prematch view shown for scraped movie, keep match in single mode,
+  rematch switches to search, return to prematch.
+- Added `TestChooserDialogBatchBugFixes` test class with 2 tests: pending scrapes
+  not counted as matched, progress bar starts at zero.
 - Rewrote `tests/test_scraper_imdb.py` with 41 tests covering: CDN suggestion
   API parsing (filtering, poster URLs, scores, empty results), `__NEXT_DATA__`
   extraction, metadata HTML parsing (all fields, empty HTML, empty data), cast

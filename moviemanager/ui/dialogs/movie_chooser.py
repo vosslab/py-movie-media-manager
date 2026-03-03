@@ -1,5 +1,8 @@
 """Search results chooser dialog with poster preview pane."""
 
+# Standard Library
+import os
+
 # PIP3 modules
 import PySide6.QtGui
 import PySide6.QtCore
@@ -64,6 +67,8 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		self._is_last_movie_scraping = False
 		# pre-match mode: show existing match instead of search
 		self._in_prematch_mode = False
+		# tracks whether user came from prematch view (for return path)
+		self._had_prematch = False
 		self.resize(900, 550)
 		self._setup_ui()
 		# load the first movie
@@ -121,45 +126,94 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		main_layout.addWidget(self._no_results_widget)
 
 		# --- pre-match widget (hidden by default) ---
-		self._prematch_widget = PySide6.QtWidgets.QWidget()
-		prematch_layout = PySide6.QtWidgets.QHBoxLayout(
+		# card-style frame with raised border for visual distinction
+		self._prematch_widget = PySide6.QtWidgets.QFrame()
+		self._prematch_widget.setFrameShape(
+			PySide6.QtWidgets.QFrame.Shape.StyledPanel
+		)
+		self._prematch_widget.setFrameShadow(
+			PySide6.QtWidgets.QFrame.Shadow.Raised
+		)
+		prematch_outer = PySide6.QtWidgets.QVBoxLayout(
 			self._prematch_widget
 		)
+		# banner row with checkmark icon
+		banner_layout = PySide6.QtWidgets.QHBoxLayout()
+		check_icon = self.style().standardIcon(
+			PySide6.QtWidgets.QStyle.StandardPixmap.SP_DialogApplyButton
+		)
+		icon_label = PySide6.QtWidgets.QLabel()
+		icon_label.setPixmap(check_icon.pixmap(20, 20))
+		banner_layout.addWidget(icon_label)
+		banner_text = PySide6.QtWidgets.QLabel("Existing Match")
+		banner_font = banner_text.font()
+		banner_font.setBold(True)
+		banner_font.setPointSize(banner_font.pointSize() + 1)
+		banner_text.setFont(banner_font)
+		banner_layout.addWidget(banner_text)
+		banner_layout.addStretch()
+		prematch_outer.addLayout(banner_layout)
+		# content: poster on left, metadata on right
+		content_layout = PySide6.QtWidgets.QHBoxLayout()
 		# left side: poster
 		self._prematch_poster = (
 			moviemanager.ui.widgets.image_label.ImageLabel()
 		)
-		self._prematch_poster.setMinimumSize(150, 225)
+		self._prematch_poster.setMinimumSize(180, 270)
 		self._prematch_poster.setText("No poster")
-		prematch_layout.addWidget(self._prematch_poster)
-		# right side: metadata summary
-		prematch_info = PySide6.QtWidgets.QVBoxLayout()
+		content_layout.addWidget(self._prematch_poster)
+		# right side: title + form layout + plot + button
+		right_layout = PySide6.QtWidgets.QVBoxLayout()
+		# title label (bold, larger font)
 		self._prematch_title = PySide6.QtWidgets.QLabel("")
 		title_font = self._prematch_title.font()
 		title_font.setBold(True)
 		title_font.setPointSize(title_font.pointSize() + 2)
 		self._prematch_title.setFont(title_font)
 		self._prematch_title.setWordWrap(True)
-		prematch_info.addWidget(self._prematch_title)
-		self._prematch_details = PySide6.QtWidgets.QLabel("")
-		self._prematch_details.setWordWrap(True)
-		prematch_info.addWidget(self._prematch_details)
-		# re-match button
+		right_layout.addWidget(self._prematch_title)
+		# metadata form layout (follows MovieDetailPanel pattern)
+		prematch_form = PySide6.QtWidgets.QFormLayout()
+		self._prematch_year_label = PySide6.QtWidgets.QLabel("")
+		prematch_form.addRow("Year:", self._prematch_year_label)
+		self._prematch_rating_label = PySide6.QtWidgets.QLabel("")
+		prematch_form.addRow("Rating:", self._prematch_rating_label)
+		self._prematch_director_label = PySide6.QtWidgets.QLabel("")
+		prematch_form.addRow("Director:", self._prematch_director_label)
+		self._prematch_cert_label = PySide6.QtWidgets.QLabel("")
+		prematch_form.addRow("Certification:", self._prematch_cert_label)
+		self._prematch_genres_label = PySide6.QtWidgets.QLabel("")
+		prematch_form.addRow("Genres:", self._prematch_genres_label)
+		self._prematch_runtime_label = PySide6.QtWidgets.QLabel("")
+		prematch_form.addRow("Runtime:", self._prematch_runtime_label)
+		self._prematch_ids_label = PySide6.QtWidgets.QLabel("")
+		prematch_form.addRow("IDs:", self._prematch_ids_label)
+		right_layout.addLayout(prematch_form)
+		# plot text area (read-only, max height 100px)
+		self._prematch_plot_text = PySide6.QtWidgets.QTextEdit()
+		self._prematch_plot_text.setReadOnly(True)
+		self._prematch_plot_text.setMaximumHeight(100)
+		self._prematch_plot_text.setFrameShape(
+			PySide6.QtWidgets.QFrame.Shape.NoFrame
+		)
+		right_layout.addWidget(self._prematch_plot_text)
+		# "Find Different Match" button (replaces small "Re-match")
 		self._rematch_btn = PySide6.QtWidgets.QPushButton(
-			"Re-match"
+			"Find Different Match"
 		)
 		self._rematch_btn.setToolTip(
-			"Search for a different match"
+			"Search for a different match for this movie"
 		)
 		self._rematch_btn.clicked.connect(
 			self._switch_to_search_mode
 		)
-		prematch_info.addWidget(
+		right_layout.addWidget(
 			self._rematch_btn,
 			alignment=PySide6.QtCore.Qt.AlignmentFlag.AlignLeft,
 		)
-		prematch_info.addStretch()
-		prematch_layout.addLayout(prematch_info, stretch=1)
+		right_layout.addStretch()
+		content_layout.addLayout(right_layout, stretch=1)
+		prematch_outer.addLayout(content_layout, stretch=1)
 		self._prematch_widget.hide()
 		main_layout.addWidget(self._prematch_widget, stretch=1)
 
@@ -277,10 +331,24 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		# in batch mode "Skip" advances; in single mode "Cancel" closes
 		if self._batch_mode:
 			skip_btn = PySide6.QtWidgets.QPushButton("Skip")
+			skip_btn.setToolTip("Skip this movie (Escape)")
 		else:
 			skip_btn = PySide6.QtWidgets.QPushButton("Cancel")
+			skip_btn.setToolTip("Cancel (Escape)")
 		skip_btn.clicked.connect(self._skip_current)
 		btn_layout.addWidget(skip_btn)
+		# "Keep Original Match" button (hidden until user clicks rematch)
+		self._keep_original_btn = PySide6.QtWidgets.QPushButton(
+			"Keep Original Match"
+		)
+		self._keep_original_btn.setToolTip(
+			"Return to the original match"
+		)
+		self._keep_original_btn.clicked.connect(
+			self._return_to_prematch
+		)
+		self._keep_original_btn.hide()
+		btn_layout.addWidget(self._keep_original_btn)
 		self._ok_btn = PySide6.QtWidgets.QPushButton("Accept Match")
 		self._ok_btn.clicked.connect(self._on_ok_clicked)
 		btn_layout.addWidget(self._ok_btn)
@@ -313,47 +381,48 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		self._search_widget.hide()
 		self._splitter.hide()
 		self._no_results_widget.hide()
-		# populate prematch widget with existing metadata
-		title_text = movie.title or "Unknown"
-		if movie.year:
-			title_text += f" ({movie.year})"
-		self._prematch_title.setText(
-			f"Already matched: {title_text}"
-		)
-		# build detail summary
-		details = []
+		# populate prematch title (banner handles "Existing Match" label)
+		self._prematch_title.setText(movie.title or "Unknown")
+		# populate individual metadata fields
+		self._prematch_year_label.setText(movie.year or "")
+		rating_text = f"{movie.rating}/10" if movie.rating else ""
+		self._prematch_rating_label.setText(rating_text)
+		self._prematch_director_label.setText(movie.director or "")
+		self._prematch_cert_label.setText(movie.certification or "")
+		genre_text = ", ".join(movie.genres) if movie.genres else ""
+		self._prematch_genres_label.setText(genre_text)
+		runtime_text = f"{movie.runtime} min" if movie.runtime else ""
+		self._prematch_runtime_label.setText(runtime_text)
+		# build IDs string from imdb_id and tmdb_id
+		id_parts = []
 		if movie.imdb_id:
-			details.append(f"IMDB: {movie.imdb_id}")
+			id_parts.append(f"IMDB: {movie.imdb_id}")
 		if movie.tmdb_id:
-			details.append(f"TMDB: {movie.tmdb_id}")
-		if movie.rating:
-			details.append(f"Rating: {movie.rating}")
-		if movie.director:
-			details.append(f"Director: {movie.director}")
-		if movie.genres:
-			genre_text = ", ".join(movie.genres)
-			details.append(f"Genres: {genre_text}")
-		if movie.certification:
-			details.append(f"Certification: {movie.certification}")
-		if movie.runtime:
-			details.append(f"Runtime: {movie.runtime} min")
-		self._prematch_details.setText("\n".join(details))
+			id_parts.append(f"TMDB: {movie.tmdb_id}")
+		self._prematch_ids_label.setText("  ".join(id_parts))
+		# populate plot text area
+		self._prematch_plot_text.setPlainText(movie.plot or "")
 		# show prematch widget
 		self._prematch_widget.show()
 		# update OK button text
 		self._ok_btn.setText("Keep Match")
 		self._ok_btn.setEnabled(True)
-		# download poster in background if available
-		if movie.poster_url:
+		# load poster from movie-specific cache file or download from URL
+		cached_poster = self._get_movie_poster_path(movie)
+		if cached_poster and os.path.isfile(cached_poster):
+			# load from movie-specific cached file on disk
+			self._prematch_poster.set_image(cached_poster)
+		elif movie.poster_url:
+			# download from URL and cache to disk
 			self._prematch_poster.setText("Loading...")
 			worker = moviemanager.ui.workers.ImageDownloadWorker(
 				movie.poster_url
 			)
+			# capture cache path for the download callback
+			cache_path = cached_poster
 			worker.signals.finished.connect(
-				lambda data, url=movie.poster_url:
-				self._prematch_poster.set_image_data(
-					data, source_url=url
-				)
+				lambda data, url=movie.poster_url, cp=cache_path:
+				self._on_prematch_poster_downloaded(data, url, cp)
 			)
 			worker.signals.error.connect(
 				lambda _: self._prematch_poster.setText("No poster")
@@ -361,6 +430,53 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 			self._pool.start(worker)
 		else:
 			self._prematch_poster.set_image_data(None)
+
+	#============================================
+	def _get_movie_poster_path(self, movie) -> str:
+		"""Build a movie-specific poster cache path from the video filename.
+
+		Uses the video file basename (without extension) plus '-poster.jpg',
+		e.g. 'The.Dark.Knight.2008.BluRay.x264-poster.jpg'. This avoids
+		ambiguity with the generic 'poster.jpg' which may belong to a
+		different movie in multi-movie directories.
+
+		Args:
+			movie: Movie instance with video_file and path.
+
+		Returns:
+			Full path to the movie-specific poster, or empty string.
+		"""
+		if not movie.path:
+			return ""
+		video = movie.video_file
+		if not video or not video.filename:
+			return ""
+		# strip the video extension and append -poster.jpg
+		basename = os.path.splitext(video.filename)[0]
+		poster_name = f"{basename}-poster.jpg"
+		poster_path = os.path.join(movie.path, poster_name)
+		return poster_path
+
+	#============================================
+	def _on_prematch_poster_downloaded(
+		self, data: bytes, source_url: str, cache_path: str
+	) -> None:
+		"""Display downloaded poster and cache it to disk.
+
+		Args:
+			data: Raw image bytes from the download worker.
+			source_url: Poster URL for decode-failure diagnostics.
+			cache_path: Local path to save the poster for future loads.
+		"""
+		self._prematch_poster.set_image_data(
+			data, source_url=source_url
+		)
+		# cache poster to disk for instant load next time
+		if data and cache_path:
+			parent_dir = os.path.dirname(cache_path)
+			if os.path.isdir(parent_dir):
+				with open(cache_path, "wb") as f:
+					f.write(data)
 
 	#============================================
 	def _switch_to_search_mode_ui(self) -> None:
@@ -375,9 +491,12 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 
 		Hides the prematch widget, shows search bar and results,
 		and triggers a new search for the current movie.
+		Shows "Keep Original Match" button so user can return.
 		"""
 		self._in_prematch_mode = False
+		self._had_prematch = True
 		self._switch_to_search_mode_ui()
+		self._keep_original_btn.show()
 		self._ok_btn.setText("Accept Match")
 		self._do_search()
 
@@ -393,6 +512,18 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 			self._advance_to_next()
 		else:
 			self.accept()
+
+	#============================================
+	def _return_to_prematch(self) -> None:
+		"""Return to the prematch view after searching for a different match.
+
+		Restores the prematch card with the original movie metadata
+		and hides the "Keep Original Match" button.
+		"""
+		self._in_prematch_mode = True
+		self._had_prematch = False
+		self._keep_original_btn.hide()
+		self._show_prematch_view(self._movie)
 
 	#============================================
 	def _skip_current(self) -> None:
@@ -498,17 +629,24 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 			self.setWindowTitle(
 				f"Match - {movie.title} ({pos} of {total})"
 			)
-			# update batch progress bar
+			# update batch progress bar (use `is True` to exclude "pending")
 			matched = sum(
-				1 for v in self._batch_results.values() if v
+				1 for v in self._batch_results.values() if v is True
 			)
+			failed = sum(
+				1 for v in self._batch_results.values() if v is False
+			)
+			# show matched/unmatched indicator for current movie
+			status = "matched" if movie.scraped else "unmatched"
 			self._progress_label.setText(
-				f"Movie {pos} of {total}"
+				f"Movie {pos} of {total} ({status})"
 			)
-			self._match_count_label.setText(
-				f"{matched} matched"
-			)
-			self._progress_bar.setValue(pos)
+			# show matched and failed counts
+			label_text = f"{matched} matched"
+			if failed:
+				label_text += f", {failed} failed"
+			self._match_count_label.setText(label_text)
+			self._progress_bar.setValue(self._current_index)
 		else:
 			self.setWindowTitle(f"Match - {movie.title}")
 		# update search fields
@@ -522,6 +660,8 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 			self._back_btn.setEnabled(self._current_index > 0)
 		# reset buttons and prematch mode
 		self._in_prematch_mode = False
+		self._had_prematch = False
+		self._keep_original_btn.hide()
 		self._ok_btn.setEnabled(True)
 		self._ok_btn.setText("Accept Match")
 		# clear the preview pane
@@ -776,15 +916,20 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		# mark movie as successfully scraped
 		if movie_path:
 			self._batch_results[movie_path] = True
-		# update batch progress
+		# update batch progress with matched and failed counts
 		if self._batch_mode:
 			matched = sum(
 				1 for v in self._batch_results.values()
 				if v is True
 			)
-			self._match_count_label.setText(
-				f"{matched} matched"
+			failed = sum(
+				1 for v in self._batch_results.values()
+				if v is False
 			)
+			label_text = f"{matched} matched"
+			if failed:
+				label_text += f", {failed} failed"
+			self._match_count_label.setText(label_text)
 		# only close if single mode OR last movie scrape completed
 		if not self._batch_mode:
 			self.unsetCursor()
@@ -807,8 +952,19 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		# mark movie as failed in batch results
 		if movie_path:
 			self._batch_results[movie_path] = False
-		# in batch mode for non-last movies: log warning, don't show popup
+		# in batch mode for non-last movies: update count label, don't show popup
 		if self._batch_mode and not self._is_last_movie_scraping:
+			# update match count label to include failure count
+			failed = sum(
+				1 for v in self._batch_results.values() if v is False
+			)
+			matched = sum(
+				1 for v in self._batch_results.values() if v is True
+			)
+			label_text = f"{matched} matched"
+			if failed:
+				label_text += f", {failed} failed"
+			self._match_count_label.setText(label_text)
 			return
 		# for single mode or last movie: show error
 		self.unsetCursor()

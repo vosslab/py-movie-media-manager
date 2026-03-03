@@ -138,6 +138,25 @@ def test_round_trip_movie_set(tmp_path):
 
 
 #============================================
+def test_round_trip_parental_guide(tmp_path):
+	"""Parental guide severity data should round-trip through NFO."""
+	original = moviemanager.core.models.movie.Movie(
+		title="The Dark Knight",
+		parental_guide={
+			"Sex & Nudity": "Mild",
+			"Violence & Gore": "Severe",
+			"Profanity": "Moderate",
+			"Alcohol, Drugs & Smoking": "None",
+			"Frightening & Intense Scenes": "Moderate",
+		},
+	)
+	nfo_file = str(tmp_path / "pg.nfo")
+	moviemanager.core.nfo.writer.write_nfo(original, nfo_file)
+	result = moviemanager.core.nfo.reader.read_nfo(nfo_file)
+	assert result.parental_guide == original.parental_guide
+
+
+#============================================
 def test_round_trip_trailers(tmp_path):
 	"""Movie with trailer URLs should round-trip them."""
 	original = moviemanager.core.models.movie.Movie(

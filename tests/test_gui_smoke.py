@@ -9,6 +9,7 @@ import PySide6.QtWidgets
 
 # local repo modules
 import moviemanager.api.movie_api
+import moviemanager.core.models.movie
 import moviemanager.core.settings
 import moviemanager.scraper.imdb_scraper
 import moviemanager.scraper.types
@@ -423,3 +424,191 @@ class TestChooserDialogBatchMode:
 			assert not hasattr(dialog, "_abort_btn")
 			# verify Accept Match button text
 			assert dialog._ok_btn.text() == "Accept Match"
+
+
+#============================================
+def _make_scraped_movie(path: str) -> moviemanager.core.models.movie.Movie:
+	"""Create a Movie instance with scraped metadata for testing.
+
+	Args:
+		path: Directory path for the movie.
+
+	Returns:
+		Movie with populated metadata and scraped=True.
+	"""
+	movie = moviemanager.core.models.movie.Movie(
+		title="The Dark Knight",
+		year="2008",
+		imdb_id="tt0468569",
+		tmdb_id=155,
+		director="Christopher Nolan",
+		certification="PG-13",
+		rating=9.0,
+		runtime=152,
+		genres=["Action", "Crime", "Drama"],
+		plot="Batman raises the stakes in his war on crime.",
+		path=path,
+		scraped=True,
+	)
+	return movie
+
+
+#============================================
+class TestChooserDialogPrematchMode:
+	"""Test MovieChooserDialog prematch view for already-matched movies."""
+
+	def test_prematch_view_shown_for_scraped_movie(self, qtbot, tmp_path):
+		"""Scraped movie should show prematch view with card layout."""
+		dk_dir = str(tmp_path / "The.Dark.Knight.2008")
+		os.makedirs(dk_dir, exist_ok=True)
+		movie = _make_scraped_movie(dk_dir)
+		settings = moviemanager.core.settings.Settings()
+		api = moviemanager.api.movie_api.MovieAPI(settings)
+		dialog = moviemanager.ui.dialogs.movie_chooser.MovieChooserDialog(
+			movie, api, None,
+		)
+		qtbot.addWidget(dialog)
+		# verify prematch mode is active
+		assert dialog._in_prematch_mode is True
+		# use isHidden() since dialog is not shown (isVisible requires parent)
+		assert not dialog._prematch_widget.isHidden()
+		# verify metadata fields are populated
+		assert dialog._prematch_title.text() == "The Dark Knight"
+		assert dialog._prematch_year_label.text() == "2008"
+		assert dialog._prematch_rating_label.text() == "9.0/10"
+		assert dialog._prematch_director_label.text() == "Christopher Nolan"
+		assert dialog._prematch_cert_label.text() == "PG-13"
+		assert "Action" in dialog._prematch_genres_label.text()
+		assert dialog._prematch_runtime_label.text() == "152 min"
+		assert "tt0468569" in dialog._prematch_ids_label.text()
+		# verify Keep Match button text
+		assert dialog._ok_btn.text() == "Keep Match"
+
+	def test_prematch_keep_match_single_mode(self, qtbot, tmp_path):
+		"""Keep Match in single mode should accept the dialog."""
+		dk_dir = str(tmp_path / "The.Dark.Knight.2008")
+		os.makedirs(dk_dir, exist_ok=True)
+		movie = _make_scraped_movie(dk_dir)
+		settings = moviemanager.core.settings.Settings()
+		api = moviemanager.api.movie_api.MovieAPI(settings)
+		dialog = moviemanager.ui.dialogs.movie_chooser.MovieChooserDialog(
+			movie, api, None,
+		)
+		qtbot.addWidget(dialog)
+		# verify prematch mode
+		assert dialog._in_prematch_mode is True
+		# click Keep Match (the OK button in prematch mode)
+		with unittest.mock.patch.object(dialog, "accept") as mock_accept:
+			dialog._on_ok_clicked()
+			mock_accept.assert_called_once()
+
+	def test_rematch_switches_to_search(self, qtbot, tmp_path):
+		"""Find Different Match should switch to search UI."""
+		dk_dir = str(tmp_path / "The.Dark.Knight.2008")
+		os.makedirs(dk_dir, exist_ok=True)
+		movie = _make_scraped_movie(dk_dir)
+		settings = moviemanager.core.settings.Settings()
+		api = moviemanager.api.movie_api.MovieAPI(settings)
+		# mock search to avoid network calls
+		with unittest.mock.patch.object(
+			moviemanager.scraper.imdb_scraper.ImdbScraper,
+			"search", side_effect=_mock_search,
+		), unittest.mock.patch(
+			"moviemanager.scraper.imdb_scraper.time.sleep",
+		):
+			dialog = moviemanager.ui.dialogs.movie_chooser.MovieChooserDialog(
+				movie, api, None,
+			)
+			qtbot.addWidget(dialog)
+			# click Find Different Match
+			dialog._switch_to_search_mode()
+			# verify search mode is active
+			assert dialog._in_prematch_mode is False
+			assert dialog._had_prematch is True
+			# verify search UI is shown and prematch is hidden
+			assert not dialog._search_widget.isHidden()
+			assert dialog._prematch_widget.isHidden()
+			# verify Keep Original Match button is shown
+			assert not dialog._keep_original_btn.isHidden()
+			assert dialog._ok_btn.text() == "Accept Match"
+
+	def test_return_to_prematch(self, qtbot, tmp_path):
+		"""Keep Original Match should restore prematch view."""
+		dk_dir = str(tmp_path / "The.Dark.Knight.2008")
+		os.makedirs(dk_dir, exist_ok=True)
+		movie = _make_scraped_movie(dk_dir)
+		settings = moviemanager.core.settings.Settings()
+		api = moviemanager.api.movie_api.MovieAPI(settings)
+		# mock search to avoid network calls
+		with unittest.mock.patch.object(
+			moviemanager.scraper.imdb_scraper.ImdbScraper,
+			"search", side_effect=_mock_search,
+		), unittest.mock.patch(
+			"moviemanager.scraper.imdb_scraper.time.sleep",
+		):
+			dialog = moviemanager.ui.dialogs.movie_chooser.MovieChooserDialog(
+				movie, api, None,
+			)
+			qtbot.addWidget(dialog)
+			# switch to search mode first
+			dialog._switch_to_search_mode()
+			assert dialog._in_prematch_mode is False
+			# click Keep Original Match
+			dialog._return_to_prematch()
+			# verify prematch mode is restored
+			assert dialog._in_prematch_mode is True
+			assert dialog._had_prematch is False
+			assert not dialog._prematch_widget.isHidden()
+			assert dialog._keep_original_btn.isHidden()
+			assert dialog._ok_btn.text() == "Keep Match"
+
+
+#============================================
+class TestChooserDialogBatchBugFixes:
+	"""Test batch mode bug fixes for pending count and progress bar."""
+
+	def test_batch_results_pending_not_counted(self, qtbot, tmp_path):
+		"""Pending scrapes should not count as matched."""
+		root = _create_movie_dirs(tmp_path)
+		settings = moviemanager.core.settings.Settings()
+		api = moviemanager.api.movie_api.MovieAPI(settings)
+		movies = api.scan_directory(root)
+		# mock search to avoid network calls
+		with unittest.mock.patch.object(
+			moviemanager.scraper.imdb_scraper.ImdbScraper,
+			"search", side_effect=_mock_search,
+		), unittest.mock.patch(
+			"moviemanager.scraper.imdb_scraper.time.sleep",
+		):
+			dialog = moviemanager.ui.dialogs.movie_chooser.MovieChooserDialog(
+				movies[0], api, None,
+				movie_list=movies,
+			)
+			qtbot.addWidget(dialog)
+			# simulate pending scrape result
+			dialog._batch_results["fake/path"] = "pending"
+			# reload to trigger count update
+			dialog._load_movie(movies[0])
+			# verify pending is not counted as matched
+			assert "0 matched" in dialog._match_count_label.text()
+
+	def test_progress_bar_starts_at_zero(self, qtbot, tmp_path):
+		"""Progress bar should start at 0 for the first movie."""
+		root = _create_movie_dirs(tmp_path)
+		settings = moviemanager.core.settings.Settings()
+		api = moviemanager.api.movie_api.MovieAPI(settings)
+		movies = api.scan_directory(root)
+		# mock search to avoid network calls
+		with unittest.mock.patch.object(
+			moviemanager.scraper.imdb_scraper.ImdbScraper,
+			"search", side_effect=_mock_search,
+		), unittest.mock.patch(
+			"moviemanager.scraper.imdb_scraper.time.sleep",
+		):
+			dialog = moviemanager.ui.dialogs.movie_chooser.MovieChooserDialog(
+				movies[0], api, None,
+				movie_list=movies,
+			)
+			qtbot.addWidget(dialog)
+			# progress bar should be 0 (no movies completed yet)
+			assert dialog._progress_bar.value() == 0

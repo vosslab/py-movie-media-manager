@@ -19,6 +19,7 @@ KNOWN_TAGS = {
 	"userrating", "director", "credits", "studio", "watched",
 	"playcount", "dateadded", "lastplayed", "trailer", "poster",
 	"set", "genre", "tag", "actor", "producer", "thumb", "fanart",
+	"parental_guide",
 }
 
 
@@ -145,6 +146,14 @@ def read_nfo(nfo_path: str) -> moviemanager.core.models.movie.Movie:
 				movie.runtime = int(text)
 		elif tag == "mpaa":
 			movie.certification = text
+		elif tag == "parental_guide":
+			# parse advisory children into parental_guide dict
+			for advisory in child:
+				if advisory.tag == "advisory":
+					cat = advisory.get("category", "")
+					sev = advisory.text.strip() if advisory.text else ""
+					if cat and sev:
+						movie.parental_guide[cat] = sev
 		elif tag == "country":
 			movie.country = text
 		elif tag == "languages":

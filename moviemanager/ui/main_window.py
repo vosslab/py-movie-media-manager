@@ -210,9 +210,10 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		This is called from the worker thread, so we use the signal
 		mechanism to forward to the main thread.
 		"""
-		# note: this is called from a worker thread but Qt signals
-		# are thread-safe for cross-thread emission
-		self._status.show_progress(current, 0, message)
+		# emit progress signal to marshal GUI update to the main thread;
+		# direct GUI calls from worker threads cause QPainter segfaults
+		if self._active_worker:
+			self._active_worker.signals.progress.emit(current, 0, message)
 
 	#============================================
 	def _on_scan_progress(self, current: int, total: int, message: str) -> None:
