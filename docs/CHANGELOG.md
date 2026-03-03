@@ -2,6 +2,19 @@
 
 ## 2026-03-03
 
+### Additions and New Features
+- Added `curl_cffi` as primary transport for parental guide fetches in
+  `imdb_scraper.py`. Uses `impersonate='chrome'` to bypass WAF without the
+  QWebEnginePage browser engine, eliminating timeout failures from
+  `loadFinished never fired`. Falls back to browser transport if `curl_cffi`
+  fails. Parses `contentData.categories[].severitySummary.text` JSON path
+  from the `curl_cffi` response.
+- Updated [docs/WAF_CHALLENGES.md](docs/WAF_CHALLENGES.md) with `curl_cffi` parental guide
+  transport documentation and separated metadata/parental-guide WAF sections.
+- Updated [docs/WAF_CHALLENGES.md](docs/WAF_CHALLENGES.md) with diagnostic logging reference
+  (stage table, timeout stage labels), timeout tuning guidance for parental guide fetches,
+  and a note on IMDB data dumps as an alternative data source for structured data.
+
 ### Developer Tests and Notes
 - Added diagnostic logging to `imdb_browser_transport.py` fetch pipeline: each stage
   (fetch start, loadFinished, toHtml callback, event loop exit) now logs with elapsed

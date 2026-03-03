@@ -35,9 +35,21 @@ QWebEngine) does not preserve the binding, so the token is rejected.
 The CDN suggestion endpoint `v2.sg.media-imdb.com/suggestion/titles/x/{query}.json`
 has no WAF protection. The app uses plain HTTP (`requests`) for search.
 
-### Metadata and parental guide (QWebEnginePage transport)
+### Parental guide (curl_cffi primary, QWebEnginePage fallback)
 
-IMDB title pages and parental guide pages are loaded via `QWebEnginePage`,
+Parental guide pages are fetched via `curl_cffi` with `impersonate='chrome'`
+as the primary transport. This bypasses WAF by presenting Chrome's TLS
+fingerprint, and returns the full `__NEXT_DATA__` JSON without needing a
+browser engine, thread bridging, or timeout guessing. The parental guide
+response uses a `contentData.categories[]` JSON path with `title` and
+`severitySummary.text` fields.
+
+If `curl_cffi` fails (HTTP error, missing data), the scraper falls back to
+the QWebEnginePage browser transport described below.
+
+### Metadata (QWebEnginePage transport)
+
+IMDB title pages are loaded via `QWebEnginePage`,
 which is a full Chromium browser engine. Key details:
 
 - **Custom User-Agent**: The default `QtWebEngine` user agent is banned by IMDB.
@@ -85,6 +97,68 @@ Separate from WAF challenges, IMDB has per-IP rate limits. The app applies:
 - `time.sleep(1 + random.random())` before QWebEnginePage loads (max ~1 req/sec)
 
 This reduces the chance of triggering rate-limit blocks.
+
+## Diagnostic logging
+
+The transport logs each stage of the fetch pipeline so timeout failures
+indicate exactly where the process stalled. Log messages use the
+`moviemanager.ui.imdb_browser_transport` logger at INFO/WARNING level.
+
+Stages tracked:
+
+| Stage | Log message | Meaning |
+| --- | --- | --- |
+| fetch start | `[worker-thread] fetch_html starting` | Worker thread initiated the request |
+| signal emitted | `[worker-thread] _load_requested emitted` | Signal sent to Qt main thread |
+| load finished | `loadFinished fired: ok=True/False` | Chromium completed (or failed) the network load |
+| HTML received | `toHtml callback received` | Page HTML extracted from Chromium |
+| event wait done | `[worker-thread] event.wait returned` | Worker thread unblocked |
+
+Timeout error messages include a stage label in parentheses:
+
+- `(loadFinished never fired)` -- Chromium never completed the page load.
+  Likely causes: WAF JS challenge taking longer than the timeout, network
+  stall, or Qt event loop starvation preventing the main thread from
+  processing the load.
+- `(toHtml callback never returned)` -- Chromium loaded the page but the
+  `toHtml()` callback never fired. Rare; may indicate a renderer crash.
+
+## Timeout tuning
+
+The parental guide fetch uses a 15-second timeout (`timeout_sec=15`).
+The general metadata fetch uses the default 30-second timeout. WAF JS
+challenges can take 5-20 seconds to solve depending on network and server
+conditions, and include at least one redirect after solving. If the first
+request in a session triggers a WAF challenge, 15 seconds may not be enough
+for challenge + redirect + page load.
+
+Symptoms of a too-short timeout:
+
+- All parental guide fetches fail with `loadFinished never fired`
+- Failures happen in bursts (all requests in a batch fail identically)
+- Metadata fetches for the same movies succeed (they use 30s timeout)
+
+Recovery options:
+
+- Retry the batch -- the first failed request may have solved the WAF
+  challenge, granting immunity for subsequent attempts
+- Clear `~/.cache/movie_organizer/webengine/` to force a fresh WAF token
+  if the cached token has become invalid
+
+## IMDB data dumps (alternative data source)
+
+IMDB publishes daily TSV data dumps at `https://datasets.imdbws.com/`
+containing structured data (movies, ratings, people, crew, episodes).
+These files have no WAF protection and require no browser engine.
+
+However, the data dumps do **not** include parental guide / content
+advisory data. That information is only available on the IMDB website,
+which is why `curl_cffi` (or the browser transport fallback) is required
+for parental guide fetches.
+
+Other tools that scrape IMDB (such as Lars Ingebrigtsen's `imdb-mode`
+for Emacs) use a similar two-layer approach: data dumps for structured
+data, headless Chrome (via Selenium) for web-only content like images.
 
 ## Configuration
 

@@ -763,13 +763,18 @@ def test_get_metadata_with_transport():
 #============================================
 
 def test_get_parental_guide_with_transport():
-	"""get_parental_guide fetches HTML via transport and parses guide."""
+	"""get_parental_guide falls back to browser transport when curl_cffi fails."""
 	html = _make_title_html(SAMPLE_NEXT_DATA_PARENTAL_GUIDE)
 	mock_transport = unittest.mock.Mock()
 	mock_transport.fetch_html.return_value = html
 	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
 	scraper.set_transport(mock_transport)
-	guide = scraper.get_parental_guide("tt0109445")
+	# mock curl_cffi path to return empty so browser transport is used
+	with unittest.mock.patch(
+		"moviemanager.scraper.imdb_scraper._fetch_parental_guide_curl",
+		return_value={},
+	):
+		guide = scraper.get_parental_guide("tt0109445")
 	assert len(guide) == 5
 	assert guide["Sex & Nudity"] == "Moderate"
 	assert guide["Profanity"] == "Severe"
@@ -788,7 +793,12 @@ def test_get_parental_guide_empty_id():
 
 #============================================
 def test_get_parental_guide_no_transport():
-	"""get_parental_guide returns empty dict when transport is not set."""
+	"""get_parental_guide returns empty dict when both curl_cffi and transport fail."""
 	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
-	guide = scraper.get_parental_guide("tt0109445")
+	# mock curl_cffi path to return empty so it falls through to transport check
+	with unittest.mock.patch(
+		"moviemanager.scraper.imdb_scraper._fetch_parental_guide_curl",
+		return_value={},
+	):
+		guide = scraper.get_parental_guide("tt0109445")
 	assert guide == {}

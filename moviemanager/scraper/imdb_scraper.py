@@ -1,7 +1,9 @@
-"""IMDB scraper using CDN suggestion API and QWebEnginePage transport.
+"""IMDB scraper using CDN suggestion API, curl_cffi, and QWebEnginePage.
 
-Search uses the IMDB suggestion CDN (no WAF). Parental guide and metadata
-use QWebEnginePage to load HTML pages, which solves AWS WAF JavaScript
+Search uses the IMDB suggestion CDN (no WAF). Parental guide uses curl_cffi
+with Chrome TLS impersonation as primary transport (bypasses WAF without a
+browser engine), falling back to QWebEnginePage if curl_cffi fails. Metadata
+uses QWebEnginePage to load HTML pages, which solves AWS WAF JavaScript
 challenges automatically via the Chromium engine.
 """
 
@@ -14,6 +16,7 @@ import logging
 
 # PIP3 modules
 import requests
+import curl_cffi.requests
 
 # local repo modules
 import moviemanager.scraper.interfaces
@@ -274,6 +277,55 @@ def _parse_parental_guide_from_above_fold(page_props: dict) -> dict:
 		severity = _safe_get(cat, "severity", "text", default="")
 		if cat_name and severity:
 			guide[cat_name] = severity
+	return guide
+
+
+#============================================
+def _fetch_parental_guide_curl(imdb_id: str) -> dict:
+	"""Fetch parental guide via curl_cffi, bypassing WAF with browser TLS.
+
+	curl_cffi impersonates Chrome's TLS fingerprint, which is enough
+	for parental guide pages (they return full __NEXT_DATA__ JSON).
+	This avoids the QWebEnginePage browser transport entirely.
+
+	Args:
+		imdb_id: IMDB movie ID (tt format).
+
+	Returns:
+		dict: Category name to severity string mapping, or empty dict on failure.
+	"""
+	url = f"{_IMDB_BASE}/title/{imdb_id}/parentalguide"
+	# rate-limit courtesy pause
+	time.sleep(random.random())
+	response = curl_cffi.requests.get(
+		url, impersonate="chrome", timeout=15,
+	)
+	if response.status_code != 200:
+		_LOG.warning(
+			"curl_cffi parental guide returned HTTP %d for %s",
+			response.status_code, imdb_id,
+		)
+		return {}
+	html = response.text
+	data = _extract_next_data_json(html)
+	if not data:
+		return {}
+	# curl_cffi response uses categories[] path instead of section.items[]
+	page_props = _safe_get(data, "props", "pageProps", default={})
+	content_data = _safe_get(page_props, "contentData", default={})
+	categories = content_data.get("categories", []) or []
+	guide = {}
+	for cat in categories:
+		cat_name = cat.get("title", "")
+		severity = _safe_get(cat, "severitySummary", "text", default="")
+		if cat_name and severity:
+			guide[cat_name] = severity
+	# fallback: try the browser-style section.items path
+	if not guide:
+		guide = _parse_parental_guide_html(html)
+	# fallback: try aboveTheFoldData path
+	if not guide:
+		guide = _parse_parental_guide_from_above_fold(page_props)
 	return guide
 
 
@@ -665,8 +717,8 @@ class ImdbScraper(moviemanager.scraper.interfaces.MetadataProvider):
 	def get_parental_guide(self, imdb_id: str) -> dict:
 		"""Fetch parental guide data for a movie.
 
-		Uses the browser transport to load the parental guide page,
-		then parses the severity data from __NEXT_DATA__ JSON.
+		Tries curl_cffi first (fast, no browser needed), then falls back
+		to the QWebEnginePage browser transport if curl_cffi fails.
 
 		Args:
 			imdb_id: IMDB movie ID (tt format).
@@ -676,6 +728,18 @@ class ImdbScraper(moviemanager.scraper.interfaces.MetadataProvider):
 		"""
 		if not imdb_id:
 			return {}
+		# try curl_cffi first -- bypasses WAF without browser transport
+		guide = _fetch_parental_guide_curl(imdb_id)
+		if guide:
+			_LOG.info(
+				"Parental guide for %s fetched via curl_cffi", imdb_id,
+			)
+			return guide
+		# fall back to browser transport
+		_LOG.info(
+			"curl_cffi failed for %s, falling back to browser transport",
+			imdb_id,
+		)
 		if self._transport is None:
 			_LOG.warning(
 				"IMDB browser transport not configured, "
