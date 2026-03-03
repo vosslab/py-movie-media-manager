@@ -57,6 +57,8 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		# track batch results: dict of movie -> scraped bool
 		self._batch_results = {}
 		self._batch_mode = movie_list is not None and len(movie_list) > 1
+		self._pending_scrape_movie = None
+		self._pending_scrape_kwargs = {}
 		self.resize(900, 550)
 		self._setup_ui()
 		# load the first movie
@@ -521,13 +523,9 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 			scrape_kwargs["imdb_id"] = result.imdb_id
 		# capture current movie for the background scrape
 		movie_to_scrape = self._movie
-		worker = moviemanager.ui.workers.Worker(
-			self._api.scrape_movie,
-			movie_to_scrape, **scrape_kwargs
-		)
-		worker.signals.finished.connect(self._on_scrape_done)
-		worker.signals.error.connect(self._on_scrape_error)
-		self._pool.start(worker)
+		self._pending_scrape_movie = movie_to_scrape
+		self._pending_scrape_kwargs = dict(scrape_kwargs)
+		self._start_scrape_worker(movie_to_scrape, scrape_kwargs)
 		# in batch mode, advance immediately without waiting for scrape
 		if self._batch_mode:
 			# record pending scrape result (will be updated on completion)
@@ -548,6 +546,17 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 			self.setCursor(
 				PySide6.QtCore.Qt.CursorShape.WaitCursor
 			)
+
+	#============================================
+	def _start_scrape_worker(self, movie, scrape_kwargs: dict) -> None:
+		"""Start a background scrape worker for the given movie."""
+		worker = moviemanager.ui.workers.Worker(
+			self._api.scrape_movie,
+			movie, **scrape_kwargs
+		)
+		worker.signals.finished.connect(self._on_scrape_done)
+		worker.signals.error.connect(self._on_scrape_error)
+		self._pool.start(worker)
 
 	#============================================
 	def _on_scrape_done(self, result) -> None:
@@ -575,10 +584,53 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		self.unsetCursor()
 		self._ok_btn.setEnabled(True)
 		self._ok_btn.setText("Accept Match")
+		if (
+			not self._batch_mode
+			and "AWS WAF challenge" in error_text
+			and self._retry_after_imdb_challenge()
+		):
+			return
 		PySide6.QtWidgets.QMessageBox.critical(
 			self, "Scrape Error",
 			f"Failed to scrape movie:\n{error_text}"
 		)
+
+	#============================================
+	def _retry_after_imdb_challenge(self) -> bool:
+		"""Open challenge dialog, apply cookies, and retry scrape.
+
+		Returns:
+			bool: True if retry was started, False otherwise.
+		"""
+		if self._pending_scrape_movie is None:
+			return False
+		imdb_id = self._pending_scrape_kwargs.get("imdb_id", "")
+		if not imdb_id:
+			return False
+		import moviemanager.ui.dialogs.imdb_challenge_dialog
+		url = f"https://www.imdb.com/title/{imdb_id}/"
+		seed_cookies = self._api.get_configured_imdb_browser_cookies()
+		dialog = moviemanager.ui.dialogs.imdb_challenge_dialog.ImdbChallengeDialog(
+			url, self, seed_cookies=seed_cookies
+		)
+		if dialog.exec() != PySide6.QtWidgets.QDialog.DialogCode.Accepted:
+			return False
+		cookies = dialog.get_cookies()
+		if not cookies:
+			return False
+		applied = self._api.apply_imdb_cookies(cookies)
+		if not applied:
+			return False
+		self._ok_btn.setEnabled(False)
+		self._ok_btn.setText("Saving...")
+		self.setCursor(
+			PySide6.QtCore.Qt.CursorShape.WaitCursor
+		)
+		self._start_scrape_worker(
+			self._pending_scrape_movie,
+			self._pending_scrape_kwargs,
+		)
+		return True
 
 	#============================================
 	def _on_double_click(self, index) -> None:

@@ -6,6 +6,7 @@ import re
 import time
 import random
 import subprocess
+import logging
 
 # PIP3 modules
 import requests
@@ -16,8 +17,13 @@ import moviemanager.core.movie.renamer
 import moviemanager.core.movie.scanner
 import moviemanager.core.nfo.writer
 import moviemanager.core.settings
+import moviemanager.scraper.browser_cookies
 import moviemanager.scraper.imdb_scraper
 import moviemanager.scraper.tmdb_scraper
+
+
+# module logger
+_LOG = logging.getLogger(__name__)
 
 
 #============================================
@@ -39,6 +45,7 @@ class MovieAPI:
 		self._settings = settings
 		self._movie_list = moviemanager.core.movie.movie_list.MovieList()
 		self._scraper = None
+		self._imdb_cookies_loaded_spec = ""
 
 	#============================================
 	def scan_directory(self, root_path: str, progress_callback=None) -> list:
@@ -86,6 +93,7 @@ class MovieAPI:
 		Falls back to IMDB if TMDB key is missing.
 		"""
 		if self._scraper is not None:
+			self._apply_configured_imdb_browser_cookies()
 			return
 		provider = self._settings.scraper_provider
 		if provider == "tmdb":
@@ -98,6 +106,61 @@ class MovieAPI:
 				return
 			# fall back to IMDB if no TMDB key
 		self._scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
+		self._apply_configured_imdb_browser_cookies()
+
+	#============================================
+	def _configured_imdb_browser_cookie_spec(self) -> str:
+		"""Return cookie loader spec from structured settings."""
+		if self._settings.imdb_browser_cookies_enabled:
+			browser = (
+				self._settings.imdb_browser_cookies_browser.strip().lower()
+			)
+			if not browser:
+				browser = "firefox"
+			return browser
+		return ""
+
+	#============================================
+	def get_configured_imdb_browser_cookies(self) -> list:
+		"""Load IMDB browser cookies from current settings.
+
+		Returns:
+			list: Cookie dicts, or empty list when disabled/unavailable.
+		"""
+		spec = self._configured_imdb_browser_cookie_spec()
+		if not spec:
+			return []
+		try:
+			return moviemanager.scraper.browser_cookies.load_imdb_cookies_from_browser(
+				spec
+			)
+		except Exception as error:
+			_LOG.warning(
+				"Failed to load IMDB browser cookies from '%s': %s",
+				spec, error,
+			)
+			return []
+
+	#============================================
+	def _apply_configured_imdb_browser_cookies(self) -> None:
+		"""Load and apply browser cookies to the IMDB scraper, if configured."""
+		if not isinstance(
+			self._scraper, moviemanager.scraper.imdb_scraper.ImdbScraper
+		):
+			return
+		spec = self._configured_imdb_browser_cookie_spec()
+		if not spec:
+			return
+		if spec == self._imdb_cookies_loaded_spec:
+			return
+		cookies = self.get_configured_imdb_browser_cookies()
+		if not cookies:
+			_LOG.warning(
+				"No IMDB cookies found from browser spec: %s", spec
+			)
+			return
+		self._scraper.set_cookies(cookies)
+		self._imdb_cookies_loaded_spec = spec
 
 	#============================================
 	def search_movie(self, title: str, year: str = "") -> list:
@@ -113,6 +176,24 @@ class MovieAPI:
 		self._ensure_scraper()
 		result = self._scraper.search(title, year)
 		return result
+
+	#============================================
+	def apply_imdb_cookies(self, cookies: list) -> bool:
+		"""Apply browser cookies to the active IMDB scraper session.
+
+		Args:
+			cookies: List of cookie dicts from a browser context.
+
+		Returns:
+			bool: True when cookies were applied to an IMDB scraper.
+		"""
+		self._ensure_scraper()
+		if not isinstance(
+			self._scraper, moviemanager.scraper.imdb_scraper.ImdbScraper
+		):
+			return False
+		self._scraper.set_cookies(cookies)
+		return True
 
 	#============================================
 	def search_movie_with_fallback(

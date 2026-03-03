@@ -5,6 +5,9 @@
 import os
 import unittest.mock
 
+# PIP3 modules
+import PySide6.QtWidgets
+
 # local repo modules
 import moviemanager.api.movie_api
 import moviemanager.core.settings
@@ -328,6 +331,41 @@ class TestMainWindowScan:
 		)
 		# verify 2 movies in the table
 		assert window._movie_panel._table_model.rowCount() == 2
+
+
+#============================================
+class TestMainWindowLastDirectory:
+	"""Test startup behavior for last opened directory."""
+
+	def test_main_window_auto_opens_last_directory(
+		self, qtbot, tmp_path, monkeypatch
+	):
+		"""MainWindow should auto-open last_directory without prompt."""
+		root = _create_movie_dirs(tmp_path)
+		settings = moviemanager.core.settings.Settings()
+		settings.last_directory = root
+		# patch save_settings for entire test lifetime (including teardown)
+		monkeypatch.setattr(
+			moviemanager.core.settings, "save_settings", lambda *a, **kw: None,
+		)
+		question_called = {"called": False}
+
+		def _question_stub(*args, **kwargs):
+			question_called["called"] = True
+			return PySide6.QtWidgets.QMessageBox.StandardButton.No
+
+		monkeypatch.setattr(
+			PySide6.QtWidgets.QMessageBox, "question", _question_stub,
+		)
+		window = moviemanager.ui.main_window.MainWindow(settings, directory="")
+		qtbot.addWidget(window)
+		# wait for startup scan to complete
+		qtbot.waitUntil(
+			lambda: window._movie_panel._table_model.rowCount() == 2,
+			timeout=5000,
+		)
+		assert window._movie_panel._table_model.rowCount() == 2
+		assert question_called["called"] is False
 
 
 #============================================

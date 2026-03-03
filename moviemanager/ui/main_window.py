@@ -61,20 +61,14 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._current_directory = ""
 		# rename history for undo (stack of rename batches)
 		self._rename_history = []
-		# load directory if provided, otherwise offer to reopen last folder
+		# load directory if provided, otherwise auto-open last folder
 		if directory:
 			self._scan_directory(directory)
 		elif self._settings.last_directory:
 			import os
 			last_dir = self._settings.last_directory
 			if os.path.isdir(last_dir):
-				reply = PySide6.QtWidgets.QMessageBox.question(
-					self, "Reopen Last Folder",
-					f"Reopen last folder?\n{last_dir}",
-				)
-				yes_btn = PySide6.QtWidgets.QMessageBox.StandardButton.Yes
-				if reply == yes_btn:
-					self._scan_directory(last_dir)
+				self._scan_directory(last_dir)
 
 	#============================================
 	def _setup_menus(self):

@@ -56,6 +56,17 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		)
 		tmdb_row.addWidget(tmdb_get_btn)
 		api_layout.addRow("TMDB API Key:", tmdb_row)
+		# IMDB browser-cookie settings
+		self._imdb_cookies_enabled_check = PySide6.QtWidgets.QCheckBox(
+			"Enable"
+		)
+		api_layout.addRow(
+			"Use Browser Cookies for IMDB:",
+			self._imdb_cookies_enabled_check,
+		)
+		self._imdb_browser_combo = PySide6.QtWidgets.QComboBox()
+		self._imdb_browser_combo.addItem("Firefox", "firefox")
+		api_layout.addRow("IMDB Cookie Browser:", self._imdb_browser_combo)
 		# Fanart.tv API key with Get Key button
 		fanart_row = PySide6.QtWidgets.QHBoxLayout()
 		self._fanart_key_edit = PySide6.QtWidgets.QLineEdit()
@@ -242,6 +253,18 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		if provider_index >= 0:
 			self._provider_combo.setCurrentIndex(provider_index)
 		self._tmdb_key_edit.setText(s.tmdb_api_key)
+		self._imdb_cookies_enabled_check.setChecked(
+			bool(s.imdb_browser_cookies_enabled)
+		)
+		browser = s.imdb_browser_cookies_browser.strip().lower()
+		if not browser:
+			browser = "firefox"
+		browser_index = self._imdb_browser_combo.findData(browser)
+		if browser_index < 0:
+			self._imdb_browser_combo.addItem(browser, browser)
+			browser_index = self._imdb_browser_combo.findData(browser)
+		if browser_index >= 0:
+			self._imdb_browser_combo.setCurrentIndex(browser_index)
 		self._fanart_key_edit.setText(s.fanart_api_key)
 		self._osub_key_edit.setText(s.opensubtitles_api_key)
 		# theme combo
@@ -269,6 +292,15 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		s = self._settings
 		s.scraper_provider = self._provider_combo.currentData()
 		s.tmdb_api_key = self._tmdb_key_edit.text()
+		s.imdb_browser_cookies_enabled = (
+			self._imdb_cookies_enabled_check.isChecked()
+		)
+		selected_browser = str(
+			self._imdb_browser_combo.currentData() or "firefox"
+		).strip().lower()
+		if not selected_browser:
+			selected_browser = "firefox"
+		s.imdb_browser_cookies_browser = selected_browser
 		s.fanart_api_key = self._fanart_key_edit.text()
 		s.opensubtitles_api_key = self._osub_key_edit.text()
 		s.theme = self._theme_combo.currentData()

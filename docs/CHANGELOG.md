@@ -1,5 +1,47 @@
 # Changelog
 
+## 2026-03-03
+
+### Fixes and Maintenance
+- Root-caused IMDB `HTTP 202` search failures to AWS WAF challenge responses
+  (`x-amzn-waf-action: challenge`) on IMDB HTML endpoints such as `/find/`.
+- Changed `ImdbScraper.search()` to query IMDB suggestion JSON endpoint
+  (`https://v2.sg.media-imdb.com/suggestion/...`) first, which currently returns
+  HTTP 200 under the same environment where `/find/` returns HTTP 202.
+- Added fallback to legacy `/find/` HTML parsing only when suggestion results are unavailable.
+- Added warning logging for failed IMDB search fetches with the original query text to make
+  these degraded searches easier to diagnose from logs.
+- Added explicit AWS WAF challenge detection in `_fetch_page()` and `_fetch_page_safe()` for
+  IMDB HTTP 202 responses so errors/logs identify challenge blocking directly.
+- Changed GUI startup behavior to auto-open `settings.last_directory` when it exists and no
+  launch directory is provided, removing the "Reopen last folder?" confirmation dialog.
+- Added an IMDB verification popup flow in match dialog scrape errors: when IMDB returns an
+  AWS WAF challenge, users can complete the challenge in an embedded browser dialog and retry
+  scraping with captured IMDB/AWS WAF cookies applied to the scraper session.
+- Added Firefox-based IMDB cookie loading support via browser spec (for example
+  `firefox:default-release`) and apply-on-start behavior for the IMDB scraper session.
+- Replaced free-form IMDB cookie source with structured GUI settings:
+  `Use Browser Cookies for IMDB` (yes/no) and `IMDB Cookie Browser`.
+- Removed CLI cookie-spec override `--cookies-from-browser` from
+  `movie_organizer_gui.py` to keep cookie configuration in GUI settings.
+- Changed IMDB challenge popup to preload configured browser cookies into
+  the embedded WebEngine profile before loading IMDB, so challenge retries
+  do not start from a fresh cookie session.
+
+### Developer Tests and Notes
+- Updated IMDB search unit tests to mock `_fetch_page_safe()` instead of `_fetch_page()`.
+- Added `test_search_http_failure_returns_empty` to verify graceful empty-result behavior
+  when IMDB search page fetch fails.
+- Added suggestion-parser tests for filtering non-title records and prioritizing exact year
+  matches in search ordering.
+- Added unit tests for HTTP helper behavior on IMDB AWS WAF challenge responses.
+- Added GUI smoke test coverage for auto-opening last directory without invoking
+  `QMessageBox.question`.
+- Added unit tests for IMDB scraper cookie injection and MovieAPI cookie-apply behavior.
+- Added browser-cookie utility tests for spec parsing and Firefox cookie DB loading/filtering.
+- Added `tests/test_settings.py` coverage for new IMDB browser-cookie settings fields
+  and for ignoring removed legacy config keys.
+
 ## 2026-02-28
 
 ### Additions and New Features

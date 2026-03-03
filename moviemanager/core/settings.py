@@ -23,6 +23,10 @@ class Settings:
 	# API keys
 	tmdb_api_key: str = ""
 	fanart_api_key: str = ""
+	# load browser cookies for IMDB scraping
+	imdb_browser_cookies_enabled: bool = False
+	# browser name for IMDB cookie loading (currently firefox)
+	imdb_browser_cookies_browser: str = "firefox"
 
 	# scraping preferences
 	scrape_language: str = "en"
