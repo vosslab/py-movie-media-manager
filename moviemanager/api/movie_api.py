@@ -12,6 +12,7 @@ import logging
 import requests
 
 # local repo modules
+import moviemanager.api.api_cache
 import moviemanager.api.match_confidence
 import moviemanager.core.movie.movie_list
 import moviemanager.core.movie.renamer
@@ -46,6 +47,7 @@ class MovieAPI:
 			settings = moviemanager.core.settings.Settings()
 		self._settings = settings
 		self._movie_list = moviemanager.core.movie.movie_list.MovieList()
+		self._cache = moviemanager.api.api_cache.ApiCache()
 		self._scraper = None
 		self._imdb_scraper = None
 		self._imdb_cookies_loaded_spec = ""
@@ -198,11 +200,16 @@ class MovieAPI:
 
 	#============================================
 	def _lookup_tmdb_poster_for_imdb_id(self, imdb_id: str) -> tuple:
-		"""Resolve TMDB id/poster URL for an IMDB id with in-memory caching."""
+		"""Resolve TMDB id/poster URL for an IMDB id with persistent caching."""
 		if not imdb_id:
 			return (0, "")
+		# check in-memory cache first, then persistent cache
 		if imdb_id in self._tmdb_poster_cache:
 			return self._tmdb_poster_cache[imdb_id]
+		cached = self._cache.get_poster_lookup(imdb_id)
+		if cached is not None:
+			self._tmdb_poster_cache[imdb_id] = cached
+			return cached
 		lookup_scraper = self._get_tmdb_lookup_scraper()
 		if lookup_scraper is None:
 			self._tmdb_poster_cache[imdb_id] = (0, "")
@@ -218,6 +225,8 @@ class MovieAPI:
 			poster_url = ""
 		result = (tmdb_id, poster_url)
 		self._tmdb_poster_cache[imdb_id] = result
+		# persist to disk cache
+		self._cache.put_poster_lookup(imdb_id, tmdb_id, poster_url)
 		return result
 
 	#============================================
@@ -253,13 +262,31 @@ class MovieAPI:
 			List of SearchResult instances sorted by match confidence.
 		"""
 		self._ensure_scraper()
-		results = self._scraper.search(title, year)
-		if isinstance(
+		# determine cache type based on active scraper
+		is_imdb = isinstance(
 			self._scraper, moviemanager.scraper.imdb_scraper.ImdbScraper
-		):
-			prefetch_results = results[:_TMDB_POSTER_PREFETCH_LIMIT]
-			for item in prefetch_results:
-				self._prefer_tmdb_poster(item)
+		)
+		cache_type = "imdb_search" if is_imdb else "tmdb_search"
+		# check persistent cache before network call
+		cached_dicts = self._cache.get_search_results(
+			cache_type, title, year
+		)
+		if cached_dicts is not None:
+			# reconstruct SearchResult dataclasses from cached dicts
+			results = [
+				moviemanager.scraper.types.SearchResult(**d)
+				for d in cached_dicts
+			]
+		else:
+			results = self._scraper.search(title, year)
+			if is_imdb:
+				prefetch_results = results[:_TMDB_POSTER_PREFETCH_LIMIT]
+				for item in prefetch_results:
+					self._prefer_tmdb_poster(item)
+			# store in persistent cache
+			self._cache.put_search_results(
+				cache_type, title, year, results
+			)
 		# compute match confidence for each result
 		ref_title = query_title or title
 		ref_year = query_year or year
@@ -378,33 +405,70 @@ class MovieAPI:
 			imdb_id: IMDB ID to fetch metadata for.
 		"""
 		self._ensure_scraper()
-		metadata = self._scraper.get_metadata(
-			tmdb_id=tmdb_id, imdb_id=imdb_id
-		)
-		if isinstance(
+		is_imdb = isinstance(
 			self._scraper, moviemanager.scraper.imdb_scraper.ImdbScraper
-		):
-			lookup_id = metadata.imdb_id or imdb_id
-			tmdb_match_id, tmdb_poster_url = (
-				self._lookup_tmdb_poster_for_imdb_id(lookup_id)
+		)
+		cache_type = "imdb_metadata" if is_imdb else "tmdb_metadata"
+		# use imdb_id as the key for both scrapers (TMDB returns imdb_id)
+		cache_key = imdb_id
+		# check persistent cache before network call
+		cached_dict = self._cache.get_metadata(
+			cache_type, cache_key
+		) if cache_key else None
+		if cached_dict is not None:
+			# reconstruct CastMember lists from nested dicts
+			actors_raw = cached_dict.pop("actors", [])
+			producers_raw = cached_dict.pop("producers", [])
+			metadata = moviemanager.scraper.types.MediaMetadata(**cached_dict)
+			metadata.actors = [
+				moviemanager.scraper.types.CastMember(**a) for a in actors_raw
+			]
+			metadata.producers = [
+				moviemanager.scraper.types.CastMember(**p) for p in producers_raw
+			]
+		else:
+			metadata = self._scraper.get_metadata(
+				tmdb_id=tmdb_id, imdb_id=imdb_id
 			)
-			if tmdb_match_id and not metadata.tmdb_id:
-				metadata.tmdb_id = tmdb_match_id
-			if tmdb_poster_url:
-				metadata.poster_url = tmdb_poster_url
+			if is_imdb:
+				lookup_id = metadata.imdb_id or imdb_id
+				tmdb_match_id, tmdb_poster_url = (
+					self._lookup_tmdb_poster_for_imdb_id(lookup_id)
+				)
+				if tmdb_match_id and not metadata.tmdb_id:
+					metadata.tmdb_id = tmdb_match_id
+				if tmdb_poster_url:
+					metadata.poster_url = tmdb_poster_url
+			# store in persistent cache keyed by imdb_id
+			store_key = metadata.imdb_id or imdb_id
+			if store_key:
+				self._cache.put_metadata(
+					cache_type, store_key, metadata,
+				)
 		# supplement parental guide from IMDB when using TMDB
 		if (self._imdb_scraper is not None
 				and not metadata.parental_guide
 				and metadata.imdb_id):
-			try:
-				guide = self._imdb_scraper.get_parental_guide(
-					metadata.imdb_id
-				)
-				metadata.parental_guide = guide
-			except Exception as err:
-				_LOG.warning(
-					"IMDB parental guide fetch failed: %s", err
-				)
+			# check parental guide cache first
+			cached_guide = self._cache.get_parental_guide(
+				metadata.imdb_id
+			)
+			if cached_guide is not None:
+				metadata.parental_guide = cached_guide
+			else:
+				try:
+					guide = self._imdb_scraper.get_parental_guide(
+						metadata.imdb_id
+					)
+					metadata.parental_guide = guide
+					# cache the parental guide result
+					self._cache.put_parental_guide(
+						metadata.imdb_id, guide
+					)
+				except Exception as err:
+					_LOG.warning(
+						"IMDB parental guide fetch failed: %s", err
+					)
 		# map MediaMetadata fields to the Movie object
 		movie.title = metadata.title or movie.title
 		movie.original_title = metadata.original_title or movie.original_title

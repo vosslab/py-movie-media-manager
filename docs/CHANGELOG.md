@@ -3,6 +3,18 @@
 ## 2026-03-03
 
 ### Additions and New Features
+- Created `moviemanager/api/api_cache.py` with persistent JSON-file caching for API
+  metadata responses. Uses 6 cache files under `~/.cache/movie_organizer/` (IMDB/TMDB
+  search, metadata, parental guide, poster lookup) with a 182-day TTL. Features atomic
+  writes via temp file + rename, automatic expired entry purging, case-insensitive key
+  normalization, and graceful corrupt JSON recovery.
+- Integrated `ApiCache` into `MovieAPI` in `moviemanager/api/movie_api.py`: search
+  results, metadata, parental guide, and TMDB poster lookups are now cached persistently.
+  Repeated test runs and scrape operations avoid redundant HTTP requests to IMDB/TMDB.
+  Metadata is keyed by `imdb_id` for both scrapers since TMDB returns IMDB IDs.
+- Added `tests/test_api_cache.py` with 21 unit tests covering round-trip serialization,
+  TTL expiration, cache miss behavior, key normalization, clear/remove operations,
+  corrupt JSON handling, and automatic directory creation.
 - Created `moviemanager/api/match_confidence.py` with API-agnostic Bayesian-inspired
   match confidence scoring. Uses four weighted signals: title similarity (0.50 weight
   via `difflib.SequenceMatcher`), year proximity (0.25 weight via Gaussian bell curve
