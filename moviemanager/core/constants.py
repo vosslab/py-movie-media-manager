@@ -71,11 +71,12 @@ ARTWORK_FILENAMES: dict = {
 	"thumb": ["thumb.jpg", "thumb.png", "landscape.jpg"],
 }
 
-# stopwords for filename parsing (from Java ParserUtils)
+# stopwords for filename parsing (from Java ParserUtils, extended)
 STOPWORDS: list = [
 	"1080", "1080i", "1080p", "480i", "480p", "576i", "576p",
 	"720", "720i", "720p",
-	"ac3", "ac3ld", "ac3md", "aoe", "avc", "atmos",
+	"aac", "aac5", "ac3", "ac3ld", "ac3md", "aoe", "avc", "atmos",
+	"avi",
 	"bd5", "bdrip", "blueray", "bluray", "brrip",
 	"cam", "cd1", "cd2", "cd3", "cd4", "cd5", "cd6", "cd7", "cd8", "cd9",
 	"complete", "custom",
@@ -87,13 +88,14 @@ STOPWORDS: list = [
 	"dvd6", "dvd7", "dvd8", "dvd9",
 	"dvdivx", "dvdrip", "dvdscr", "dvdscreener",
 	"emule", "etm", "extended",
-	"flv", "fragment", "fs",
+	"flac", "flv", "fragment", "fs",
 	"german",
 	"h264", "h265", "hddvd", "hdr", "hdr10", "hdrip",
-	"hdtv", "hdtvrip", "hevc", "hrhd", "hrhdtv",
+	"hdtv", "hdtvrip", "hevc", "hrhd", "hrhdtv", "hybrid",
 	"ind", "internal",
-	"ld", "limited",
-	"md", "multisubs",
+	"ld", "limited", "lt",
+	"m2ts", "m4v", "md", "mkv", "mov", "mp3", "mp4",
+	"mpeg", "mpg", "multisubs",
 	"nfo", "nfofix", "ntg", "ntsc",
 	"ogg", "ogm",
 	"pal", "pdtv", "proper", "pso",
@@ -102,8 +104,9 @@ STOPWORDS: list = [
 	"screener", "se", "subbed", "svcd", "swedish",
 	"tc", "telecine", "telesync", "truehd", "ts",
 	"uhd", "uncut", "unrated",
-	"vcf",
-	"webdl", "webrip", "workprint", "ws", "www",
+	"vcf", "vob",
+	"webdl", "webm", "webrip", "wmv", "workprint", "ws", "www",
 	"x264", "x265", "xf", "xvid", "xvidvd", "xxx",
+	"yts",
 	"2160p", "4k",
 ]

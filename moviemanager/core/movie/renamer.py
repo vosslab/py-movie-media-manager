@@ -80,14 +80,17 @@ def expand_template(
 
 
 #============================================
-def _collect_artwork_files(directory: str) -> list:
+def _collect_artwork_files(directory: str, video_basename: str = "") -> list:
 	"""Find artwork files in a movie directory.
 
 	Scans the directory for filenames that match known artwork
-	names from ARTWORK_FILENAMES.
+	names from ARTWORK_FILENAMES. Also finds prefixed artwork
+	files like 'Movie.Name-poster.jpg' in multi-movie directories.
 
 	Args:
 		directory: path to the movie directory.
+		video_basename: video filename without extension, used to
+			match prefixed artwork (e.g. 'Movie.Name').
 
 	Returns:
 		List of full paths to artwork files that exist on disk.
@@ -102,11 +105,32 @@ def _collect_artwork_files(directory: str) -> list:
 	# check each file in the directory
 	if not os.path.isdir(directory):
 		return artwork_paths
+	collected = set()
 	for entry in os.listdir(directory):
+		# exact match: poster.jpg, fanart.jpg, etc.
 		if entry.lower() in known_names:
 			full_path = os.path.join(directory, entry)
 			if os.path.isfile(full_path):
-				artwork_paths.append(full_path)
+				collected.add(full_path)
+
+	# second pass: find prefixed artwork like Movie.Name-poster.jpg
+	if video_basename:
+		prefix_lower = video_basename.lower()
+		for entry in os.listdir(directory):
+			entry_lower = entry.lower()
+			# check for video_basename followed by separator (- or .)
+			for sep in ("-", "."):
+				prefix_with_sep = prefix_lower + sep
+				if not entry_lower.startswith(prefix_with_sep):
+					continue
+				# extract the suffix after the prefix+separator
+				suffix = entry_lower[len(prefix_with_sep):]
+				if suffix in known_names:
+					full_path = os.path.join(directory, entry)
+					if os.path.isfile(full_path):
+						collected.add(full_path)
+
+	artwork_paths = sorted(collected)
 	return artwork_paths
 
 
@@ -145,8 +169,13 @@ def rename_movie(
 		spaces_to_underscores=spaces_to_underscores,
 	)
 
-	# determine the parent of the current movie directory
-	parent_dir = os.path.dirname(movie.path) if movie.path else ""
+	# determine where the new subfolder should be created
+	# multi-movie dirs: create subfolder inside the shared directory
+	# single-movie dirs: create subfolder alongside the current one
+	if movie.multi_movie_dir:
+		parent_dir = movie.path
+	else:
+		parent_dir = os.path.dirname(movie.path) if movie.path else ""
 	dest_dir = os.path.join(parent_dir, target_dir)
 
 	rename_pairs = []
@@ -168,7 +197,11 @@ def rename_movie(
 		rename_pairs.append((movie.nfo_path, nfo_dest))
 
 	# collect artwork files from the movie directory
-	artwork_files = _collect_artwork_files(movie.path)
+	# pass video basename to find prefixed artwork in multi-movie dirs
+	video_basename = ""
+	if movie.video_file:
+		video_basename = os.path.splitext(movie.video_file.filename)[0]
+	artwork_files = _collect_artwork_files(movie.path, video_basename)
 	for art_path in artwork_files:
 		# keep original artwork filename in the new directory
 		art_name = os.path.basename(art_path)

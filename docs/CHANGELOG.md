@@ -22,6 +22,20 @@
   correctly named).
 
 ### Fixes and Maintenance
+- Added common video/audio file extensions (`mp4`, `mkv`, `avi`, `mov`, `m4v`, `webm`, `wmv`,
+  `mpg`, `mpeg`, `m2ts`, `vob`, `aac`, `flac`, `mp3`) and common release tags (`hybrid`, `yts`,
+  `lt`) to the filename parser STOPWORDS list. Prevents file extensions from leaking into parsed
+  movie titles when filenames contain embedded extensions (e.g. `Jay_Kelly.mp4_2025.mp4` now parses
+  as "Jay Kelly" instead of "Jay Kelly mp4") (`moviemanager/core/constants.py`).
+- Fixed organize button moving files OUT of multi-movie directories (e.g. TODO_MOVIES) into the
+  parent directory. Now creates the subfolder inside the multi-movie directory when
+  `multi_movie_dir` is True (`moviemanager/core/movie/renamer.py`).
+- Fixed artwork collector missing video-basename-prefixed artwork files (e.g.
+  `Movie.Name-poster.jpg`, `Movie.Name.fanart.jpg`) in multi-movie directories. The collector
+  now matches both exact artwork names and prefixed variants (`moviemanager/core/movie/renamer.py`).
+- Fixed `is_organized` property using a loose title substring match that would incorrectly mark
+  misnamed folders as organized (e.g. `Anaconda_blah_2025`). Now compares the folder name exactly
+  against the expanded path template from settings (`moviemanager/core/models/movie.py`).
 - Moved `task_api.py` from `moviemanager/api/` to `moviemanager/ui/` because it depends on PySide6
   and violates the rule that `api/` must not import Qt. Fixes `test_no_pyside6_in_core.py` failure.
 - Fixed `FakeTransport` in `tests/test_imdb_browser_transport.py` to include all attributes
