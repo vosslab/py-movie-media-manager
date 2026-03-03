@@ -14,6 +14,7 @@ import moviemanager.core.settings
 import moviemanager.scraper.imdb_scraper
 import moviemanager.scraper.types
 import moviemanager.ui.main_window
+import moviemanager.ui.task_api
 import moviemanager.ui.dialogs.movie_chooser
 
 
@@ -395,6 +396,7 @@ class TestChooserDialogBatchMode:
 			dialog = moviemanager.ui.dialogs.movie_chooser.MovieChooserDialog(
 				movies[0], api, None,
 				movie_list=movies,
+				task_api=moviemanager.ui.task_api.TaskAPI(),
 			)
 			qtbot.addWidget(dialog)
 			# verify batch mode is active
@@ -422,6 +424,7 @@ class TestChooserDialogBatchMode:
 		):
 			dialog = moviemanager.ui.dialogs.movie_chooser.MovieChooserDialog(
 				movies[0], api, None,
+				task_api=moviemanager.ui.task_api.TaskAPI(),
 			)
 			qtbot.addWidget(dialog)
 			# verify single mode
@@ -472,6 +475,7 @@ class TestChooserDialogPrematchMode:
 		api = moviemanager.api.movie_api.MovieAPI(settings)
 		dialog = moviemanager.ui.dialogs.movie_chooser.MovieChooserDialog(
 			movie, api, None,
+			task_api=moviemanager.ui.task_api.TaskAPI(),
 		)
 		qtbot.addWidget(dialog)
 		# verify prematch mode is active
@@ -499,6 +503,7 @@ class TestChooserDialogPrematchMode:
 		api = moviemanager.api.movie_api.MovieAPI(settings)
 		dialog = moviemanager.ui.dialogs.movie_chooser.MovieChooserDialog(
 			movie, api, None,
+			task_api=moviemanager.ui.task_api.TaskAPI(),
 		)
 		qtbot.addWidget(dialog)
 		# verify prematch mode
@@ -524,6 +529,7 @@ class TestChooserDialogPrematchMode:
 		):
 			dialog = moviemanager.ui.dialogs.movie_chooser.MovieChooserDialog(
 				movie, api, None,
+				task_api=moviemanager.ui.task_api.TaskAPI(),
 			)
 			qtbot.addWidget(dialog)
 			# click Find Different Match
@@ -554,6 +560,7 @@ class TestChooserDialogPrematchMode:
 		):
 			dialog = moviemanager.ui.dialogs.movie_chooser.MovieChooserDialog(
 				movie, api, None,
+				task_api=moviemanager.ui.task_api.TaskAPI(),
 			)
 			qtbot.addWidget(dialog)
 			# switch to search mode first
@@ -589,6 +596,7 @@ class TestChooserDialogBatchBugFixes:
 			dialog = moviemanager.ui.dialogs.movie_chooser.MovieChooserDialog(
 				movies[0], api, None,
 				movie_list=movies,
+				task_api=moviemanager.ui.task_api.TaskAPI(),
 			)
 			qtbot.addWidget(dialog)
 			# simulate pending scrape result
@@ -614,6 +622,7 @@ class TestChooserDialogBatchBugFixes:
 			dialog = moviemanager.ui.dialogs.movie_chooser.MovieChooserDialog(
 				movies[0], api, None,
 				movie_list=movies,
+				task_api=moviemanager.ui.task_api.TaskAPI(),
 			)
 			qtbot.addWidget(dialog)
 			# progress bar should be 0 (no movies completed yet)

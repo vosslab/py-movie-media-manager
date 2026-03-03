@@ -122,13 +122,22 @@ class DownloadDialog(PySide6.QtWidgets.QDialog):
 		parent: Parent widget.
 	"""
 
-	def __init__(self, movies: list, api, settings, parent=None):
+	def __init__(self, movies: list, api, settings, task_api, parent=None):
+		"""Initialize the batch download dialog.
+
+		Args:
+			movies: List of scraped Movie instances to process.
+			api: MovieAPI instance for download methods.
+			settings: Application Settings instance.
+			task_api: TaskAPI instance for background job tracking.
+			parent: Parent widget.
+		"""
 		super().__init__(parent)
 		self._movies = movies
 		self._api = api
 		self._settings = settings
 		self._worker = None
-		self._pool = PySide6.QtCore.QThreadPool()
+		self._task_api = task_api
 		self.setWindowTitle(
 			f"Download Content - {len(movies)} movies"
 		)
@@ -273,22 +282,24 @@ class DownloadDialog(PySide6.QtWidgets.QDialog):
 		self._cancel_btn.setText("Stop")
 		self._progress.show()
 		self._progress.setMaximum(len(self._movies))
-		# create background worker for the download loop
-		worker = moviemanager.ui.workers.Worker(
+		# submit background worker via TaskAPI for job tracking
+		task_id = self._task_api.submit_job(
+			f"Batch download ({len(self._movies)} movies)",
 			_run_batch_download,
 			self._movies, self._api, self._settings,
 			self._artwork_check.isChecked(),
 			self._trailer_check.isChecked(),
 			self._subs_check.isChecked(),
+			_priority=moviemanager.ui.task_api.PRIORITY_LOW,
 		)
 		# pass worker reference so the loop can check cancellation
+		worker = self._task_api.get_worker(task_id)
 		worker.kwargs["worker"] = worker
 		# connect signals
 		worker.signals.progress.connect(self._on_progress)
 		worker.signals.finished.connect(self._on_finished)
 		worker.signals.error.connect(self._on_error)
 		self._worker = worker
-		self._pool.start(worker, moviemanager.ui.task_api.PRIORITY_LOW)
 
 	#============================================
 	def _on_progress(self, current: int, total: int, message: str) -> None:

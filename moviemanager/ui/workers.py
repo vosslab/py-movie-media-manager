@@ -83,6 +83,42 @@ class Worker(PySide6.QtCore.QRunnable):
 
 
 #============================================
+def download_image_bytes(url: str, timeout: int = 15) -> bytes:
+	"""Download image bytes from a URL with browser-like headers.
+
+	Args:
+		url: The image URL to download.
+		timeout: HTTP request timeout in seconds.
+
+	Returns:
+		Raw image bytes from the response.
+
+	Raises:
+		RuntimeError: If the HTTP status is not 200 or content is not an image.
+	"""
+	# use browser-like User-Agent to avoid CDN rejections
+	headers = {
+		"User-Agent": (
+			"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+			"AppleWebKit/537.36 (KHTML, like Gecko) "
+			"Chrome/120.0.0.0 Safari/537.36"
+		),
+	}
+	response = requests.get(url, timeout=timeout, headers=headers)
+	if response.status_code != 200:
+		error_msg = f"HTTP {response.status_code} downloading {url}"
+		raise RuntimeError(error_msg)
+	# verify response contains image data, not HTML
+	content_type = response.headers.get("Content-Type", "")
+	if content_type and "image" not in content_type:
+		error_msg = (
+			f"Non-image response ({content_type}) from {url}"
+		)
+		raise RuntimeError(error_msg)
+	return response.content
+
+
+#============================================
 class ImageDownloadWorker(PySide6.QtCore.QRunnable):
 	"""Worker that downloads an image from a URL and emits the bytes.
 

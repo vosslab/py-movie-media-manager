@@ -22,6 +22,22 @@
   `download_dialog.py` (LOW), `image_chooser.py` (BACKGROUND),
   `movie_detail_panel.py` (BACKGROUND).
 
+- Added `download_image_bytes()` helper function to `moviemanager/ui/workers.py`, extracting
+  the HTTP download logic from `ImageDownloadWorker` into a plain callable for use with TaskAPI.
+- Migrated remaining local `QThreadPool` instances to TaskAPI:
+  - `main_window.py`: 4 rename operations (single/batch preview and execution) via
+    `submit_job()` with `PRIORITY_CRITICAL` and `_rename_mode` discriminator for signal routing.
+  - `movie_chooser.py`: 7 operations (search, broader search, prematch poster, poster preview,
+    scrape, prefetch search, prefetch poster) via `submit()` and `submit_job()`. Removed
+    fallback scrape branch that used the local pool when `task_api` was `None`.
+  - `image_chooser.py`: 2 operations (preview download, artwork download) via `submit()` and
+    `submit_job()`. Added `task_api` constructor parameter.
+  - `download_dialog.py`: 1 batch download operation via `submit_job()` with `PRIORITY_LOW`.
+    Added `task_api` constructor parameter.
+- Removed `self._pool = QThreadPool()` from `MainWindow`, `MovieChooserDialog`,
+  `ImageChooserDialog`, and `DownloadDialog`. Only `MovieDetailPanel` retains a local pool
+  for image loading.
+
 ### Behavior or Interface Changes
 - Routed all downloads (artwork, trailers, subtitles) through `TaskAPI.submit_job()`
   so each appears as an individual tracked job in the Jobs dialog

@@ -36,7 +36,6 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		super().__init__(parent)
 		self._settings = settings
 		self._api = moviemanager.api.movie_api.MovieAPI(settings)
-		self._pool = PySide6.QtCore.QThreadPool()
 		self.setWindowTitle("Movie Media Manager")
 		self.resize(1200, 800)
 		# accept drag-and-drop of directories (#19)
@@ -86,6 +85,8 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._refresh_task_id = None
 		self._download_task_ids = []
 		self._probe_task_id = None
+		self._rename_task_id = None
+		self._rename_mode = None
 		# menu bar
 		self._setup_menus()
 		# toolbar
@@ -462,6 +463,18 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			self._on_probe_task_finished(task_id, result)
 		elif task_id in self._download_task_ids:
 			self._on_download_job_done(task_id, result)
+		elif task_id == self._rename_task_id:
+			self._rename_task_id = None
+			mode = self._rename_mode
+			self._rename_mode = None
+			if mode == "single_preview":
+				self._on_rename_preview_done(result)
+			elif mode == "single_exec":
+				self._on_rename_exec_done(result)
+			elif mode == "batch_preview":
+				self._on_batch_rename_preview_done(result)
+			elif mode == "batch_exec":
+				self._on_batch_rename_exec_done(result)
 
 	#============================================
 	def _on_task_error(self, task_id: int, error_text: str) -> None:
@@ -471,6 +484,14 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			self._on_scan_error(error_text)
 		elif task_id == self._probe_task_id:
 			self._on_probe_task_error(task_id, error_text)
+		elif task_id == self._rename_task_id:
+			self._rename_task_id = None
+			mode = self._rename_mode
+			self._rename_mode = None
+			if mode in ("single_preview", "batch_preview"):
+				self._on_rename_preview_error(error_text)
+			else:
+				self._on_rename_exec_error(error_text)
 
 	#============================================
 	def _on_task_progress(self, task_id: int, cur: int, tot: int, msg: str) -> None:
@@ -672,16 +693,14 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		# compute rename preview in background thread
 		self._status.showMessage("Computing rename preview...")
 		self.setCursor(PySide6.QtCore.Qt.CursorShape.WaitCursor)
-		worker = moviemanager.ui.workers.Worker(
-			self._api.rename_movie, movie, dry_run=True,
-		)
 		# store movie ref for the callback
 		self._pending_rename_movie = movie
-		worker.signals.finished.connect(
-			self._on_rename_preview_done
+		self._rename_mode = "single_preview"
+		self._rename_task_id = self._task_api.submit_job(
+			"Rename preview", self._api.rename_movie, movie,
+			dry_run=True,
+			_priority=moviemanager.ui.task_api.PRIORITY_CRITICAL,
 		)
-		worker.signals.error.connect(self._on_rename_preview_error)
-		self._pool.start(worker)
 
 	#============================================
 	def _on_rename_preview_done(self, pairs: list) -> None:
@@ -710,18 +729,14 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			self.setCursor(
 				PySide6.QtCore.Qt.CursorShape.WaitCursor
 			)
-			exec_worker = moviemanager.ui.workers.Worker(
-				self._api.rename_movie, movie, dry_run=False,
-			)
 			# store pairs for undo on completion
 			self._pending_rename_pairs = pairs
-			exec_worker.signals.finished.connect(
-				self._on_rename_exec_done
+			self._rename_mode = "single_exec"
+			self._rename_task_id = self._task_api.submit_job(
+				"Renaming movie", self._api.rename_movie, movie,
+				dry_run=False,
+				_priority=moviemanager.ui.task_api.PRIORITY_CRITICAL,
 			)
-			exec_worker.signals.error.connect(
-				self._on_rename_exec_error
-			)
-			self._pool.start(exec_worker)
 
 	#============================================
 	def _on_rename_preview_error(self, error_text: str) -> None:
@@ -772,14 +787,12 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		# store movies for callback
 		self._pending_batch_movies = movies
 		# compute all dry-run previews in background
-		worker = moviemanager.ui.workers.Worker(
+		self._rename_mode = "batch_preview"
+		self._rename_task_id = self._task_api.submit_job(
+			"Batch rename preview",
 			self._compute_batch_rename_pairs, movies,
+			_priority=moviemanager.ui.task_api.PRIORITY_CRITICAL,
 		)
-		worker.signals.finished.connect(
-			self._on_batch_rename_preview_done
-		)
-		worker.signals.error.connect(self._on_rename_preview_error)
-		self._pool.start(worker)
 
 	#============================================
 	def _compute_batch_rename_pairs(self, movies: list) -> dict:
@@ -846,16 +859,12 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 				PySide6.QtCore.Qt.CursorShape.WaitCursor
 			)
 			self._pending_rename_pairs = all_pairs
-			exec_worker = moviemanager.ui.workers.Worker(
+			self._rename_mode = "batch_exec"
+			self._rename_task_id = self._task_api.submit_job(
+				"Batch renaming",
 				self._execute_batch_renames, movies_to_rename,
+				_priority=moviemanager.ui.task_api.PRIORITY_CRITICAL,
 			)
-			exec_worker.signals.finished.connect(
-				self._on_batch_rename_exec_done
-			)
-			exec_worker.signals.error.connect(
-				self._on_rename_exec_error
-			)
-			self._pool.start(exec_worker)
 
 	#============================================
 	def _execute_batch_renames(self, movies: list) -> list:
@@ -944,14 +953,16 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 	#============================================
 	def _cancel_operation(self) -> None:
 		"""Cancel the currently running background operation."""
-		# cancel scan, scrape, refresh via TaskAPI
+		# cancel scan, scrape, refresh, rename via TaskAPI
 		for tid in (self._scan_task_id, self._scrape_task_id,
-					self._refresh_task_id):
+					self._refresh_task_id, self._rename_task_id):
 			if tid is not None:
 				self._task_api.cancel(tid)
 		self._scan_task_id = None
 		self._scrape_task_id = None
 		self._refresh_task_id = None
+		self._rename_task_id = None
+		self._rename_mode = None
 		# cancel any pending download jobs
 		for tid in self._download_task_ids:
 			self._task_api.cancel(tid)

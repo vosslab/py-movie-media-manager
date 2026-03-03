@@ -21,11 +21,19 @@ import moviemanager.ui.workers
 class ImageChooserDialog(PySide6.QtWidgets.QDialog):
 	"""Dialog for browsing and downloading artwork."""
 
-	def __init__(self, movie, artwork_urls: dict, parent=None):
+	def __init__(self, movie, artwork_urls: dict, task_api, parent=None):
+		"""Initialize the artwork chooser dialog.
+
+		Args:
+			movie: Movie instance to download artwork for.
+			artwork_urls: Dict mapping artwork type to list of URLs.
+			task_api: TaskAPI instance for background downloads.
+			parent: Parent widget.
+		"""
 		super().__init__(parent)
 		self._movie = movie
 		self._artwork_urls = artwork_urls
-		self._pool = PySide6.QtCore.QThreadPool()
+		self._task_api = task_api
 		self.setWindowTitle(f"Artwork - {movie.title}")
 		self.resize(800, 600)
 		self._setup_ui()
@@ -102,10 +110,13 @@ class ImageChooserDialog(PySide6.QtWidgets.QDialog):
 		# show loading state
 		self._preview.setText("Loading preview...")
 		# download thumbnail in background thread (#1)
-		worker = moviemanager.ui.workers.ImageDownloadWorker(url)
+		task_id = self._task_api.submit(
+			moviemanager.ui.workers.download_image_bytes, url,
+			_priority=moviemanager.ui.task_api.PRIORITY_BACKGROUND,
+		)
+		worker = self._task_api.get_worker(task_id)
 		worker.signals.finished.connect(self._on_preview_loaded)
 		worker.signals.error.connect(self._on_preview_error)
-		self._pool.start(worker, moviemanager.ui.task_api.PRIORITY_BACKGROUND)
 
 	#============================================
 	def _on_preview_loaded(self, image_bytes: bytes) -> None:
@@ -170,12 +181,14 @@ class ImageChooserDialog(PySide6.QtWidgets.QDialog):
 		self._download_btn.setEnabled(False)
 		self._download_btn.setText("Downloading...")
 		self.setCursor(PySide6.QtCore.Qt.CursorShape.WaitCursor)
-		worker = moviemanager.ui.workers.Worker(
-			self._do_download, url, output_path, output_name
+		task_id = self._task_api.submit_job(
+			f"Artwork: {output_name}",
+			self._do_download, url, output_path, output_name,
+			_priority=moviemanager.ui.task_api.PRIORITY_BACKGROUND,
 		)
+		worker = self._task_api.get_worker(task_id)
 		worker.signals.finished.connect(self._on_download_done)
 		worker.signals.error.connect(self._on_download_error)
-		self._pool.start(worker, moviemanager.ui.task_api.PRIORITY_BACKGROUND)
 
 	#============================================
 	def _do_download(self, url: str, output_path: str, output_name: str) -> str:
