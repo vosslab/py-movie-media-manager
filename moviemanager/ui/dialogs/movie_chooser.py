@@ -37,6 +37,13 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		self._pool = PySide6.QtCore.QThreadPool()
 		# track in-flight poster download worker for cancellation
 		self._poster_worker = None
+		# prefetch cache for next movie search results
+		self._prefetch_cache = {}
+		# prefetch cache for next movie poster image data
+		self._prefetch_poster_cache = {}
+		# track the prefetch worker for cancellation
+		self._prefetch_worker = None
+		self._prefetch_poster_worker = None
 		# batch mode state
 		self._movie_list = movie_list or [movie]
 		self._current_index = 0
@@ -182,23 +189,45 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		self._splitter.setSizes([540, 360])
 		main_layout.addWidget(self._splitter, stretch=1)
 
-		# --- button row ---
-		btn_layout = PySide6.QtWidgets.QHBoxLayout()
+		# --- batch progress bar (visible only in batch mode) ---
 		if self._batch_mode:
-			# batch mode: Abort Queue | Back | spacer | Cancel | OK
+			progress_layout = PySide6.QtWidgets.QHBoxLayout()
+			self._progress_label = PySide6.QtWidgets.QLabel(
+				"Movie 1 of " + str(len(self._movie_list))
+			)
+			progress_layout.addWidget(self._progress_label)
+			self._match_count_label = PySide6.QtWidgets.QLabel(
+				"0 matched"
+			)
+			progress_layout.addWidget(self._match_count_label)
+			self._progress_bar = PySide6.QtWidgets.QProgressBar()
+			self._progress_bar.setMaximum(len(self._movie_list))
+			self._progress_bar.setValue(0)
+			self._progress_bar.setMaximumHeight(16)
+			progress_layout.addWidget(self._progress_bar)
+			main_layout.addLayout(progress_layout)
+
+		# --- button row (all buttons right-aligned) ---
+		btn_layout = PySide6.QtWidgets.QHBoxLayout()
+		btn_layout.addStretch()
+		if self._batch_mode:
+			# batch: spacer | Stop Batch | Back | Skip | Accept Match
 			self._abort_btn = PySide6.QtWidgets.QPushButton(
-				"Abort Queue"
+				"Stop Batch"
 			)
 			self._abort_btn.clicked.connect(self.reject)
 			btn_layout.addWidget(self._abort_btn)
 			self._back_btn = PySide6.QtWidgets.QPushButton("Back")
 			self._back_btn.clicked.connect(self._go_previous)
 			btn_layout.addWidget(self._back_btn)
-		btn_layout.addStretch()
-		cancel_btn = PySide6.QtWidgets.QPushButton("Cancel")
-		cancel_btn.clicked.connect(self._skip_current)
-		btn_layout.addWidget(cancel_btn)
-		self._ok_btn = PySide6.QtWidgets.QPushButton("OK")
+		# in batch mode "Skip" advances; in single mode "Cancel" closes
+		if self._batch_mode:
+			skip_btn = PySide6.QtWidgets.QPushButton("Skip")
+		else:
+			skip_btn = PySide6.QtWidgets.QPushButton("Cancel")
+		skip_btn.clicked.connect(self._skip_current)
+		btn_layout.addWidget(skip_btn)
+		self._ok_btn = PySide6.QtWidgets.QPushButton("Accept Match")
 		self._ok_btn.clicked.connect(self._accept_selection)
 		btn_layout.addWidget(self._ok_btn)
 		main_layout.addLayout(btn_layout)
@@ -244,16 +273,24 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 
 		# download poster if URL is available
 		if result.poster_url:
-			self._poster_label.setText("Loading...")
-			worker = moviemanager.ui.workers.ImageDownloadWorker(
-				result.poster_url
-			)
-			worker.signals.finished.connect(
-				self._on_poster_downloaded
-			)
-			worker.signals.error.connect(self._on_poster_error)
-			self._poster_worker = worker
-			self._pool.start(worker)
+			# check prefetch poster cache for the first result (row 0)
+			if (row == 0
+					and self._movie.path in self._prefetch_poster_cache):
+				cached_data = self._prefetch_poster_cache.pop(
+					self._movie.path
+				)
+				self._poster_label.set_image_data(cached_data)
+			else:
+				self._poster_label.setText("Loading...")
+				worker = moviemanager.ui.workers.ImageDownloadWorker(
+					result.poster_url
+				)
+				worker.signals.finished.connect(
+					self._on_poster_downloaded
+				)
+				worker.signals.error.connect(self._on_poster_error)
+				self._poster_worker = worker
+				self._pool.start(worker)
 		else:
 			# no poster URL available
 			self._poster_label.set_image_data(None)
@@ -291,10 +328,21 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 			pos = self._current_index + 1
 			total = len(self._movie_list)
 			self.setWindowTitle(
-				f"Scrape - {movie.title} ({pos}/{total})"
+				f"Match - {movie.title} ({pos} of {total})"
 			)
+			# update batch progress bar
+			matched = sum(
+				1 for v in self._batch_results.values() if v
+			)
+			self._progress_label.setText(
+				f"Movie {pos} of {total}"
+			)
+			self._match_count_label.setText(
+				f"{matched} matched"
+			)
+			self._progress_bar.setValue(pos)
 		else:
-			self.setWindowTitle(f"Scrape - {movie.title}")
+			self.setWindowTitle(f"Match - {movie.title}")
 		# update search fields
 		self._search_field.setText(movie.title)
 		if movie.year:
@@ -306,19 +354,34 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 			self._back_btn.setEnabled(self._current_index > 0)
 		# reset buttons
 		self._ok_btn.setEnabled(True)
-		self._ok_btn.setText("OK")
+		self._ok_btn.setText("Accept Match")
 		# clear the preview pane
 		self._on_result_selected(-1)
 		# start search
 		self._do_search()
+		# prefetch next movie search results
+		self._prefetch_next()
 
 	#============================================
 	def _do_search(self) -> None:
-		"""Search with current text in a background thread."""
+		"""Search with current text in a background thread.
+
+		Checks the prefetch cache first; if the search fields match
+		the current movie's original title/year, uses cached results
+		immediately instead of making a network call.
+		"""
 		title = self._search_field.text().strip()
 		year = self._year_field.text().strip()
 		if not title:
 			return
+		# check prefetch cache (only when fields match original movie)
+		if self._movie.path in self._prefetch_cache:
+			cache_title = self._movie.title.strip()
+			cache_year = self._movie.year or ""
+			if title == cache_title and year == cache_year:
+				results = self._prefetch_cache.pop(self._movie.path)
+				self._on_search_done(results)
+				return
 		# disable search button while working
 		self._search_btn.setEnabled(False)
 		self._search_btn.setText("Searching...")
@@ -418,6 +481,9 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		# auto-select first result to populate preview
 		if results:
 			self._results_table.setCurrentCell(0, 0)
+			# force preview update in case currentCellChanged did not fire
+			# (happens when cell index was already 0,0 from previous search)
+			self._on_result_selected(0)
 
 	#============================================
 	def _on_search_error(self, error_text: str) -> None:
@@ -434,7 +500,11 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 
 	#============================================
 	def _accept_selection(self) -> None:
-		"""Accept the selected result and scrape."""
+		"""Accept the selected result and scrape.
+
+		In batch mode, immediately advances to the next movie while
+		the scrape runs in the background, for a faster workflow.
+		"""
 		row = self._results_table.currentRow()
 		if row < 0 or row >= len(self._results):
 			PySide6.QtWidgets.QMessageBox.warning(
@@ -443,37 +513,60 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 			)
 			return
 		result = self._results[row]
-		# scrape in background thread
-		self._ok_btn.setEnabled(False)
-		self._ok_btn.setText("Scraping...")
-		self.setCursor(PySide6.QtCore.Qt.CursorShape.WaitCursor)
 		# pass imdb_id when using IMDB provider (tmdb_id will be 0)
 		scrape_kwargs = {}
 		if result.tmdb_id:
 			scrape_kwargs["tmdb_id"] = result.tmdb_id
 		elif result.imdb_id:
 			scrape_kwargs["imdb_id"] = result.imdb_id
+		# capture current movie for the background scrape
+		movie_to_scrape = self._movie
 		worker = moviemanager.ui.workers.Worker(
 			self._api.scrape_movie,
-			self._movie, **scrape_kwargs
+			movie_to_scrape, **scrape_kwargs
 		)
 		worker.signals.finished.connect(self._on_scrape_done)
 		worker.signals.error.connect(self._on_scrape_error)
 		self._pool.start(worker)
-
-	#============================================
-	def _on_scrape_done(self, result) -> None:
-		"""Handle scrape completion."""
-		self.unsetCursor()
-		# record success for this movie
-		# use path as key since Movie is not hashable
-		self._batch_results[self._movie.path] = True
-		# in batch mode, auto-advance to next movie
+		# in batch mode, advance immediately without waiting for scrape
 		if self._batch_mode:
+			# record pending scrape result (will be updated on completion)
+			self._batch_results[movie_to_scrape.path] = True
 			if self._current_index < len(self._movie_list) - 1:
 				self._advance_to_next()
 				return
-		# last movie or single mode: accept
+			# last movie in batch: close after scrape finishes
+			self._ok_btn.setEnabled(False)
+			self._ok_btn.setText("Saving...")
+			self.setCursor(
+				PySide6.QtCore.Qt.CursorShape.WaitCursor
+			)
+		else:
+			# single mode: wait for scrape to finish
+			self._ok_btn.setEnabled(False)
+			self._ok_btn.setText("Saving...")
+			self.setCursor(
+				PySide6.QtCore.Qt.CursorShape.WaitCursor
+			)
+
+	#============================================
+	def _on_scrape_done(self, result) -> None:
+		"""Handle scrape completion.
+
+		In batch mode, advancement is handled immediately in
+		_accept_selection, so this only updates the progress bar.
+		For the last movie in the batch or single mode, this accepts.
+		"""
+		self.unsetCursor()
+		# update the batch progress bar match count
+		if self._batch_mode:
+			matched = sum(
+				1 for v in self._batch_results.values() if v
+			)
+			self._match_count_label.setText(
+				f"{matched} matched"
+			)
+		# accept dialog (for single mode or last movie in batch)
 		self.accept()
 
 	#============================================
@@ -481,7 +574,7 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		"""Handle scrape error."""
 		self.unsetCursor()
 		self._ok_btn.setEnabled(True)
-		self._ok_btn.setText("OK")
+		self._ok_btn.setText("Accept Match")
 		PySide6.QtWidgets.QMessageBox.critical(
 			self, "Scrape Error",
 			f"Failed to scrape movie:\n{error_text}"
@@ -511,6 +604,115 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		self._current_index -= 1
 		prev_movie = self._movie_list[self._current_index]
 		self._load_movie(prev_movie)
+
+	#============================================
+	def done(self, result: int) -> None:
+		"""Cancel in-flight workers before dialog is destroyed.
+
+		Prevents "Signal source has been deleted" errors when
+		background prefetch or poster workers outlive the dialog.
+
+		Args:
+			result: Dialog result code (Accepted or Rejected).
+		"""
+		# cancel any in-flight workers
+		if self._prefetch_worker is not None:
+			self._prefetch_worker.cancel()
+			self._prefetch_worker = None
+		if self._prefetch_poster_worker is not None:
+			self._prefetch_poster_worker.cancel()
+			self._prefetch_poster_worker = None
+		if self._poster_worker is not None:
+			self._poster_worker.cancel()
+			self._poster_worker = None
+		super().done(result)
+
+	#============================================
+	def _prefetch_next(self) -> None:
+		"""Start background search for the next movie in the batch.
+
+		Prefetches search results so advancing to the next movie
+		feels instant. Also prefetches the poster for the top result.
+		"""
+		if not self._batch_mode:
+			return
+		next_idx = self._current_index + 1
+		if next_idx >= len(self._movie_list):
+			return
+		next_movie = self._movie_list[next_idx]
+		# skip if already cached
+		if next_movie.path in self._prefetch_cache:
+			return
+		# cancel existing prefetch
+		if self._prefetch_worker is not None:
+			self._prefetch_worker.cancel()
+		# run search in background
+		title = next_movie.title
+		year = next_movie.year or ""
+		worker = moviemanager.ui.workers.Worker(
+			self._api.search_movie, title, year
+		)
+		# capture movie path for the lambda closure
+		path = next_movie.path
+		worker.signals.finished.connect(
+			lambda results, p=path: self._on_prefetch_done(p, results)
+		)
+		# silently ignore prefetch errors
+		worker.signals.error.connect(lambda _: None)
+		self._prefetch_worker = worker
+		self._pool.start(worker)
+
+	#============================================
+	def _on_prefetch_done(self, movie_path: str, results: list) -> None:
+		"""Cache prefetched search results and start poster prefetch.
+
+		Args:
+			movie_path: Path key for the prefetched movie.
+			results: Search results from the background search.
+		"""
+		self._prefetch_cache[movie_path] = results
+		self._prefetch_worker = None
+		# also prefetch poster for the top result
+		if results and results[0].poster_url:
+			if self._prefetch_poster_worker is not None:
+				self._prefetch_poster_worker.cancel()
+			poster_worker = moviemanager.ui.workers.ImageDownloadWorker(
+				results[0].poster_url
+			)
+			path = movie_path
+			poster_worker.signals.finished.connect(
+				lambda data, p=path: self._on_prefetch_poster_done(p, data)
+			)
+			poster_worker.signals.error.connect(lambda _: None)
+			self._prefetch_poster_worker = poster_worker
+			self._pool.start(poster_worker)
+
+	#============================================
+	def _on_prefetch_poster_done(self, movie_path: str, data: bytes) -> None:
+		"""Cache prefetched poster image data.
+
+		Args:
+			movie_path: Path key for the prefetched movie.
+			data: Raw poster image bytes.
+		"""
+		self._prefetch_poster_cache[movie_path] = data
+		self._prefetch_poster_worker = None
+
+	#============================================
+	def keyPressEvent(self, event) -> None:
+		"""Override key handling for batch-friendly shortcuts.
+
+		Escape skips in batch mode (instead of closing the dialog).
+		Default QDialog behavior is preserved for single mode.
+
+		Args:
+			event: The key press event.
+		"""
+		if event.key() == PySide6.QtCore.Qt.Key.Key_Escape:
+			# in batch mode, Escape means skip; in single mode, cancel
+			self._skip_current()
+			return
+		super().keyPressEvent(event)
 
 	#============================================
 	def get_batch_results(self) -> dict:

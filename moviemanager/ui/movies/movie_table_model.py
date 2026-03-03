@@ -6,10 +6,29 @@ import PySide6.QtGui
 
 
 # column 0 is the checkbox (empty header), then data columns
-COLUMNS = ["", "Title", "Year", "Rating", "Status"]
+COLUMNS = ["", "Title", "Year", "Rating", "D", "N", "A", "S", "T",
+	"SN", "VG", "Pr", "AD", "FI"]
 
-# status indicator labels and descriptions
-STATUS_STEPS = ["Scraped", "NFO", "Artwork"]
+# status column indices and their movie attribute + full label
+STATUS_COLUMNS = {
+	4: ("has_data", "Data"),
+	5: ("has_nfo", "NFO"),
+	6: ("has_poster", "Artwork"),
+	7: ("has_subtitle", "Subtitles"),
+	8: ("has_trailer", "Trailer"),
+}
+
+# parental guide column indices, full category name, and short header
+PG_COLUMNS = {
+	9:  ("Sex & Nudity", "SN"),
+	10: ("Violence & Gore", "VG"),
+	11: ("Profanity", "Pr"),
+	12: ("Alcohol, Drugs & Smoking", "AD"),
+	13: ("Frightening & Intense Scenes", "FI"),
+}
+
+# severity ordinal mapping for sorting parental guide columns
+SEVERITY_ORDER = {"None": 0, "Mild": 1, "Moderate": 2, "Severe": 3}
 
 
 #============================================
@@ -21,8 +40,11 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 		self._movies = []
 		self._filtered = []
 		self._filter_text = ""
-		# set of row indices that are checked
+		# set of movie ids that are checked (survives sorting)
 		self._checked = set()
+		# sort state
+		self._sort_column = None
+		self._sort_order = PySide6.QtCore.Qt.SortOrder.AscendingOrder
 
 	#============================================
 	def set_movies(self, movies: list) -> None:
@@ -49,27 +71,73 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 		"""
 		if not self._filter_text:
 			self._filtered = list(self._movies)
+		else:
+			filtered = []
+			for m in self._movies:
+				# check title
+				if self._filter_text in m.title.lower():
+					filtered.append(m)
+					continue
+				# check year
+				if self._filter_text in m.year.lower():
+					filtered.append(m)
+					continue
+				# check genres (joined as comma-separated string)
+				genres_str = ", ".join(m.genres).lower()
+				if self._filter_text in genres_str:
+					filtered.append(m)
+					continue
+				# check director
+				if self._filter_text in m.director.lower():
+					filtered.append(m)
+					continue
+			self._filtered = filtered
+		# re-apply sort after filtering
+		if self._sort_column is not None:
+			self._do_sort()
+
+	#============================================
+	def _do_sort(self) -> None:
+		"""Sort self._filtered by current sort column and order."""
+		col = self._sort_column
+		reverse = (self._sort_order == PySide6.QtCore.Qt.SortOrder.DescendingOrder)
+		if col == 0:
+			# no sorting on checkbox column
 			return
-		filtered = []
-		for m in self._movies:
-			# check title
-			if self._filter_text in m.title.lower():
-				filtered.append(m)
-				continue
-			# check year
-			if self._filter_text in m.year.lower():
-				filtered.append(m)
-				continue
-			# check genres (joined as comma-separated string)
-			genres_str = ", ".join(m.genres).lower()
-			if self._filter_text in genres_str:
-				filtered.append(m)
-				continue
-			# check director
-			if self._filter_text in m.director.lower():
-				filtered.append(m)
-				continue
-		self._filtered = filtered
+		if col == 1:
+			key_func = lambda m: m.title.lower()
+		elif col == 2:
+			key_func = lambda m: m.year.lower()
+		elif col == 3:
+			key_func = lambda m: float(m.rating) if m.rating else 0.0
+		elif col in STATUS_COLUMNS:
+			attr_name = STATUS_COLUMNS[col][0]
+			key_func = lambda m, a=attr_name: getattr(m, a, False)
+		elif col in PG_COLUMNS:
+			# sort by severity ordinal; missing data sorts to -1
+			cat_name = PG_COLUMNS[col][0]
+			key_func = lambda m, c=cat_name: SEVERITY_ORDER.get(
+				m.parental_guide.get(c, ""), -1
+			)
+		else:
+			return
+		self._filtered.sort(key=key_func, reverse=reverse)
+
+	#============================================
+	def sort(self, column: int, order=None) -> None:
+		"""Sort by the given column and order.
+
+		Args:
+			column: Column index to sort by.
+			order: Qt.SortOrder (AscendingOrder or DescendingOrder).
+		"""
+		if order is None:
+			order = PySide6.QtCore.Qt.SortOrder.AscendingOrder
+		self._sort_column = column
+		self._sort_order = order
+		self.beginResetModel()
+		self._do_sort()
+		self.endResetModel()
 
 	#============================================
 	def get_movie(self, row: int):
@@ -81,7 +149,7 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 	#============================================
 	def check_all(self) -> None:
 		"""Check all visible rows."""
-		self._checked = set(range(len(self._filtered)))
+		self._checked = {id(m) for m in self._filtered}
 		# notify views the checkbox column changed
 		top = self.index(0, 0)
 		bottom = self.index(self.rowCount() - 1, 0)
@@ -99,9 +167,9 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 	def check_unscraped(self) -> None:
 		"""Check only rows where movie is not yet scraped."""
 		self._checked.clear()
-		for row, movie in enumerate(self._filtered):
+		for movie in self._filtered:
 			if not movie.scraped:
-				self._checked.add(row)
+				self._checked.add(id(movie))
 		top = self.index(0, 0)
 		bottom = self.index(self.rowCount() - 1, 0)
 		self.dataChanged.emit(top, bottom)
@@ -110,79 +178,15 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 	def get_checked_movies(self) -> list:
 		"""Return list of checked Movie objects."""
 		checked = []
-		for row in sorted(self._checked):
-			if 0 <= row < len(self._filtered):
-				checked.append(self._filtered[row])
+		for movie in self._filtered:
+			if id(movie) in self._checked:
+				checked.append(movie)
 		return checked
 
 	#============================================
 	def get_checked_count(self) -> int:
 		"""Return number of checked rows."""
 		return len(self._checked)
-
-	#============================================
-	def _get_status_flags(self, movie) -> dict:
-		"""Return dict of workflow status booleans for a movie.
-
-		Args:
-			movie: The Movie object to check.
-
-		Returns:
-			Dict with keys: scraped, nfo, artwork.
-		"""
-		flags = {
-			"scraped": movie.scraped,
-			"nfo": movie.has_nfo,
-			"artwork": movie.has_poster,
-		}
-		return flags
-
-	#============================================
-	def _get_status_text(self, movie) -> str:
-		"""Return compact status string with colored dot indicators.
-
-		Args:
-			movie: The Movie object to check.
-
-		Returns:
-			String like 'S N A' where each letter is present if done.
-		"""
-		flags = self._get_status_flags(movie)
-		parts = []
-		if flags["scraped"]:
-			parts.append("S")
-		else:
-			parts.append("-")
-		if flags["nfo"]:
-			parts.append("N")
-		else:
-			parts.append("-")
-		if flags["artwork"]:
-			parts.append("A")
-		else:
-			parts.append("-")
-		status_text = " ".join(parts)
-		return status_text
-
-	#============================================
-	def _get_status_tooltip(self, movie) -> str:
-		"""Return detailed tooltip text for the status column.
-
-		Args:
-			movie: The Movie object to check.
-
-		Returns:
-			Multi-line tooltip describing each workflow step.
-		"""
-		flags = self._get_status_flags(movie)
-		yes_no = {True: "Yes", False: "No"}
-		lines = [
-			f"Scraped: {yes_no[flags['scraped']]}",
-			f"NFO: {yes_no[flags['nfo']]}",
-			f"Artwork: {yes_no[flags['artwork']]}",
-		]
-		tooltip = "\n".join(lines)
-		return tooltip
 
 	#============================================
 	def rowCount(self, parent=None) -> int:
@@ -202,6 +206,14 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 		if orientation == PySide6.QtCore.Qt.Orientation.Horizontal:
 			if role == PySide6.QtCore.Qt.ItemDataRole.DisplayRole:
 				return COLUMNS[section]
+			# tooltip for status columns shows full name
+			if role == PySide6.QtCore.Qt.ItemDataRole.ToolTipRole:
+				if section in STATUS_COLUMNS:
+					label = STATUS_COLUMNS[section][1]
+					return label
+				if section in PG_COLUMNS:
+					full_name = PG_COLUMNS[section][0]
+					return full_name
 		return None
 
 	#============================================
@@ -225,30 +237,43 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 			return None
 		row = index.row()
 		col = index.column()
+		movie = self._filtered[row]
 		# checkbox column (col 0)
 		if col == 0:
 			if role == PySide6.QtCore.Qt.ItemDataRole.CheckStateRole:
-				if row in self._checked:
+				if id(movie) in self._checked:
 					return PySide6.QtCore.Qt.CheckState.Checked
 				return PySide6.QtCore.Qt.CheckState.Unchecked
 			return None
-		movie = self._filtered[row]
-		# status column (col 4)
-		if col == 4:
+		# status indicator columns (cols 4-8)
+		if col in STATUS_COLUMNS:
+			attr_name, label = STATUS_COLUMNS[col]
+			flag_value = getattr(movie, attr_name, False)
 			if role == PySide6.QtCore.Qt.ItemDataRole.DisplayRole:
-				return self._get_status_text(movie)
+				# delegate paints the icon, no text needed
+				return ""
+			if role == PySide6.QtCore.Qt.ItemDataRole.UserRole:
+				return flag_value
 			if role == PySide6.QtCore.Qt.ItemDataRole.ToolTipRole:
-				return self._get_status_tooltip(movie)
-			# color the status text based on completion
-			if role == PySide6.QtCore.Qt.ItemDataRole.ForegroundRole:
-				flags = self._get_status_flags(movie)
-				all_done = all(flags.values())
-				none_done = not any(flags.values())
-				if all_done:
-					return PySide6.QtGui.QColor("green")
-				if none_done:
-					return PySide6.QtGui.QColor("gray")
-				return PySide6.QtGui.QColor("orange")
+				yes_no = "Yes" if flag_value else "No"
+				tooltip = f"{label}: {yes_no}"
+				return tooltip
+			return None
+		# parental guide columns (cols 9-13)
+		if col in PG_COLUMNS:
+			cat_name = PG_COLUMNS[col][0]
+			severity = movie.parental_guide.get(cat_name, "")
+			if role == PySide6.QtCore.Qt.ItemDataRole.DisplayRole:
+				# delegate paints the circle, no text needed
+				return ""
+			if role == PySide6.QtCore.Qt.ItemDataRole.UserRole:
+				return severity
+			if role == PySide6.QtCore.Qt.ItemDataRole.ToolTipRole:
+				if severity:
+					tooltip = f"{cat_name}: {severity}"
+				else:
+					tooltip = f"{cat_name}: No data"
+				return tooltip
 			return None
 		# data columns use DisplayRole only
 		if role != PySide6.QtCore.Qt.ItemDataRole.DisplayRole:
@@ -268,11 +293,11 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 			role = PySide6.QtCore.Qt.ItemDataRole.EditRole
 		if index.column() == 0:
 			if role == PySide6.QtCore.Qt.ItemDataRole.CheckStateRole:
-				row = index.row()
+				movie = self._filtered[index.row()]
 				if value == PySide6.QtCore.Qt.CheckState.Checked:
-					self._checked.add(row)
+					self._checked.add(id(movie))
 				else:
-					self._checked.discard(row)
+					self._checked.discard(id(movie))
 				self.dataChanged.emit(index, index)
 				return True
 		return False

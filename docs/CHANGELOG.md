@@ -2,7 +2,108 @@
 
 ## 2026-02-28
 
+### Additions and New Features
+- Redesigned toolbar to reflect the 3-step workflow: Open | 1. Match | 2. Organize |
+  3. Download | Settings | Quit. Numbered labels make the workflow order explicit.
+- Added "3. Download" toolbar button that opens a new batch download dialog
+  (`moviemanager/ui/dialogs/download_dialog.py`) for downloading artwork, trailers, and
+  subtitles across multiple movies at once
+- Added batch organize (rename) support: checking multiple movies and clicking Organize
+  shows a single combined preview dialog with all file moves, instead of one at a time
+- Added prefetching in MovieChooserDialog: while reviewing movie N, search results for
+  movie N+1 are fetched in the background, along with the poster for the top result.
+  Advancing to the next movie now feels instant when the prefetch completes in time.
+- Added immediate advance in batch matching: clicking Accept Match now immediately shows
+  the next movie while the scrape for the current movie runs in the background
+- Added batch progress bar to MovieChooserDialog showing "Movie X of Y" and "N matched"
+  counts with a visual progress bar during batch matching
+- Added "Download" to the right-click context menu alongside Match, Edit, and Organize
+- Added "Download Content" to the Movie menu (consolidates artwork + trailers + subtitles)
+- Added `_download_content()` and `_rename_batch()` methods to `MainWindow`
+
+### Behavior or Interface Changes
+- Renamed toolbar buttons: "Scrape" -> "1. Match", "Rename" -> "2. Organize"
+- Removed "Edit" from toolbar (still accessible via Ctrl+E, double-click, context menu,
+  and Movie menu)
+- Renamed menu labels: "Scrape Selected" -> "Match Selected", "Rename Selected" ->
+  "Organize Selected", "Scrape All Unscraped" -> "Match All Unscraped"
+- Renamed MovieChooserDialog buttons: "OK" -> "Accept Match", "Cancel" -> "Skip" in batch
+  mode (clarifies that it advances without matching, not that it cancels the operation),
+  "Abort Queue" -> "Stop Batch"
+- Changed dialog window title from "Scrape - {title}" to "Match - {title}" with improved
+  position format "3 of 5" (was "3/5")
+- Escape key in batch mode now skips to the next movie (was closing the entire dialog)
+- Status bar messages now include workflow hints after each step: "ready to organize
+  (Step 2)" after matching, "ready to download content (Step 3)" after organizing
+- Context menu items renamed: "Scrape" -> "Match", "Rename" -> "Organize"
+- "Scraping..." button text during match changed to "Saving..."
+
 ### Fixes and Maintenance
+- Updated `test_gui_smoke.py` assertions from "Abort Queue" to "Stop Batch" and added
+  progress bar and "Accept Match" button text assertions for both batch and single modes
+- Added `download_content` action mapping to `menu_builder.py`
+- Fixed "Signal source has been deleted" RuntimeError in `Worker.run()` by guarding signal
+  emission against RuntimeError when the receiver is destroyed before the worker finishes
+- Added `done()` override to `MovieChooserDialog` to cancel in-flight prefetch and poster
+  workers before the dialog is destroyed
+
+### Additions and New Features
+- Added 5 parental guide columns (SN, VG, Pr, AD, FI) to the movie table showing
+  IMDb content severity for Sex & Nudity, Violence & Gore, Profanity, Alcohol/Drugs/
+  Smoking, and Frightening & Intense Scenes with colored circle indicators (green=None,
+  yellow=Mild, orange=Moderate, red=Severe, gray=no data)
+- Added `SeverityDelegate` in `moviemanager/ui/movies/status_delegate.py` for painting
+  color-coded severity circles in parental guide columns
+- Added right-click column chooser on the table header: users can show/hide any column
+  (except checkbox) via checkmark menu; visibility persists across sessions via QSettings
+- Added `visible_columns` field to `Settings` dataclass with all columns visible by default
+- Added `PG_COLUMNS` and `SEVERITY_ORDER` mappings to `movie_table_model.py` for parental
+  guide column data, tooltips, and sort support
+
+### Behavior or Interface Changes
+- Fixed column sizing: Title column now stretches to fill available space while checkbox,
+  Year, Rating, status icon (D/N/A/S/T), and parental guide columns resize to contents;
+  replaced `setStretchLastSection(True)` with per-column resize modes
+- Parental guide columns show full category name in header tooltip on hover
+- Column visibility is saved/restored alongside header state and sort order in QSettings
+
+### Additions and New Features
+- Redesigned status column with expanded `D N A S T` indicators (Data, NFO, Artwork,
+  Subtitles, Trailer) replacing the previous `S N A` (Scraped, NFO, Artwork) set
+- Split single status column into 5 separate icon columns matching tinyMediaManager
+  layout: each column (D, N, A, S, T) shows a green circle when present or red circle
+  when missing via `StatusIconDelegate` in `moviemanager/ui/movies/status_delegate.py`
+- Added column header sorting to the movie table: clicking any column header sorts by
+  that column (title, year, rating, or individual status flags); sort order persists
+  through filter changes
+- Added `has_subtitle` property to `Movie` model that scans the movie directory for
+  files with subtitle extensions (`.srt`, `.sub`, `.ssa`, `.ass`, `.vtt`, etc.)
+- Added `has_trailer` property to `Movie` model that checks for files with "trailer"
+  in the name and a video extension in the movie directory
+- Status column tooltip now shows individual indicator label with Yes/No
+- Added `has_data` property to `Movie` model that returns `True` when meaningful
+  metadata exists (scraped via API or loaded from NFO with title plus plot or external
+  ID), so movies with NFO files correctly show `D N` instead of `- N`
+
+### Behavior or Interface Changes
+- `MovieChooserDialog` batch mode buttons now right-aligned: all buttons (Abort Queue,
+  Back, Cancel, OK) grouped on the right side instead of split across both sides
+- Status display changed from single combined `D N A S T` letter column to 5 separate
+  icon columns with colored circle indicators (green=present, red=missing)
+- Checkbox tracking now uses `id(movie)` instead of row indices so check state
+  survives column sorting
+- Status column `UserRole` data now returns a boolean per column for delegate
+  consumption; removed combined flags dict and `ForegroundRole`
+
+### Fixes and Maintenance
+- Fixed poster images showing "Invalid image" in `MovieChooserDialog`: added
+  browser-like `User-Agent` header to `ImageDownloadWorker` HTTP requests so IMDB
+  CDN serves actual image bytes instead of HTML error pages; added content-type
+  validation to reject non-image responses before passing to `QPixmap`
+- Fixed poster not loading for the first search result in `MovieChooserDialog`:
+  `currentCellChanged` signal does not fire when `setCurrentCell(0, 0)` is called
+  and the cell index is already (0, 0) from a previous search; added explicit
+  `_on_result_selected(0)` call after setting the current cell
 - Fixed batch mode never triggering from row selection in `_scrape_selected()`:
   added fallback to selection model when fewer than 2 checkboxes are toggled,
   so Shift/Cmd-click multi-select now activates batch mode

@@ -21,15 +21,17 @@ menus:
         store_as: "undo_rename_action"
   - label: "&Movie"
     items:
-      - label: "&Scrape Selected"
+      - label: "&Match Selected"
         shortcut: "Ctrl+Shift+S"
         action: "scrape_selected"
       - label: "&Edit Selected"
         shortcut: "Ctrl+E"
         action: "edit_selected"
-      - label: "&Rename Selected"
+      - label: "&Organize Selected"
         shortcut: "F2"
         action: "rename_selected"
+      - label: "&Download Content"
+        action: "download_content"
       - separator: true
       - label: "Select &All"
         shortcut: "Ctrl+A"
@@ -39,7 +41,7 @@ menus:
       - label: "Select &Unscraped"
         action: "select_unscraped"
       - separator: true
-      - label: "Scrape All &Unscraped"
+      - label: "Match All &Unscraped"
         action: "batch_scrape_unscraped"
       - separator: true
       - label: "Download &Trailer"

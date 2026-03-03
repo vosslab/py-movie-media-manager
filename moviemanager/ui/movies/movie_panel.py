@@ -8,7 +8,25 @@ import PySide6.QtCore
 # local repo modules
 import moviemanager.ui.movies.movie_table_model
 import moviemanager.ui.movies.movie_detail_panel
+import moviemanager.ui.movies.status_delegate
 import moviemanager.ui.widgets.search_field
+
+# full display names for column chooser menu items
+_COLUMN_DISPLAY_NAMES = {
+	"Title": "Title",
+	"Year": "Year",
+	"Rating": "Rating",
+	"D": "Data (D)",
+	"N": "NFO (N)",
+	"A": "Artwork (A)",
+	"S": "Subtitles (S)",
+	"T": "Trailer (T)",
+	"SN": "Sex & Nudity (SN)",
+	"VG": "Violence & Gore (VG)",
+	"Pr": "Profanity (Pr)",
+	"AD": "Alcohol, Drugs & Smoking (AD)",
+	"FI": "Frightening & Intense Scenes (FI)",
+}
 
 
 #============================================
@@ -96,6 +114,18 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 			moviemanager.ui.movies.movie_table_model.MovieTableModel()
 		)
 		self._table_view.setModel(self._table_model)
+		# install icon delegates on status columns 4-8 (D, N, A, S, T)
+		for col in range(4, 9):
+			icon_del = moviemanager.ui.movies.status_delegate.StatusIconDelegate(
+				self._table_view
+			)
+			self._table_view.setItemDelegateForColumn(col, icon_del)
+		# install severity delegates on PG columns 9-13 (SN, VG, Pr, AD, FI)
+		for col in range(9, 14):
+			sev_del = moviemanager.ui.movies.status_delegate.SeverityDelegate(
+				self._table_view
+			)
+			self._table_view.setItemDelegateForColumn(col, sev_del)
 		self._table_view.setSelectionBehavior(
 			PySide6.QtWidgets.QAbstractItemView
 			.SelectionBehavior.SelectRows
@@ -114,11 +144,39 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 		# derive fixed row height from font metrics + padding
 		font_height = self._table_view.fontMetrics().height()
 		v_header.setDefaultSectionSize(font_height + 8)
-		# allow user to manually resize columns (#17)
+		# column sizing: Title stretches, all others resize to contents
 		header = self._table_view.horizontalHeader()
-		header.setStretchLastSection(True)
+		header.setStretchLastSection(False)
 		header.setSectionResizeMode(
 			PySide6.QtWidgets.QHeaderView.ResizeMode.Interactive
+		)
+		# checkbox column: fit to contents
+		header.setSectionResizeMode(
+			0, PySide6.QtWidgets.QHeaderView.ResizeMode.ResizeToContents
+		)
+		# Title column absorbs remaining space
+		header.setSectionResizeMode(
+			1, PySide6.QtWidgets.QHeaderView.ResizeMode.Stretch
+		)
+		# Year and Rating: fit to contents
+		header.setSectionResizeMode(
+			2, PySide6.QtWidgets.QHeaderView.ResizeMode.ResizeToContents
+		)
+		header.setSectionResizeMode(
+			3, PySide6.QtWidgets.QHeaderView.ResizeMode.ResizeToContents
+		)
+		# status icon columns 4-8 and PG columns 9-13: fit to contents
+		for col_idx in range(4, 14):
+			header.setSectionResizeMode(
+				col_idx,
+				PySide6.QtWidgets.QHeaderView.ResizeMode.ResizeToContents,
+			)
+		# right-click context menu on header for column chooser
+		header.setContextMenuPolicy(
+			PySide6.QtCore.Qt.ContextMenuPolicy.CustomContextMenu
+		)
+		header.customContextMenuRequested.connect(
+			self._show_header_context_menu
 		)
 		# right-click context menu
 		self._table_view.setContextMenuPolicy(
@@ -249,22 +307,25 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 		if not movie:
 			return
 		menu = PySide6.QtWidgets.QMenu(self)
-		# workflow actions
-		scrape_action = menu.addAction("Scrape")
+		# workflow actions (3-step pipeline)
+		match_action = menu.addAction("Match")
 		edit_action = menu.addAction("Edit")
-		rename_action = menu.addAction("Rename")
+		organize_action = menu.addAction("Organize")
+		download_action = menu.addAction("Download")
 		menu.addSeparator()
 		finder_action = menu.addAction("Show in Finder")
 		# execute menu and handle result
 		action = menu.exec(
 			self._table_view.viewport().mapToGlobal(pos)
 		)
-		if action == scrape_action:
+		if action == match_action:
 			self.context_action.emit("scrape", movie)
 		elif action == edit_action:
 			self.context_action.emit("edit", movie)
-		elif action == rename_action:
+		elif action == organize_action:
 			self.context_action.emit("rename", movie)
+		elif action == download_action:
+			self.context_action.emit("download", movie)
 		elif action == finder_action:
 			# open movie directory in system file manager
 			if movie.path:
@@ -273,8 +334,39 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 				)
 
 	#============================================
+	def _show_header_context_menu(self, pos) -> None:
+		"""Show column chooser context menu on header right-click."""
+		header = self._table_view.horizontalHeader()
+		menu = PySide6.QtWidgets.QMenu(self)
+		columns = moviemanager.ui.movies.movie_table_model.COLUMNS
+		# skip col 0 (checkbox) -- always visible
+		for col_idx in range(1, len(columns)):
+			col_key = columns[col_idx]
+			display_name = _COLUMN_DISPLAY_NAMES.get(col_key, col_key)
+			action = menu.addAction(display_name)
+			action.setCheckable(True)
+			# column is visible when not hidden
+			is_visible = not header.isSectionHidden(col_idx)
+			action.setChecked(is_visible)
+			# connect toggle to show/hide the column
+			action.toggled.connect(
+				lambda checked, c=col_idx: self._toggle_column(c, checked)
+			)
+		menu.exec(header.mapToGlobal(pos))
+
+	#============================================
+	def _toggle_column(self, col_idx: int, visible: bool) -> None:
+		"""Show or hide a table column.
+
+		Args:
+			col_idx: Column index to toggle.
+			visible: True to show, False to hide.
+		"""
+		self._table_view.setColumnHidden(col_idx, not visible)
+
+	#============================================
 	def save_table_state(self, settings) -> None:
-		"""Save column widths and sort state to QSettings."""
+		"""Save column widths, sort state, and visibility to QSettings."""
 		header = self._table_view.horizontalHeader()
 		settings.setValue("movieTable/headerState", header.saveState())
 		settings.setValue(
@@ -285,10 +377,17 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 			"movieTable/sortOrder",
 			header.sortIndicatorOrder().value,
 		)
+		# save visible columns list
+		columns = moviemanager.ui.movies.movie_table_model.COLUMNS
+		visible = []
+		for col_idx in range(1, len(columns)):
+			if not header.isSectionHidden(col_idx):
+				visible.append(columns[col_idx])
+		settings.setValue("movieTable/visibleColumns", visible)
 
 	#============================================
 	def restore_table_state(self, settings) -> None:
-		"""Restore column widths and sort state from QSettings."""
+		"""Restore column widths, sort state, and visibility from QSettings."""
 		header_state = settings.value("movieTable/headerState")
 		if header_state:
 			self._table_view.horizontalHeader().restoreState(
@@ -301,3 +400,11 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 				int(sort_col),
 				PySide6.QtCore.Qt.SortOrder(int(sort_order))
 			)
+		# restore column visibility
+		visible_cols = settings.value("movieTable/visibleColumns")
+		if visible_cols is not None:
+			columns = moviemanager.ui.movies.movie_table_model.COLUMNS
+			for col_idx in range(1, len(columns)):
+				col_key = columns[col_idx]
+				is_visible = col_key in visible_cols
+				self._table_view.setColumnHidden(col_idx, not is_visible)

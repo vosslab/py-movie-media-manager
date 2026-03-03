@@ -53,20 +53,31 @@ class Worker(PySide6.QtCore.QRunnable):
 
 	#============================================
 	def run(self) -> None:
-		"""Execute the function and emit finished or error."""
+		"""Execute the function and emit finished or error.
+
+		Guards signal emission against RuntimeError in case the
+		receiver has been deleted (e.g., dialog closed while worker
+		is still running in the thread pool).
+		"""
 		if self._cancelled:
 			return
 		try:
 			result = self.fn(*self.args, **self.kwargs)
 			if not self._cancelled:
 				self.signals.finished.emit(result)
+		except RuntimeError:
+			# signal receiver was deleted; silently ignore
+			pass
 		except Exception:
 			if not self._cancelled:
 				# capture full traceback for debugging
 				buf = io.StringIO()
 				traceback.print_exc(file=buf)
 				error_text = buf.getvalue()
-				self.signals.error.emit(error_text)
+				try:
+					self.signals.error.emit(error_text)
+				except RuntimeError:
+					pass
 
 
 #============================================
@@ -97,13 +108,33 @@ class ImageDownloadWorker(PySide6.QtCore.QRunnable):
 		if self._cancelled:
 			return
 		try:
+			# use browser-like User-Agent to avoid CDN rejections
+			headers = {
+				"User-Agent": (
+					"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+					"AppleWebKit/537.36 (KHTML, like Gecko) "
+					"Chrome/120.0.0.0 Safari/537.36"
+				),
+			}
 			response = requests.get(
-				self._url, timeout=self._timeout
+				self._url, timeout=self._timeout,
+				headers=headers,
 			)
 			if self._cancelled:
 				return
 			if response.status_code == 200:
-				self.signals.finished.emit(response.content)
+				# verify response contains image data, not HTML
+				content_type = response.headers.get(
+					"Content-Type", ""
+				)
+				if "image" in content_type or not content_type:
+					self.signals.finished.emit(response.content)
+				else:
+					error_msg = (
+						f"Non-image response ({content_type}) "
+						f"from {self._url}"
+					)
+					self.signals.error.emit(error_msg)
 			else:
 				error_msg = (
 					f"HTTP {response.status_code} "

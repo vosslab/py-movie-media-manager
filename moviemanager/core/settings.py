@@ -53,6 +53,14 @@ class Settings:
 	# OpenSubtitles API key (stored in user .config)
 	opensubtitles_api_key: str = ""
 
+	# table column visibility (checkbox col 0 is always visible)
+	visible_columns: list = dataclasses.field(
+		default_factory=lambda: [
+			"Title", "Year", "Rating", "D", "N", "A", "S", "T",
+			"SN", "VG", "Pr", "AD", "FI",
+		]
+	)
+
 	# artwork options
 	download_poster: bool = True
 	download_fanart: bool = True

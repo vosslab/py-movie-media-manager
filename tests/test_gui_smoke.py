@@ -355,9 +355,13 @@ class TestChooserDialogBatchMode:
 			qtbot.addWidget(dialog)
 			# verify batch mode is active
 			assert dialog._batch_mode is True
-			# verify Abort Queue button exists
+			# verify Stop Batch button exists
 			assert hasattr(dialog, "_abort_btn")
-			assert dialog._abort_btn.text() == "Abort Queue"
+			assert dialog._abort_btn.text() == "Stop Batch"
+			# verify progress bar exists
+			assert hasattr(dialog, "_progress_bar")
+			# verify Accept Match button text
+			assert dialog._ok_btn.text() == "Accept Match"
 
 	def test_chooser_dialog_single_mode(self, qtbot, tmp_path):
 		"""Dialog without movie_list should be in single mode."""
@@ -378,5 +382,7 @@ class TestChooserDialogBatchMode:
 			qtbot.addWidget(dialog)
 			# verify single mode
 			assert dialog._batch_mode is False
-			# verify no Abort Queue button
+			# verify no Stop Batch button in single mode
 			assert not hasattr(dialog, "_abort_btn")
+			# verify Accept Match button text
+			assert dialog._ok_btn.text() == "Accept Match"

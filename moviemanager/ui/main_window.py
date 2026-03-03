@@ -85,7 +85,10 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 
 	#============================================
 	def _setup_toolbar(self):
-		"""Create toolbar with labeled icons in workflow order."""
+		"""Create toolbar with labeled icons in 3-step workflow order.
+
+		Layout: Open | sep | 1. Match | 2. Organize | 3. Download | spacer | Settings | Quit
+		"""
 		toolbar = self.addToolBar("Main")
 		toolbar.setMovable(False)
 		# text-under-icon layout with larger icons
@@ -107,38 +110,42 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		toolbar.addAction(open_btn)
 		# separator between Open and workflow actions
 		toolbar.addSeparator()
-		# scrape button
-		scrape_btn = PySide6.QtGui.QAction("Scrape", self)
-		scrape_btn.setIcon(
+		# step 1: match button (was "Scrape")
+		match_btn = PySide6.QtGui.QAction("1. Match", self)
+		match_btn.setIcon(
 			style.standardIcon(
 				PySide6.QtWidgets.QStyle.StandardPixmap.SP_ArrowDown
 			)
 		)
-		scrape_btn.setToolTip(
-			"Scrape metadata from TMDB (Ctrl+Shift+S)"
+		match_btn.setToolTip(
+			"Match movies to IMDB/TMDB (Ctrl+Shift+S)"
 		)
-		scrape_btn.triggered.connect(self._scrape_selected)
-		toolbar.addAction(scrape_btn)
-		# edit button
-		edit_btn = PySide6.QtGui.QAction("Edit", self)
-		edit_btn.setIcon(
-			style.standardIcon(
-				PySide6.QtWidgets.QStyle.StandardPixmap.SP_FileDialogDetailedView
-			)
-		)
-		edit_btn.setToolTip("Edit movie metadata (Ctrl+E)")
-		edit_btn.triggered.connect(self._edit_selected)
-		toolbar.addAction(edit_btn)
-		# rename button
-		rename_btn = PySide6.QtGui.QAction("Rename", self)
-		rename_btn.setIcon(
+		match_btn.triggered.connect(self._scrape_selected)
+		toolbar.addAction(match_btn)
+		# step 2: organize button (was "Rename")
+		organize_btn = PySide6.QtGui.QAction("2. Organize", self)
+		organize_btn.setIcon(
 			style.standardIcon(
 				PySide6.QtWidgets.QStyle.StandardPixmap.SP_FileIcon
 			)
 		)
-		rename_btn.setToolTip("Rename movie files (F2)")
-		rename_btn.triggered.connect(self._rename_selected)
-		toolbar.addAction(rename_btn)
+		organize_btn.setToolTip(
+			"Organize movies into folders (F2)"
+		)
+		organize_btn.triggered.connect(self._rename_selected)
+		toolbar.addAction(organize_btn)
+		# step 3: download button (new)
+		download_btn = PySide6.QtGui.QAction("3. Download", self)
+		download_btn.setIcon(
+			style.standardIcon(
+				PySide6.QtWidgets.QStyle.StandardPixmap.SP_DialogSaveButton
+			)
+		)
+		download_btn.setToolTip(
+			"Download artwork, trailers, and subtitles"
+		)
+		download_btn.triggered.connect(self._download_content)
+		toolbar.addAction(download_btn)
 		# flexible spacer to push settings/quit to the right
 		spacer = PySide6.QtWidgets.QWidget()
 		spacer.setSizePolicy(
@@ -304,16 +311,20 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			scraped = self._api.get_scraped_count()
 			total = self._api.get_movie_count()
 			self._status.set_movie_count(total, scraped)
-			# show summary for batch mode
+			# show summary with workflow hint
 			if len(checked_movies) > 1:
 				batch_results = dialog.get_batch_results()
 				count = sum(1 for v in batch_results.values() if v)
 				self._status.showMessage(
-					f"Batch scrape: {count}/{len(checked_movies)} scraped",
-					5000,
+					f"Matched {count}/{len(checked_movies)} movies"
+					" -- ready to organize (Step 2)",
+					8000,
 				)
 			else:
-				self._status.showMessage("Scrape complete", 3000)
+				self._status.showMessage(
+					"Match complete -- ready to organize (Step 2)",
+					5000,
+				)
 
 	#============================================
 	def _edit_selected(self):
@@ -336,10 +347,26 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 
 	#============================================
 	def _rename_selected(self):
-		"""Rename selected movie files."""
+		"""Organize selected movie files into proper folder structure.
+
+		Supports batch mode when multiple movies are checked. Collects
+		rename pairs for all checked movies and shows a combined
+		preview dialog. Falls back to single-movie mode.
+		"""
+		import moviemanager.ui.dialogs.rename_preview
+		# collect checked or selected movies for batch
+		checked_movies = self._movie_panel.get_checked_movies()
+		if len(checked_movies) <= 1:
+			selected = self._movie_panel.get_selected_movies()
+			if len(selected) > 1:
+				checked_movies = selected
+		# batch mode: multiple movies
+		if len(checked_movies) > 1:
+			self._rename_batch(checked_movies)
+			return
+		# single mode: one selected movie
 		movie = self._movie_panel.get_selected_movie()
 		if not movie:
-			# show feedback instead of silent return (#3)
 			PySide6.QtWidgets.QMessageBox.information(
 				self, "No Selection",
 				"Please select a movie first."
@@ -351,16 +378,15 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			pairs = self._api.rename_movie(movie, dry_run=True)
 		except Exception as exc:
 			self.unsetCursor()
-			self._show_error("Rename Error", str(exc))
+			self._show_error("Organize Error", str(exc))
 			return
 		self.unsetCursor()
 		if not pairs:
 			PySide6.QtWidgets.QMessageBox.information(
-				self, "Rename", "No files to rename."
+				self, "Organize", "No files to organize."
 			)
 			return
 		# show rename preview dialog
-		import moviemanager.ui.dialogs.rename_preview
 		dialog = moviemanager.ui.dialogs.rename_preview.RenamePreviewDialog(
 			pairs, self
 		)
@@ -369,14 +395,87 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			try:
 				self._api.rename_movie(movie, dry_run=False)
 			except Exception as exc:
-				self._show_error("Rename Error", str(exc))
+				self._show_error("Organize Error", str(exc))
 				return
 			# record rename batch for undo
 			self._rename_history.append(pairs)
 			self._undo_rename_action.setEnabled(True)
 			self._movie_panel.set_movies(self._api.get_movies())
-			# transient success message (#24)
-			self._status.showMessage("Rename complete", 3000)
+			# workflow hint: suggest download as next step
+			self._status.showMessage(
+				"Organize complete -- ready to download content"
+				" (Step 3)",
+				8000,
+			)
+
+	#============================================
+	def _rename_batch(self, movies: list) -> None:
+		"""Organize multiple movies in batch with a combined preview.
+
+		Collects rename pairs for all scraped movies, shows a single
+		preview dialog, and executes all renames on confirmation.
+
+		Args:
+			movies: List of Movie instances to organize.
+		"""
+		import moviemanager.ui.dialogs.rename_preview
+		self.setCursor(PySide6.QtCore.Qt.CursorShape.WaitCursor)
+		# collect rename pairs for all scraped movies
+		all_pairs = []
+		movies_to_rename = []
+		skipped = 0
+		for movie in movies:
+			if not movie.scraped:
+				skipped += 1
+				continue
+			try:
+				pairs = self._api.rename_movie(movie, dry_run=True)
+			except Exception:
+				continue
+			if pairs:
+				all_pairs.extend(pairs)
+				movies_to_rename.append(movie)
+		self.unsetCursor()
+		if not all_pairs:
+			msg = "No matched movies to organize."
+			if skipped:
+				msg += f" ({skipped} unmatched movies skipped)"
+			PySide6.QtWidgets.QMessageBox.information(
+				self, "Organize", msg
+			)
+			return
+		# show combined preview dialog
+		title = (
+			f"Organize {len(movies_to_rename)} movies"
+			f" ({len(all_pairs)} files)"
+		)
+		dialog = moviemanager.ui.dialogs.rename_preview.RenamePreviewDialog(
+			all_pairs, self
+		)
+		dialog.setWindowTitle(title)
+		accepted = PySide6.QtWidgets.QDialog.DialogCode.Accepted
+		if dialog.exec() == accepted:
+			# execute all renames
+			errors = []
+			for movie in movies_to_rename:
+				try:
+					self._api.rename_movie(movie, dry_run=False)
+				except Exception as exc:
+					errors.append(f"{movie.title}: {exc}")
+			# record combined batch for undo
+			self._rename_history.append(all_pairs)
+			self._undo_rename_action.setEnabled(True)
+			self._movie_panel.set_movies(self._api.get_movies())
+			if errors:
+				error_text = "\n".join(errors)
+				self._show_error("Organize Errors", error_text)
+			else:
+				count = len(movies_to_rename)
+				self._status.showMessage(
+					f"Organized {count} movies"
+					" -- ready to download content (Step 3)",
+					8000,
+				)
 
 	#============================================
 	def _undo_last_rename(self) -> None:
@@ -455,6 +554,8 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			self._edit_selected()
 		elif action == "rename":
 			self._rename_selected()
+		elif action == "download":
+			self._download_content()
 
 	#============================================
 	def _select_all(self) -> None:
@@ -571,6 +672,43 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		moviemanager.core.settings.save_settings(self._settings)
 		app = PySide6.QtWidgets.QApplication.instance()
 		moviemanager.ui.theme.apply_theme(app, self._settings.theme)
+
+	#============================================
+	def _download_content(self) -> None:
+		"""Open download dialog for checked or selected movies.
+
+		Downloads artwork, trailers, and subtitles for matched movies
+		using a batch checklist dialog. Filters to only scraped movies.
+		"""
+		# collect checked or selected movies
+		checked_movies = self._movie_panel.get_checked_movies()
+		if len(checked_movies) <= 1:
+			selected = self._movie_panel.get_selected_movies()
+			if len(selected) > 1:
+				checked_movies = selected
+		# filter to scraped movies only
+		scraped_movies = [m for m in checked_movies if m.scraped]
+		# fall back to single selected movie
+		if not scraped_movies:
+			movie = self._movie_panel.get_selected_movie()
+			if movie and movie.scraped:
+				scraped_movies = [movie]
+		if not scraped_movies:
+			PySide6.QtWidgets.QMessageBox.information(
+				self, "No Matched Movies",
+				"Match movies to IMDB first (Step 1)."
+			)
+			return
+		import moviemanager.ui.dialogs.download_dialog
+		dialog = moviemanager.ui.dialogs.download_dialog.DownloadDialog(
+			scraped_movies, self._api, self._settings, self,
+		)
+		dialog.exec()
+		# refresh table after downloads
+		self._movie_panel.set_movies(self._api.get_movies())
+		scraped = self._api.get_scraped_count()
+		total = self._api.get_movie_count()
+		self._status.set_movie_count(total, scraped)
 
 	#============================================
 	def _download_trailer(self) -> None:

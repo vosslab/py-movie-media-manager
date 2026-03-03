@@ -139,6 +139,26 @@ class Movie:
 
 	#============================================
 	@property
+	def has_data(self) -> bool:
+		"""Return whether meaningful metadata exists for this movie.
+
+		True when the movie has been scraped via API or has data loaded
+		from an NFO file (title plus plot or external ID).
+
+		Returns:
+			True if the movie has populated metadata beyond filename parsing.
+		"""
+		if self.scraped:
+			return True
+		# check for data loaded from NFO: title alone comes from filename
+		# parsing, so require title plus additional metadata fields
+		has_ids = bool(self.tmdb_id or self.imdb_id)
+		has_plot = bool(self.plot)
+		has_extra = has_ids or has_plot
+		return bool(self.title and has_extra)
+
+	#============================================
+	@property
 	def video_file(self) -> moviemanager.core.models.media_file.MediaFile | None:
 		"""Return the first media file with VIDEO type, or None.
 
@@ -150,6 +170,45 @@ class Movie:
 			if mf.file_type == video_type:
 				return mf
 		return None
+
+	#============================================
+	@property
+	def has_subtitle(self) -> bool:
+		"""Return whether any subtitle file exists in the movie directory.
+
+		Returns:
+			True if a file with a subtitle extension is found on disk.
+		"""
+		if not self.path or not os.path.isdir(self.path):
+			return False
+		subtitle_exts = moviemanager.core.constants.SUBTITLE_EXTENSIONS
+		for entry in os.listdir(self.path):
+			# check file extension against known subtitle extensions
+			ext = os.path.splitext(entry)[1].lower()
+			if ext in subtitle_exts:
+				return True
+		return False
+
+	#============================================
+	@property
+	def has_trailer(self) -> bool:
+		"""Return whether a trailer video file exists in the movie directory.
+
+		Checks for any file with 'trailer' in the name and a video extension.
+
+		Returns:
+			True if a trailer file is found on disk.
+		"""
+		if not self.path or not os.path.isdir(self.path):
+			return False
+		video_exts = moviemanager.core.constants.VIDEO_EXTENSIONS
+		for entry in os.listdir(self.path):
+			name_lower = entry.lower()
+			ext = os.path.splitext(entry)[1].lower()
+			# match files with 'trailer' in the name and a video extension
+			if "trailer" in name_lower and ext in video_exts:
+				return True
+		return False
 
 	#============================================
 	@property

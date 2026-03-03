@@ -94,6 +94,7 @@ def _build_action_map(window) -> dict:
 		"focus_search": window._focus_search,
 		"on_escape": window._on_escape,
 		"rescan": window._rescan,
+		"download_content": window._download_content,
 		"download_trailer": window._download_trailer,
 		"download_subtitles": window._download_subtitles,
 	}
