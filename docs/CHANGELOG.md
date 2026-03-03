@@ -3,6 +3,12 @@
 ## 2026-03-03
 
 ### Behavior or Interface Changes
+- Deferred media probing to a background worker so movies appear in the table immediately after scan.
+  Removed synchronous `probe_media_file()` call from `moviemanager/core/movie/scanner.py`. Added
+  `probe_movie_list()` in `moviemanager/core/media_probe.py` that iterates all video MediaFiles and
+  populates codec/resolution fields in-place. `_on_scan_done()` in `moviemanager/ui/main_window.py`
+  now launches a background Worker that runs `probe_movie_list()` with status bar progress, then
+  refreshes the table when complete.
 - Reduced status and parental guide icon column widths from ~65px (ResizeToContents) to 36px (Fixed)
   in `moviemanager/ui/movies/movie_panel.py`. Frees ~300px for the Title column.
 - Shortened status column headers from Mtch/Org/Art/Sub/Trl to single-character M/O/A/S/T in

@@ -184,3 +184,47 @@ def probe_media_file(path: str) -> dict:
 				)
 
 	return result
+
+
+#============================================
+def probe_movie_list(movies: list, progress_callback=None) -> None:
+	"""Probe all video MediaFiles in a list of movies for codec metadata.
+
+	Iterates through each movie's media files, finds VIDEO-type files,
+	and calls probe_media_file() to populate codec/resolution fields
+	in-place. Skips files that already have video_codec set.
+
+	Args:
+		movies: List of Movie objects to probe.
+		progress_callback: Optional callable(current, total, message)
+			for status bar updates.
+	"""
+	# local repo modules
+	import moviemanager.core.constants
+
+	# collect all video media files across all movies
+	video_files = []
+	for movie in movies:
+		for mf in movie.media_files:
+			if mf.file_type == moviemanager.core.constants.MediaFileType.VIDEO:
+				video_files.append(mf)
+
+	total = len(video_files)
+	for i, mf in enumerate(video_files):
+		# skip files already probed
+		if mf.video_codec:
+			if progress_callback:
+				progress_callback(i + 1, total, f"Skipping: {mf.filename}")
+			continue
+		# report progress before probing
+		if progress_callback:
+			progress_callback(i + 1, total, f"Probing: {mf.filename}")
+		# probe and populate fields in-place
+		probe_data = probe_media_file(mf.path)
+		mf.video_codec = probe_data["video_codec"]
+		mf.video_width = probe_data["video_width"]
+		mf.video_height = probe_data["video_height"]
+		mf.duration = probe_data["duration_seconds"]
+		mf.audio_codec = probe_data["audio_codec"]
+		mf.audio_channels = probe_data["audio_channels"]
+		mf.container_format = probe_data["container_format"]

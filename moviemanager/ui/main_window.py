@@ -12,6 +12,7 @@ import PySide6.QtCore
 
 # local repo modules
 import moviemanager.api.movie_api
+import moviemanager.core.media_probe
 import moviemanager.core.settings
 import moviemanager.ui.dialogs.download_dialog
 import moviemanager.ui.dialogs.movie_chooser
@@ -65,6 +66,8 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._active_worker = None
 		# track background download worker separately
 		self._download_worker = None
+		# track background media probe worker
+		self._probe_worker = None
 		# menu bar
 		self._setup_menus()
 		# toolbar
@@ -314,6 +317,58 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		)
 		# update toolbar badges with workflow counts
 		self._update_toolbar_badges()
+		# launch background media probe for codec/resolution fields
+		self._start_media_probe()
+
+	#============================================
+	def _start_media_probe(self) -> None:
+		"""Launch background worker to probe video files for codec metadata.
+
+		Runs pymediainfo on each video file after the fast scan completes,
+		so movies appear in the table immediately and codec/resolution
+		fields populate in the background.
+		"""
+		movies = self._api.get_movies()
+		if not movies:
+			return
+		worker = moviemanager.ui.workers.Worker(
+			moviemanager.core.media_probe.probe_movie_list,
+			movies,
+			progress_callback=self._on_probe_progress_callback,
+		)
+		worker.signals.progress.connect(self._on_probe_progress)
+		worker.signals.finished.connect(self._on_probe_done)
+		self._probe_worker = worker
+		self._pool.start(worker)
+
+	#============================================
+	def _on_probe_progress_callback(
+		self, current: int, total: int, message: str,
+	) -> None:
+		"""Progress callback invoked from probe worker thread.
+
+		Emits progress signal to marshal GUI update to the main thread.
+		"""
+		if self._probe_worker:
+			self._probe_worker.signals.progress.emit(
+				current, total, message,
+			)
+
+	#============================================
+	def _on_probe_progress(
+		self, current: int, total: int, message: str,
+	) -> None:
+		"""Handle probe progress updates on the main thread."""
+		self._status.show_progress(current, total, message)
+
+	#============================================
+	def _on_probe_done(self, result) -> None:
+		"""Handle probe completion: refresh table and clear status."""
+		self._probe_worker = None
+		self._status.hide_progress()
+		# refresh table cells with newly populated codec fields
+		self._movie_panel.refresh_data()
+		self._status.showMessage("Media probe complete", 3000)
 
 	#============================================
 	def _on_checked_changed(self, checked: int, total: int) -> None:

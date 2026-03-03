@@ -2,46 +2,13 @@
 
 # Standard Library
 import os
-import re
 
 # local repo modules
 import moviemanager.core.constants
-import moviemanager.core.media_probe
 import moviemanager.core.models.media_file
 import moviemanager.core.models.movie
 import moviemanager.core.nfo.reader
 import moviemanager.core.utils
-
-# matches stems that are a trailer file, not a movie with "trailer" in the title
-# examples that match: "trailer", "trailer2", "movie-trailer", "My_Movie_trailer1"
-# examples that do NOT match: "Trailer_Park_Boys", "trailer_park_boys_2006"
-_TRAILER_STEM_RE = re.compile(
-	r"^trailer\d*$|[-_ ]trailer\d*$", re.IGNORECASE
-)
-
-
-#============================================
-def _is_trailer_file(stem: str) -> bool:
-	"""Check if a filename stem indicates a trailer file.
-
-	Matches stems like "trailer", "trailer2", "movie-trailer",
-	"My_Movie_trailer1" but not "Trailer_Park_Boys".
-
-	Args:
-		stem: Lowercase filename without extension.
-
-	Returns:
-		True if the stem matches a trailer file pattern.
-	"""
-	is_match = bool(_TRAILER_STEM_RE.search(stem))
-	return is_match
-
-assert _is_trailer_file("trailer")
-assert _is_trailer_file("trailer2")
-assert _is_trailer_file("movie-trailer")
-assert _is_trailer_file("the_matrix-trailer1")
-assert not _is_trailer_file("trailer_park_boys")
-assert not _is_trailer_file("trailer_park_boys_2006")
 
 
 #============================================
@@ -119,16 +86,12 @@ def scan_directory(
 		]
 
 		# find video files in this directory, skipping trailer files
-		video_files = []
-		for f in filenames:
-			if not moviemanager.core.utils.is_video_file(f):
-				continue
-			# skip standalone trailer files but not movies with "trailer"
-			# in the title (e.g. "Trailer Park Boys")
-			stem = os.path.splitext(f)[0].lower()
-			if _is_trailer_file(stem):
-				continue
-			video_files.append(f)
+		# the app saves trailers as "trailer.mp4", so match that exact stem
+		video_files = [
+			f for f in filenames
+			if moviemanager.core.utils.is_video_file(f)
+			and os.path.splitext(f)[0].lower() != "trailer"
+		]
 		if not video_files:
 			continue
 
@@ -168,17 +131,6 @@ def scan_directory(
 				filesize=os.path.getsize(video_path),
 				file_type=moviemanager.core.constants.MediaFileType.VIDEO,
 			)
-			# probe video file for codec and resolution metadata
-			probe_data = moviemanager.core.media_probe.probe_media_file(
-				video_path
-			)
-			media_file.video_codec = probe_data["video_codec"]
-			media_file.video_width = probe_data["video_width"]
-			media_file.video_height = probe_data["video_height"]
-			media_file.duration = probe_data["duration_seconds"]
-			media_file.audio_codec = probe_data["audio_codec"]
-			media_file.audio_channels = probe_data["audio_channels"]
-			media_file.container_format = probe_data["container_format"]
 			movie.media_files.append(media_file)
 
 			# look for a matching NFO file
