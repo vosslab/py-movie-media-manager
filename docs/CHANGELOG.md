@@ -2,6 +2,95 @@
 
 ## 2026-03-03
 
+### Additions and New Features
+- Added runtime proximity scoring to match confidence
+  (`moviemanager/api/match_confidence.py`). Uses a Gaussian bell curve
+  (sigma=15 min) so close runtimes boost confidence and large mismatches
+  penalize it. When runtime is unavailable (0), the signal is neutral (0.5).
+- Added `runtime` field to `SearchResult` dataclass in
+  `moviemanager/scraper/types.py` for future use when search APIs provide it.
+- Rebalanced match confidence weights: title 0.45 (was 0.50), year 0.20
+  (was 0.25), runtime 0.10 (new), token overlap 0.15 (unchanged),
+  popularity 0.10 (unchanged).
+- `MovieChooserDialog` now passes local movie runtime to search and
+  broader-search calls for runtime proximity scoring.
+- Added 3 new tests in `tests/test_match_confidence.py` for
+  `_runtime_proximity()`, runtime-improves-match, and runtime-mismatch-hurts.
+- Added "Min" runtime column to the movie chooser results table and a runtime
+  label in the preview pane (`moviemanager/ui/dialogs/movie_chooser.py`).
+
+### Fixes and Maintenance
+- Fixed `StatusIconDelegate` column range in `moviemanager/ui/movies/movie_panel.py` from
+  `range(4, 9)` to `range(5, 10)` so the Min (duration) column no longer gets an icon delegate
+  that paints nothing. Similarly fixed `SeverityDelegate` range from `range(9, 14)` to
+  `range(10, 15)` to align PG severity columns correctly.
+- Fixed `locked_columns` sets in `movie_panel.py` from `{1, 4, 5, 6, 7, 8}` to `{1, 5, 6, 7, 8, 9}`
+  so the Trailer column (index 9) is locked and the Min column (index 4) can be hidden.
+- Probe results are now auto-saved to existing NFO files after background probing
+  (`moviemanager/core/media_probe.py`). Subsequent scans load cached `<fileinfo><streamdetails>`
+  from NFO and skip re-probing, improving scan performance.
+
+### Additions and New Features
+- Added `shell_safe_filename()` to `moviemanager/core/utils.py` using a whitelist approach modeled
+  on `rmspaces.py`: transliterates unicode to ASCII via `unidecode`, replaces `&` with `and`,
+  replaces quotes with underscores, and strips any character not in `-./_0-9A-Za-z`.
+
+### Behavior or Interface Changes
+- Rename preview dialog (`moviemanager/ui/dialogs/rename_preview.py`) now displays relative paths
+  instead of full absolute paths. Computes the common base directory of all source and destination
+  paths and shows it in the info label (e.g., "3 file(s) will be renamed (in .../Movies/Collection/):")
+  while table cells use `os.path.relpath()` for shorter, more readable entries.
+- Renamer shell-safe mode now uses the new `shell_safe_filename()` function instead of inline
+  regex in both `moviemanager/core/movie/renamer.py` and the settings dialog preview
+  (`moviemanager/ui/dialogs/settings_dialog.py`). Handles unicode, quotes, ampersands, and more
+  shell-unsafe characters than the previous implementation.
+- Renamed the shell-safe checkbox label from "Replace spaces with underscores (shell-safe)" to
+  "Shell-safe filenames (ASCII, no spaces or special characters)".
+
+### Developer Tests and Notes
+- Added 8 new tests in `tests/test_renamer.py` for `shell_safe_filename()` covering ampersands,
+  apostrophes, double quotes, parentheses, unicode, dots/hyphens, leading/trailing cleanup, and
+  template expansion with shell-safe mode.
+
+### Additions and New Features
+- Added `<fileinfo><streamdetails>` read/write support to NFO reader and writer
+  (`moviemanager/core/nfo/reader.py`, `moviemanager/core/nfo/writer.py`). Caches probe results
+  (video codec, resolution, aspect ratio, duration, audio codec, channels) in NFO files using
+  standard Kodi format. On subsequent scans, cached data is loaded from NFO, avoiding re-probing.
+- Scanner now populates video MediaFile fields from NFO `<fileinfo>` data during merge
+  (`moviemanager/core/movie/scanner.py`). Files with cached probe data skip pymediainfo probing.
+- `probe_movie_list()` now sets `movie.runtime` from probe duration when runtime is not already
+  set by NFO metadata (`moviemanager/core/media_probe.py`).
+
+### Behavior or Interface Changes
+- Min column now falls back to NFO/scraped `movie.runtime` when probe duration is unavailable
+  (`moviemanager/ui/movies/movie_table_model.py`). Previously the column was empty until probing
+  completed; now scraped movies show runtime immediately on scan.
+- Media probe now uses `TaskAPI.submit_job()` instead of raw `QThreadPool`, so it appears in the
+  Jobs dialog with proper progress tracking and error handling (`moviemanager/ui/main_window.py`).
+
+### Fixes and Maintenance
+- Fixed `_get_duration_minutes()` to prefer probe duration but fall back to NFO runtime instead
+  of returning 0 when no probe data exists (`moviemanager/ui/movies/movie_table_model.py`).
+- Fixed `probe_movie_list()` variable scoping: changed from collecting bare MediaFile objects to
+  `(movie, mf)` pairs so `movie.runtime` update references the correct movie
+  (`moviemanager/core/media_probe.py`).
+
+### Additions and New Features
+- Added Calibre-style background job system for scraping. Clicking "Accept Match" now runs
+  `scrape_movie()` in a background worker thread instead of blocking the UI. Jobs are tracked
+  by a new `JobManager` layer in `moviemanager/ui/task_api.py` with `submit_job()`, `active_count`,
+  `all_jobs`, and `job_list_changed` signal.
+- Added "Jobs: N" button to the status bar (`moviemanager/ui/widgets/status_bar.py`). The button
+  text bolds when jobs are active and emits `jobs_clicked` when clicked.
+- Created `moviemanager/ui/dialogs/jobs_dialog.py`: a non-modal popup listing running and completed
+  background jobs with name, status, and elapsed time. Includes "Clear Completed" button.
+- `MovieChooserDialog` now accepts an optional `task_api` parameter and submits scrape work through
+  it for job tracking. Falls back to its own thread pool when no `task_api` is provided.
+- `MainWindow` creates a shared `TaskAPI` instance, passes it to `MovieChooserDialog`, wires
+  `job_list_changed` to the status bar count, and connects the jobs button to the popup dialog.
+  `closeEvent` warns if background jobs are still running and calls `task_api.shutdown()`.
+
 ### Behavior or Interface Changes
 - Deferred media probing to a background worker so movies appear in the table immediately after scan.
   Removed synchronous `probe_media_file()` call from `moviemanager/core/movie/scanner.py`. Added

@@ -19,7 +19,7 @@ KNOWN_TAGS = {
 	"userrating", "director", "credits", "studio", "watched",
 	"playcount", "dateadded", "lastplayed", "trailer", "poster",
 	"set", "genre", "tag", "actor", "producer", "thumb", "fanart",
-	"parental_guide",
+	"parental_guide", "fileinfo",
 }
 
 
@@ -92,6 +92,57 @@ def _parse_set(set_elem: lxml.etree._Element) -> moviemanager.core.models.movie_
 		set_name = ""
 	movie_set = moviemanager.core.models.movie_set.MovieSet(name=set_name)
 	return movie_set
+
+
+#============================================
+def _parse_streamdetails(sd_elem: lxml.etree._Element) -> dict:
+	"""Parse a streamdetails XML element into a dict of media info.
+
+	Extracts video codec, resolution, aspect ratio, duration, and
+	audio codec/channels from the first video and audio children.
+
+	Args:
+		sd_elem: XML element for <streamdetails>.
+
+	Returns:
+		Dict with keys: video_codec, video_width, video_height,
+		aspect_ratio, duration_seconds, audio_codec, audio_channels.
+	"""
+	info = {
+		"video_codec": "",
+		"video_width": 0,
+		"video_height": 0,
+		"aspect_ratio": 0.0,
+		"duration_seconds": 0,
+		"audio_codec": "",
+		"audio_channels": "",
+	}
+	# parse first video element
+	video_elem = sd_elem.find("video")
+	if video_elem is not None:
+		info["video_codec"] = _get_text(video_elem, "codec")
+		# parse width
+		width_str = _get_text(video_elem, "width")
+		if width_str:
+			info["video_width"] = int(width_str)
+		# parse height
+		height_str = _get_text(video_elem, "height")
+		if height_str:
+			info["video_height"] = int(height_str)
+		# parse aspect ratio
+		aspect_str = _get_text(video_elem, "aspect")
+		if aspect_str:
+			info["aspect_ratio"] = float(aspect_str)
+		# parse duration in seconds
+		dur_str = _get_text(video_elem, "durationinseconds")
+		if dur_str:
+			info["duration_seconds"] = int(dur_str)
+	# parse first audio element
+	audio_elem = sd_elem.find("audio")
+	if audio_elem is not None:
+		info["audio_codec"] = _get_text(audio_elem, "codec")
+		info["audio_channels"] = _get_text(audio_elem, "channels")
+	return info
 
 
 #============================================
@@ -216,6 +267,11 @@ def read_nfo(nfo_path: str) -> moviemanager.core.models.movie.Movie:
 		elif tag == "producer":
 			producer_dict = _parse_actor(child)
 			movie.producers.append(producer_dict)
+		elif tag == "fileinfo":
+			# parse streamdetails into cached file info dict
+			sd = child.find("streamdetails")
+			if sd is not None:
+				movie._fileinfo = _parse_streamdetails(sd)
 		else:
 			# preserve unknown elements for round-trip
 			unknown_elements.append(child)

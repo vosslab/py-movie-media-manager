@@ -52,6 +52,10 @@ def _title_similarity(query: str, candidate: str) -> float:
 # sigma=2 gives: off-by-1 ~0.88, off-by-2 ~0.61, off-by-3 ~0.32
 _YEAR_SIGMA = 2.0
 
+# Gaussian standard deviation for runtime proximity bell curve (minutes).
+# sigma=15 gives: off-by-5 ~0.95, off-by-10 ~0.80, off-by-20 ~0.41
+_RUNTIME_SIGMA = 15.0
+
 
 #============================================
 def _year_proximity(query_year: str, result_year: str) -> float:
@@ -84,6 +88,35 @@ def _year_proximity(query_year: str, result_year: str) -> float:
 	diff = abs(q_year - r_year)
 	# Gaussian bell curve: exp(-diff^2 / (2 * sigma^2))
 	score = math.exp(-(diff ** 2) / (2.0 * _YEAR_SIGMA ** 2))
+	return score
+
+
+#============================================
+def _runtime_proximity(query_runtime: int, result_runtime: int) -> float:
+	"""Score runtime proximity using a Gaussian bell curve.
+
+	Compares the local movie runtime (from probe or NFO) against
+	the search result runtime. Uses a wider sigma than year proximity
+	because runtime differences of a few minutes are common across
+	databases and different cuts of a film.
+
+	Missing runtime on either side returns 0.5 (neutral).
+
+	Args:
+		query_runtime: Runtime in minutes from the local movie (0 if unknown).
+		result_runtime: Runtime in minutes from the search result (0 if unknown).
+
+	Returns:
+		float: Runtime proximity score from 0.0 to 1.0.
+	"""
+	# treat zero as missing
+	if not query_runtime or query_runtime <= 0:
+		return 0.5
+	if not result_runtime or result_runtime <= 0:
+		return 0.5
+	diff = abs(query_runtime - result_runtime)
+	# Gaussian bell curve: exp(-diff^2 / (2 * sigma^2))
+	score = math.exp(-(diff ** 2) / (2.0 * _RUNTIME_SIGMA ** 2))
 	return score
 
 
@@ -135,19 +168,22 @@ def compute_match_confidence(
 	result_year: str,
 	result_original_title: str = "",
 	result_score: float = 0.0,
+	query_runtime: int = 0,
+	result_runtime: int = 0,
 ) -> float:
 	"""Compute confidence score for how well a result matches a query.
 
-	Uses four weighted signals to produce a composite score:
-	- Title similarity (0.50): difflib SequenceMatcher ratio
-	- Year proximity (0.25): exact=1.0, off-by-1=0.7, etc.
+	Uses five weighted signals to produce a composite score:
+	- Title similarity (0.45): difflib SequenceMatcher ratio
+	- Year proximity (0.20): Gaussian bell curve on year difference
+	- Runtime proximity (0.10): Gaussian bell curve on minute difference
 	- Token overlap (0.15): Jaccard similarity of word tokens
 	- Popularity prior (0.10): normalized provider rating
 
 	Bonuses: exact title + exact year gets +0.1 boost.
 	Clamps: title similarity below 0.3 caps final score at 0.3.
 
-	All parameters are plain strings/floats -- no API-specific
+	All parameters are plain strings/floats/ints -- no API-specific
 	types are required.
 
 	Args:
@@ -157,6 +193,8 @@ def compute_match_confidence(
 		result_year: Year from the search result (may be empty).
 		result_original_title: Original title from the result (may be empty).
 		result_score: Provider aggregate rating (0-10 scale).
+		query_runtime: Runtime in minutes from local movie (0 if unknown).
+		result_runtime: Runtime in minutes from search result (0 if unknown).
 
 	Returns:
 		float: Confidence score from 0.0 to 1.0.
@@ -175,12 +213,14 @@ def compute_match_confidence(
 			r_norm = orig_norm
 	# compute individual signals
 	year_score = _year_proximity(query_year, result_year)
+	runtime_score = _runtime_proximity(query_runtime, result_runtime)
 	token_score = _token_overlap(q_norm, r_norm)
 	pop_score = _popularity_prior(result_score)
 	# weighted composite
 	confidence = (
-		0.50 * title_sim
-		+ 0.25 * year_score
+		0.45 * title_sim
+		+ 0.20 * year_score
+		+ 0.10 * runtime_score
 		+ 0.15 * token_score
 		+ 0.10 * pop_score
 	)

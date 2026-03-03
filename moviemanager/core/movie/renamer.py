@@ -89,14 +89,7 @@ def expand_template(
 	result = result.strip()
 	# optionally make filenames shell-safe
 	if spaces_to_underscores:
-		# replace spaces with underscores
-		result = result.replace(" ", "_")
-		# strip shell-unsafe characters
-		result = re.sub(r"[(){}\[\]&|;$*?~!#<>]", "", result)
-		# collapse multiple underscores to one
-		result = re.sub(r"_{2,}", "_", result)
-		# strip leading/trailing underscores
-		result = result.strip("_")
+		result = moviemanager.core.utils.shell_safe_filename(result)
 	return result
 
 

@@ -135,14 +135,14 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 			moviemanager.ui.movies.movie_table_model.MovieTableModel()
 		)
 		self._table_view.setModel(self._table_model)
-		# install icon delegates on status columns 4-8 (D, N, A, S, T)
-		for col in range(4, 9):
+		# install icon delegates on status columns 5-9 (M, O, A, S, T)
+		for col in range(5, 10):
 			icon_del = moviemanager.ui.movies.status_delegate.StatusIconDelegate(
 				self._table_view
 			)
 			self._table_view.setItemDelegateForColumn(col, icon_del)
-		# install severity delegates on PG columns 9-13 (SN, VG, Pr, AD, FI)
-		for col in range(9, 14):
+		# install severity delegates on PG columns 10-14 (SN, VG, Pr, AD, FI)
+		for col in range(10, 15):
 			sev_del = moviemanager.ui.movies.status_delegate.SeverityDelegate(
 				self._table_view
 			)
@@ -396,7 +396,7 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 		menu = PySide6.QtWidgets.QMenu(self)
 		columns = moviemanager.ui.movies.movie_table_model.COLUMNS
 		# columns that cannot be hidden (Title + status indicators)
-		locked_columns = {1, 4, 5, 6, 7, 8}
+		locked_columns = {1, 5, 6, 7, 8, 9}
 		# skip col 0 (checkbox) -- always visible
 		for col_idx in range(1, len(columns)):
 			if col_idx in locked_columns:
@@ -449,7 +449,7 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 	def restore_table_state(self, settings) -> None:
 		"""Restore column widths, sort state, and visibility from QSettings."""
 		# columns that must always be visible (Title + status indicators)
-		locked_columns = {1, 4, 5, 6, 7, 8}
+		locked_columns = {1, 5, 6, 7, 8, 9}
 		header_state = settings.value("movieTable/headerState")
 		if header_state:
 			self._table_view.horizontalHeader().restoreState(

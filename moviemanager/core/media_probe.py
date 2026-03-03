@@ -201,16 +201,17 @@ def probe_movie_list(movies: list, progress_callback=None) -> None:
 	"""
 	# local repo modules
 	import moviemanager.core.constants
+	import moviemanager.core.nfo.writer
 
-	# collect all video media files across all movies
-	video_files = []
+	# collect (movie, media_file) pairs for all video files
+	video_pairs = []
 	for movie in movies:
 		for mf in movie.media_files:
 			if mf.file_type == moviemanager.core.constants.MediaFileType.VIDEO:
-				video_files.append(mf)
+				video_pairs.append((movie, mf))
 
-	total = len(video_files)
-	for i, mf in enumerate(video_files):
+	total = len(video_pairs)
+	for i, (movie, mf) in enumerate(video_pairs):
 		# skip files already probed
 		if mf.video_codec:
 			if progress_callback:
@@ -228,3 +229,9 @@ def probe_movie_list(movies: list, progress_callback=None) -> None:
 		mf.audio_codec = probe_data["audio_codec"]
 		mf.audio_channels = probe_data["audio_channels"]
 		mf.container_format = probe_data["container_format"]
+		# set movie runtime from probe if not already set by NFO
+		if movie.runtime == 0 and mf.duration > 0:
+			movie.runtime = round(mf.duration / 60)
+		# auto-save probe results to NFO if an NFO file exists
+		if movie.nfo_path and os.path.isfile(movie.nfo_path):
+			moviemanager.core.nfo.writer.write_nfo(movie, movie.nfo_path)

@@ -216,7 +216,40 @@ def write_nfo(
 	if movie.spoken_languages:
 		_add_text_element(root, "languages", movie.spoken_languages)
 
-	# 34. unknown_elements (re-emit preserved elements)
+	# 34. fileinfo (stream details from first video media file)
+	vf = movie.video_file
+	if vf is not None and vf.video_codec:
+		fileinfo = lxml.etree.SubElement(root, "fileinfo")
+		sd = lxml.etree.SubElement(fileinfo, "streamdetails")
+		# video track
+		video_elem = lxml.etree.SubElement(sd, "video")
+		_add_text_element(video_elem, "codec", vf.video_codec)
+		if vf.video_width:
+			_add_text_element(
+				video_elem, "width", str(vf.video_width)
+			)
+		if vf.video_height:
+			_add_text_element(
+				video_elem, "height", str(vf.video_height)
+			)
+		if vf.aspect_ratio:
+			_add_text_element(
+				video_elem, "aspect", f"{vf.aspect_ratio:.3f}"
+			)
+		if vf.duration:
+			_add_text_element(
+				video_elem, "durationinseconds", str(vf.duration)
+			)
+		# audio track
+		if vf.audio_codec:
+			audio_elem = lxml.etree.SubElement(sd, "audio")
+			_add_text_element(audio_elem, "codec", vf.audio_codec)
+			if vf.audio_channels:
+				_add_text_element(
+					audio_elem, "channels", vf.audio_channels
+				)
+
+	# 35. unknown_elements (re-emit preserved elements)
 	for elem in movie.unknown_elements:
 		# deep copy to avoid modifying the original tree
 		root.append(copy.deepcopy(elem))

@@ -152,3 +152,68 @@ def test_year_proximity_internal():
 	# missing years
 	assert prox("", "1999") == 0.5
 	assert prox("1999", "") == 0.3
+
+
+#============================================
+def test_runtime_proximity_internal():
+	"""Test the internal _runtime_proximity bell curve helper."""
+	prox = moviemanager.api.match_confidence._runtime_proximity
+	# exact match is 1.0
+	assert prox(120, 120) == 1.0
+	# off-by-5 minutes should be high (~0.95)
+	assert prox(120, 125) > 0.9
+	# off-by-15 minutes should be moderate (~0.61)
+	assert prox(120, 135) > 0.5
+	# off-by-30 minutes should be low
+	assert prox(120, 150) < 0.5
+	# bell curve: scores decrease monotonically with distance
+	assert prox(120, 125) > prox(120, 135)
+	assert prox(120, 135) > prox(120, 150)
+	# missing runtime returns neutral
+	assert prox(0, 120) == 0.5
+	assert prox(120, 0) == 0.5
+	assert prox(0, 0) == 0.5
+
+
+#============================================
+def test_runtime_improves_match():
+	"""Matching runtime should boost confidence vs missing runtime."""
+	# same title/year but one has matching runtime, other has none
+	score_with_runtime = (
+		moviemanager.api.match_confidence.compute_match_confidence(
+			"Inception", "2010", "Inception", "2010",
+			query_runtime=148, result_runtime=148,
+		)
+	)
+	score_no_runtime = (
+		moviemanager.api.match_confidence.compute_match_confidence(
+			"Inception", "2010", "Inception", "2010",
+			query_runtime=148, result_runtime=0,
+		)
+	)
+	assert score_with_runtime > score_no_runtime, (
+		f"Runtime match ({score_with_runtime}) should beat "
+		f"no runtime ({score_no_runtime})"
+	)
+
+
+#============================================
+def test_runtime_mismatch_hurts():
+	"""Very different runtime should reduce confidence."""
+	# same title/year, one with close runtime, one with far runtime
+	score_close = (
+		moviemanager.api.match_confidence.compute_match_confidence(
+			"Inception", "2010", "Inception", "2010",
+			query_runtime=148, result_runtime=150,
+		)
+	)
+	score_far = (
+		moviemanager.api.match_confidence.compute_match_confidence(
+			"Inception", "2010", "Inception", "2010",
+			query_runtime=148, result_runtime=90,
+		)
+	)
+	assert score_close > score_far, (
+		f"Close runtime ({score_close}) should beat "
+		f"far runtime ({score_far})"
+	)

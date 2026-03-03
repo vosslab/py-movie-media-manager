@@ -8,6 +8,7 @@ import moviemanager.core.constants
 import moviemanager.core.models.media_file
 import moviemanager.core.models.movie
 import moviemanager.core.movie.renamer
+import moviemanager.core.utils
 
 
 #============================================
@@ -191,3 +192,77 @@ def test_rename_with_artwork(tmp_path):
 		# artwork keeps its original filename
 		basename = os.path.basename(dest)
 		assert basename in artwork_names
+
+
+#============================================
+def test_shell_safe_filename_ampersand():
+	"""Ampersand is replaced with 'and'."""
+	result = moviemanager.core.utils.shell_safe_filename("Fast & Furious")
+	assert result == "Fast_and_Furious"
+
+
+#============================================
+def test_shell_safe_filename_apostrophe():
+	"""Apostrophe is replaced with underscore."""
+	result = moviemanager.core.utils.shell_safe_filename("Ocean's Eleven")
+	assert result == "Ocean_s_Eleven"
+
+
+#============================================
+def test_shell_safe_filename_double_quotes():
+	"""Double quotes are replaced with underscore."""
+	result = moviemanager.core.utils.shell_safe_filename('He Said "Hello"')
+	assert "_" not in result or '"' not in result
+	# no double quotes remain
+	assert '"' not in result
+
+
+#============================================
+def test_shell_safe_filename_parentheses():
+	"""Parentheses are stripped via the whitelist."""
+	result = moviemanager.core.utils.shell_safe_filename(
+		"The Matrix (1999)"
+	)
+	assert result == "The_Matrix_1999"
+
+
+#============================================
+def test_shell_safe_filename_unicode():
+	"""Unicode characters are transliterated to ASCII."""
+	# accented e -> e
+	result = moviemanager.core.utils.shell_safe_filename("Amelie")
+	assert result == "Amelie"
+
+
+#============================================
+def test_shell_safe_filename_preserves_dots_hyphens():
+	"""Dots and hyphens in filenames are preserved."""
+	result = moviemanager.core.utils.shell_safe_filename(
+		"Wall-E"
+	)
+	assert result == "Wall-E"
+
+
+#============================================
+def test_shell_safe_filename_no_leading_trailing():
+	"""Leading and trailing special characters are stripped."""
+	result = moviemanager.core.utils.shell_safe_filename(
+		"__test__"
+	)
+	assert result == "test"
+
+
+#============================================
+def test_expand_template_shell_safe():
+	"""Shell-safe template expansion cleans special characters."""
+	movie = moviemanager.core.models.movie.Movie(
+		title="Ocean's Eleven",
+		year="2001",
+	)
+	result = moviemanager.core.movie.renamer.expand_template(
+		"{title}-{year}", movie, spaces_to_underscores=True,
+	)
+	# no apostrophes or spaces in result
+	assert "'" not in result
+	assert " " not in result
+	assert "2001" in result

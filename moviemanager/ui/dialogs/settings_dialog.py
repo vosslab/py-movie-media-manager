@@ -1,7 +1,6 @@
 """Application settings dialog."""
 
 # Standard Library
-import re
 import webbrowser
 
 # PIP3 modules
@@ -10,6 +9,7 @@ import PySide6.QtWidgets
 
 # local repo modules
 import moviemanager.core.settings
+import moviemanager.core.utils
 
 
 #============================================
@@ -194,7 +194,7 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		rename_layout.addRow("", self._channels_check)
 		# shell-safe naming option
 		self._spaces_check = PySide6.QtWidgets.QCheckBox(
-			"Replace spaces with underscores (shell-safe)"
+			"Shell-safe filenames (ASCII, no spaces or special characters)"
 		)
 		rename_layout.addRow("", self._spaces_check)
 		# live preview of folder name
@@ -460,20 +460,14 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 			path_example = path_example.replace(token, value)
 			file_example = file_example.replace(token, value)
 
-		# apply spaces_to_underscores if checked
+		# apply shell-safe filename cleaning if checked
 		if self._spaces_check.isChecked():
-			path_example = path_example.replace(" ", "_")
-			path_example = re.sub(
-				r"[(){}\[\]&|;$*?~!#<>]", "", path_example
+			path_example = moviemanager.core.utils.shell_safe_filename(
+				path_example
 			)
-			path_example = re.sub(r"_{2,}", "_", path_example)
-			path_example = path_example.strip("_")
-			file_example = file_example.replace(" ", "_")
-			file_example = re.sub(
-				r"[(){}\[\]&|;$*?~!#<>]", "", file_example
+			file_example = moviemanager.core.utils.shell_safe_filename(
+				file_example
 			)
-			file_example = re.sub(r"_{2,}", "_", file_example)
-			file_example = file_example.strip("_")
 
 		preview_text = f"Example: {path_example}/{file_example}.mkv"
 		self._rename_preview.setText(preview_text)

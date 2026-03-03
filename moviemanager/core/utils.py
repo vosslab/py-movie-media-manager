@@ -5,6 +5,9 @@ import os
 import re
 import datetime
 
+# PIP3 modules
+import unidecode
+
 # local repo modules
 import moviemanager.core.constants
 
@@ -112,6 +115,52 @@ def parse_title_year(filename: str) -> tuple:
 # simple assertion test for parse_title_year
 result = parse_title_year("The.Dark.Knight.2008.BluRay.x264.mkv")
 assert result == ("The Dark Knight", "2008")
+
+
+#============================================
+def shell_safe_filename(name: str) -> str:
+	"""Make a filename shell-safe using a whitelist approach.
+
+	Transliterates unicode to ASCII, replaces ampersands with 'and',
+	removes quotes, and strips any character not in the whitelist
+	(alphanumeric, hyphen, dot, underscore, slash).
+
+	Modeled on the rmspaces.py cleanName() function.
+
+	Args:
+		name: raw filename string.
+
+	Returns:
+		Cleaned filename safe for shell use.
+	"""
+	# transliterate unicode characters to ASCII equivalents
+	result = unidecode.unidecode(name)
+	# replace ampersand with the word 'and'
+	result = result.replace("&", "and")
+	# replace single and double quotes with underscores
+	result = result.replace("'", "_")
+	result = result.replace('"', "_")
+	# replace spaces with underscores
+	result = result.replace(" ", "_")
+	# replace any character NOT in the whitelist with underscore
+	result = re.sub(r"[^-./_ 0-9A-Za-z]", "_", result)
+	# clean up triple and double separator patterns
+	result = result.replace("_._", ".")
+	result = result.replace("._.", "_")
+	result = result.replace("-_-", "_")
+	result = result.replace("_-_", "-")
+	# collapse double dots and double underscores
+	result = re.sub(r"\.{2,}", ".", result)
+	result = re.sub(r"_{2,}", "_", result)
+	# strip leading and trailing underscores, hyphens, and dots
+	result = result.strip("_-.")
+	return result
+
+
+# simple assertion tests for shell_safe_filename
+assert shell_safe_filename("Fast & Furious") == "Fast_and_Furious"
+assert shell_safe_filename("Ocean's Eleven") == "Ocean_s_Eleven"
+assert shell_safe_filename("The Matrix (1999)") == "The_Matrix_1999"
 
 
 #============================================

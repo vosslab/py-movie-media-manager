@@ -2,7 +2,6 @@
 
 # Standard Library
 import os
-import traceback
 
 # PIP3 modules
 import PySide6.QtGui
@@ -26,7 +25,8 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 	Abort Queue/Back/Cancel/OK buttons for navigating a list of movies.
 	"""
 
-	def __init__(self, movie, api, parent=None, movie_list=None):
+	def __init__(self, movie, api, parent=None, movie_list=None,
+				task_api=None):
 		"""Initialize the movie chooser dialog.
 
 		Args:
@@ -34,9 +34,11 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 			api: MovieAPI instance for search and scrape.
 			parent: Parent widget.
 			movie_list: Optional list of movies for batch navigation.
+			task_api: Optional TaskAPI for submitting background scrape jobs.
 		"""
 		super().__init__(parent)
 		self._api = api
+		self._task_api = task_api
 		self._selected_result = None
 		self._results = []
 		self._pool = PySide6.QtCore.QThreadPool()
@@ -223,9 +225,9 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 
 		# left side: results table (3 columns)
 		self._results_table = PySide6.QtWidgets.QTableWidget()
-		self._results_table.setColumnCount(3)
+		self._results_table.setColumnCount(4)
 		self._results_table.setHorizontalHeaderLabels(
-			["Title", "Year", "Match"]
+			["Title", "Year", "Min", "Match"]
 		)
 		self._results_table.setSelectionBehavior(
 			PySide6.QtWidgets.QAbstractItemView
@@ -279,6 +281,9 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 
 		self._year_label = PySide6.QtWidgets.QLabel("")
 		preview_layout.addWidget(self._year_label)
+
+		self._runtime_label = PySide6.QtWidgets.QLabel("")
+		preview_layout.addWidget(self._runtime_label)
 
 		# overview text with word wrap in a read-only text edit
 		self._overview_text = PySide6.QtWidgets.QTextEdit()
@@ -550,6 +555,7 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 			self._poster_label.setText("No poster")
 			self._title_label.setText("")
 			self._year_label.setText("")
+			self._runtime_label.setText("")
 			self._overview_text.clear()
 			return
 
@@ -559,6 +565,13 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		self._title_label.setText(result.title)
 		year_text = f"Year: {result.year}" if result.year else ""
 		self._year_label.setText(year_text)
+		# show runtime in minutes if available
+		if result.runtime and result.runtime > 0:
+			self._runtime_label.setText(
+				f"Runtime: {result.runtime} min"
+			)
+		else:
+			self._runtime_label.setText("")
 		self._overview_text.setPlainText(result.overview or "")
 
 		# download poster if URL is available
@@ -696,9 +709,12 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		self._search_btn.setEnabled(False)
 		self._search_btn.setText("Searching...")
 		self.setCursor(PySide6.QtCore.Qt.CursorShape.WaitCursor)
+		# pass local movie runtime for proximity scoring
+		runtime = getattr(self._movie, "runtime", 0) or 0
 		# run search in background thread
 		worker = moviemanager.ui.workers.Worker(
-			self._api.search_movie, title, year
+			self._api.search_movie, title, year,
+			query_runtime=runtime,
 		)
 		worker.signals.finished.connect(self._on_search_done)
 		worker.signals.error.connect(self._on_search_error)
@@ -714,8 +730,11 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		self._broader_search_btn.setEnabled(False)
 		self._broader_search_btn.setText("Searching...")
 		self.setCursor(PySide6.QtCore.Qt.CursorShape.WaitCursor)
+		# pass local movie runtime for proximity scoring
+		runtime = getattr(self._movie, "runtime", 0) or 0
 		worker = moviemanager.ui.workers.Worker(
-			self._api.search_movie_with_fallback, title, year
+			self._api.search_movie_with_fallback, title, year,
+			query_runtime=runtime,
 		)
 		worker.signals.finished.connect(self._on_broader_search_done)
 		worker.signals.error.connect(self._on_search_error)
@@ -782,6 +801,14 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 				row, 1,
 				PySide6.QtWidgets.QTableWidgetItem(result.year)
 			)
+			# show runtime in minutes if available
+			runtime_text = ""
+			if result.runtime and result.runtime > 0:
+				runtime_text = str(result.runtime)
+			self._results_table.setItem(
+				row, 2,
+				PySide6.QtWidgets.QTableWidgetItem(runtime_text)
+			)
 			# show match confidence as percentage with color coding
 			conf = result.match_confidence
 			if conf > 0:
@@ -808,7 +835,7 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 					PySide6.QtGui.QColor(255, 200, 200)
 				)
 				conf_item.setForeground(dark_text)
-			self._results_table.setItem(row, 2, conf_item)
+			self._results_table.setItem(row, 3, conf_item)
 		self._results_table.resizeColumnsToContents()
 		# auto-select first result to populate preview
 		if results:
@@ -832,11 +859,11 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 
 	#============================================
 	def _accept_selection(self) -> None:
-		"""Accept the selected result and scrape synchronously.
+		"""Accept the selected result and scrape in background.
 
-		The scrape runs on the main thread using QEventLoop-based
-		fetch_html, so the UI stays responsive during page loads.
-		In batch mode, advances to the next movie after scrape completes.
+		Submits the scrape as a background job so the UI stays
+		responsive. In batch mode, advances to the next movie
+		after the scrape callback fires.
 		"""
 		row = self._results_table.currentRow()
 		if row < 0 or row >= len(self._results):
@@ -858,30 +885,56 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		self._pending_scrape_kwargs = dict(scrape_kwargs)
 		# mark as pending (not yet confirmed by scrape callback)
 		self._batch_results[movie_to_scrape.path] = "pending"
-		# scrape synchronously on the main thread
+		# run scrape in background worker
 		self._start_scrape_worker(movie_to_scrape, scrape_kwargs)
-		# in batch mode, advance after the synchronous scrape
+		# in batch mode, advance immediately (scrape continues in background)
 		if self._batch_mode:
 			self._advance_to_next()
 
 	#============================================
 	def _start_scrape_worker(self, movie, scrape_kwargs: dict) -> None:
-		"""Run scrape synchronously on the main thread.
+		"""Run scrape in a background worker thread.
 
-		The IMDB browser transport uses QEventLoop when called from the
-		main thread, so the UI stays responsive during page loads.
+		Submits the scrape as a named job through TaskAPI (if available)
+		so it appears in the status bar jobs indicator. Falls back to
+		a plain Worker on the dialog's thread pool otherwise.
 		"""
 		movie_path = movie.path
+		movie_title = movie.title or "Unknown"
 		# disable button and show wait cursor during scrape
 		self._ok_btn.setEnabled(False)
 		self._ok_btn.setText("Saving...")
 		self.setCursor(PySide6.QtCore.Qt.CursorShape.WaitCursor)
-		try:
-			self._api.scrape_movie(movie, **scrape_kwargs)
-			self._on_scrape_done(None, movie_path)
-		except Exception:
-			error_text = traceback.format_exc()
-			self._on_scrape_error(error_text, movie_path)
+		if self._task_api is not None:
+			# submit through TaskAPI for job tracking in status bar
+			job_name = f"Scraping {movie_title}"
+			task_id = self._task_api.submit_job(
+				job_name, self._api.scrape_movie, movie,
+				**scrape_kwargs,
+			)
+			# connect TaskAPI signals filtered by this task_id
+			self._task_api.task_finished.connect(
+				lambda tid, res, mp=movie_path, expected=task_id:
+				self._on_scrape_done(res, mp) if tid == expected else None
+			)
+			self._task_api.task_error.connect(
+				lambda tid, err, mp=movie_path, expected=task_id:
+				self._on_scrape_error(err, mp) if tid == expected else None
+			)
+		else:
+			# fallback: run on the dialog's own thread pool
+			worker = moviemanager.ui.workers.Worker(
+				self._api.scrape_movie, movie, **scrape_kwargs
+			)
+			worker.signals.finished.connect(
+				lambda res, mp=movie_path:
+				self._on_scrape_done(res, mp)
+			)
+			worker.signals.error.connect(
+				lambda err, mp=movie_path:
+				self._on_scrape_error(err, mp)
+			)
+			self._pool.start(worker)
 
 	#============================================
 	def _on_scrape_done(self, result, movie_path: str = "") -> None:
@@ -1067,8 +1120,10 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		# run search in background
 		title = next_movie.title
 		year = next_movie.year or ""
+		runtime = getattr(next_movie, "runtime", 0) or 0
 		worker = moviemanager.ui.workers.Worker(
-			self._api.search_movie, title, year
+			self._api.search_movie, title, year,
+			query_runtime=runtime,
 		)
 		# capture movie path for the lambda closure
 		path = next_movie.path

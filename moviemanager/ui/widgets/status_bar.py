@@ -11,9 +11,21 @@ class StatusBar(PySide6.QtWidgets.QStatusBar):
 
 	# emitted when the user clicks the Cancel button
 	cancel_requested = PySide6.QtCore.Signal()
+	# emitted when the user clicks the Jobs button
+	jobs_clicked = PySide6.QtCore.Signal()
 
 	def __init__(self, parent=None):
 		super().__init__(parent)
+		# jobs button (permanent widget on the right)
+		self._jobs_btn = PySide6.QtWidgets.QPushButton("Jobs: 0")
+		self._jobs_btn.setFlat(True)
+		self._jobs_btn.setMaximumWidth(90)
+		# small font, no border by default
+		self._jobs_btn.setStyleSheet(
+			"QPushButton { font-size: 11px; padding: 2px 6px; }"
+		)
+		self._jobs_btn.clicked.connect(self.jobs_clicked.emit)
+		self.addPermanentWidget(self._jobs_btn)
 		# movie count label
 		self._count_label = PySide6.QtWidgets.QLabel("No movies loaded")
 		self.addPermanentWidget(self._count_label)
@@ -28,6 +40,19 @@ class StatusBar(PySide6.QtWidgets.QStatusBar):
 		self._progress.setMaximumWidth(200)
 		self._progress.hide()
 		self.addWidget(self._progress)
+
+	#============================================
+	def update_job_count(self, active: int) -> None:
+		"""Update the Jobs button text and style.
+
+		Args:
+			active: Number of currently running jobs.
+		"""
+		self._jobs_btn.setText(f"Jobs: {active}")
+		# bold text when jobs are active
+		font = self._jobs_btn.font()
+		font.setBold(active > 0)
+		self._jobs_btn.setFont(font)
 
 	#============================================
 	def set_movie_count(self, total: int, scraped: int) -> None:

@@ -291,6 +291,7 @@ class MovieAPI:
 	def search_movie(
 		self, title: str, year: str = "",
 		query_title: str = "", query_year: str = "",
+		query_runtime: int = 0,
 	) -> list:
 		"""Search for movie metadata by title.
 
@@ -302,6 +303,7 @@ class MovieAPI:
 			year: Optional release year to narrow results.
 			query_title: Original title for scoring (defaults to title).
 			query_year: Original year for scoring (defaults to year).
+			query_runtime: Runtime in minutes from local movie (0 if unknown).
 
 		Returns:
 			List of SearchResult instances sorted by match confidence.
@@ -343,6 +345,8 @@ class MovieAPI:
 					r.title, r.year,
 					result_original_title=r.original_title,
 					result_score=r.score,
+					query_runtime=query_runtime,
+					result_runtime=r.runtime,
 				)
 			)
 		# sort by confidence descending (best match first)
@@ -380,7 +384,8 @@ class MovieAPI:
 
 	#============================================
 	def search_movie_with_fallback(
-		self, title: str, year: str = ""
+		self, title: str, year: str = "",
+		query_runtime: int = 0,
 	) -> tuple:
 		"""Search with fallback strategies when initial search fails.
 
@@ -392,30 +397,39 @@ class MovieAPI:
 		Args:
 			title: Movie title to search for.
 			year: Optional release year to narrow results.
+			query_runtime: Runtime in minutes from local movie (0 if unknown).
 
 		Returns:
 			tuple: (results list, strategy description string).
 		"""
 		# strategy 1: title + year
 		if year:
-			results = self.search_movie(title, year)
+			results = self.search_movie(
+				title, year, query_runtime=query_runtime
+			)
 			if results:
 				strategy = f"title + year: {title} ({year})"
 				return (results, strategy)
 			# strategy 2: title only (drop year)
-			results = self.search_movie(title)
+			results = self.search_movie(
+				title, query_runtime=query_runtime
+			)
 			if results:
 				strategy = f"title only: {title}"
 				return (results, strategy)
 		else:
-			results = self.search_movie(title)
+			results = self.search_movie(
+				title, query_runtime=query_runtime
+			)
 			if results:
 				strategy = f"title: {title}"
 				return (results, strategy)
 		# strategy 3: simplified title
 		simplified = _simplify_title(title)
 		if simplified != title.lower().strip():
-			results = self.search_movie(simplified)
+			results = self.search_movie(
+				simplified, query_runtime=query_runtime
+			)
 			if results:
 				strategy = f"simplified: {simplified}"
 				return (results, strategy)

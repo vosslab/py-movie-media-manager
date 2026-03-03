@@ -78,12 +78,22 @@ All supported XML tags inside the `<movie>` root element.
 | fanart/thumb | text | Fanart image URL | - | Supported |
 | parental_guide | container | Advisory severity levels | No | Supported (custom) |
 | parental_guide/advisory | text with @category | Severity by category | Yes | Supported (custom) |
+| fileinfo | container | Technical file information wrapper | No | Supported |
+| fileinfo/streamdetails | container | Stream details container | - | Supported |
+| fileinfo/streamdetails/video | container | Video stream info | - | Supported |
+| fileinfo/streamdetails/video/codec | text | Video codec (e.g. h264, hevc) | - | Supported |
+| fileinfo/streamdetails/video/width | integer (as text) | Horizontal resolution in pixels | - | Supported |
+| fileinfo/streamdetails/video/height | integer (as text) | Vertical resolution in pixels | - | Supported |
+| fileinfo/streamdetails/video/aspect | float (as text) | Display aspect ratio | - | Supported |
+| fileinfo/streamdetails/video/durationinseconds | integer (as text) | Duration in seconds | - | Supported |
+| fileinfo/streamdetails/audio | container | Audio stream info | - | Supported |
+| fileinfo/streamdetails/audio/codec | text | Audio codec (e.g. aac, ac3) | - | Supported |
+| fileinfo/streamdetails/audio/channels | text | Channel layout (e.g. 5.1, 2.0) | - | Supported |
 
 Tags not yet supported by this project:
 
 - `uniqueid` -- modern Kodi v17+ style external ID (with `type` attribute)
 - `ratings` -- wrapper element for multiple rating sources
-- `fileinfo` -- technical file information container
 - `source` -- media source descriptor
 - `original_filename` -- original file name before rename
 
@@ -164,6 +174,21 @@ A complete example using a fictional movie with all common tags populated.
 	<dateadded>2024-07-01 12:00:00</dateadded>
 	<lastplayed>2024-08-15 20:30:00</lastplayed>
 	<languages>English, Spanish</languages>
+	<fileinfo>
+		<streamdetails>
+			<video>
+				<codec>h264</codec>
+				<aspect>2.390</aspect>
+				<width>1920</width>
+				<height>804</height>
+				<durationinseconds>7620</durationinseconds>
+			</video>
+			<audio>
+				<codec>ac3</codec>
+				<channels>5.1</channels>
+			</audio>
+		</streamdetails>
+	</fileinfo>
 </movie>
 ```
 

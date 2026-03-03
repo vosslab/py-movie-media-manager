@@ -36,20 +36,26 @@ DURATION_COLUMN = 4
 
 #============================================
 def _get_duration_minutes(movie) -> int:
-	"""Return the video file duration in minutes for the given movie.
+	"""Return the movie duration in minutes.
+
+	Prefers actual file duration from media probe, falls back to
+	NFO/scraped runtime metadata.
 
 	Args:
 		movie: Movie object with media_files list.
 
 	Returns:
-		Duration in whole minutes, or 0 if no video file found.
+		Duration in whole minutes, or 0 if unavailable.
 	"""
 	vf = movie.video_file
-	if vf is None or vf.duration <= 0:
-		return 0
-	# convert seconds to minutes, rounding to nearest
-	minutes = round(vf.duration / 60)
-	return minutes
+	if vf is not None and vf.duration > 0:
+		# prefer actual file duration from media probe
+		minutes = round(vf.duration / 60)
+		return minutes
+	# fall back to NFO/scraped runtime metadata
+	if movie.runtime > 0:
+		return movie.runtime
+	return 0
 
 
 #============================================

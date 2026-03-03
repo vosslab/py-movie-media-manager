@@ -269,6 +269,18 @@ def _merge_nfo_into_movie(
 		movie.watched = nfo_movie.watched
 	if nfo_movie.date_added:
 		movie.date_added = nfo_movie.date_added
+	# populate video MediaFile from cached fileinfo if available
+	fileinfo = getattr(nfo_movie, "_fileinfo", None)
+	if fileinfo:
+		vf = movie.video_file
+		if vf is not None and not vf.video_codec:
+			vf.video_codec = fileinfo.get("video_codec", "")
+			vf.video_width = fileinfo.get("video_width", 0)
+			vf.video_height = fileinfo.get("video_height", 0)
+			vf.aspect_ratio = fileinfo.get("aspect_ratio", 0.0)
+			vf.duration = fileinfo.get("duration_seconds", 0)
+			vf.audio_codec = fileinfo.get("audio_codec", "")
+			vf.audio_channels = fileinfo.get("audio_channels", "")
 	# mark as scraped if NFO provided external IDs
 	if movie.imdb_id or movie.tmdb_id:
 		movie.scraped = True

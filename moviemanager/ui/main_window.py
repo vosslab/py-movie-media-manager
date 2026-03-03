@@ -14,7 +14,9 @@ import PySide6.QtCore
 import moviemanager.api.movie_api
 import moviemanager.core.media_probe
 import moviemanager.core.settings
+import moviemanager.ui.task_api
 import moviemanager.ui.dialogs.download_dialog
+import moviemanager.ui.dialogs.jobs_dialog
 import moviemanager.ui.dialogs.movie_chooser
 import moviemanager.ui.dialogs.movie_editor
 import moviemanager.ui.dialogs.rename_preview
@@ -58,16 +60,28 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._movie_panel.checked_changed.connect(
 			self._on_checked_changed
 		)
+		# shared task API for background job tracking
+		self._task_api = moviemanager.ui.task_api.TaskAPI(
+			max_workers=2, parent=self
+		)
+		# jobs dialog (created on demand, reused)
+		self._jobs_dialog = None
 		# status bar
 		self._status = moviemanager.ui.widgets.status_bar.StatusBar()
 		self._status.cancel_requested.connect(self._cancel_operation)
+		# connect jobs button to show jobs dialog
+		self._status.jobs_clicked.connect(self._show_jobs_dialog)
+		# update jobs count when job list changes
+		self._task_api.job_list_changed.connect(
+			self._update_jobs_count
+		)
 		self.setStatusBar(self._status)
 		# track the active worker for cancellation
 		self._active_worker = None
 		# track background download worker separately
 		self._download_worker = None
-		# track background media probe worker
-		self._probe_worker = None
+		# track background media probe task ID
+		self._probe_task_id = None
 		# menu bar
 		self._setup_menus()
 		# toolbar
@@ -322,24 +336,30 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 
 	#============================================
 	def _start_media_probe(self) -> None:
-		"""Launch background worker to probe video files for codec metadata.
+		"""Launch background job to probe video files for codec metadata.
 
-		Runs pymediainfo on each video file after the fast scan completes,
-		so movies appear in the table immediately and codec/resolution
-		fields populate in the background.
+		Uses TaskAPI so the probe appears in the Jobs dialog with
+		progress tracking. Movies appear in the table immediately
+		after scan; codec/resolution fields populate in the background.
 		"""
 		movies = self._api.get_movies()
 		if not movies:
 			return
-		worker = moviemanager.ui.workers.Worker(
+		self._probe_task_id = self._task_api.submit_job(
+			"Media probe",
 			moviemanager.core.media_probe.probe_movie_list,
 			movies,
 			progress_callback=self._on_probe_progress_callback,
 		)
-		worker.signals.progress.connect(self._on_probe_progress)
-		worker.signals.finished.connect(self._on_probe_done)
-		self._probe_worker = worker
-		self._pool.start(worker)
+		self._task_api.task_progress.connect(
+			self._on_probe_task_progress
+		)
+		self._task_api.task_finished.connect(
+			self._on_probe_task_finished
+		)
+		self._task_api.task_error.connect(
+			self._on_probe_task_error
+		)
 
 	#============================================
 	def _on_probe_progress_callback(
@@ -347,28 +367,54 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 	) -> None:
 		"""Progress callback invoked from probe worker thread.
 
-		Emits progress signal to marshal GUI update to the main thread.
+		Emits progress signal via the TaskAPI worker to marshal
+		GUI update to the main thread.
 		"""
-		if self._probe_worker:
-			self._probe_worker.signals.progress.emit(
-				current, total, message,
-			)
+		worker = self._task_api.get_worker(self._probe_task_id)
+		if worker:
+			worker.signals.progress.emit(current, total, message)
 
 	#============================================
-	def _on_probe_progress(
-		self, current: int, total: int, message: str,
+	def _on_probe_task_progress(
+		self, task_id: int, current: int, total: int, message: str,
 	) -> None:
-		"""Handle probe progress updates on the main thread."""
+		"""Handle probe progress updates on the main thread.
+
+		Refreshes the table every 5 files so codec/duration fields
+		appear progressively as files are probed.
+		"""
+		if task_id != self._probe_task_id:
+			return
 		self._status.show_progress(current, total, message)
+		# refresh table periodically so new values appear live
+		if current % 5 == 0 or current == total:
+			self._movie_panel.refresh_data()
+			# force UI repaint so updated cells are visible immediately
+			PySide6.QtWidgets.QApplication.processEvents()
 
 	#============================================
-	def _on_probe_done(self, result) -> None:
+	def _on_probe_task_finished(self, task_id: int, result) -> None:
 		"""Handle probe completion: refresh table and clear status."""
-		self._probe_worker = None
+		if task_id != self._probe_task_id:
+			return
+		self._probe_task_id = None
 		self._status.hide_progress()
 		# refresh table cells with newly populated codec fields
 		self._movie_panel.refresh_data()
 		self._status.showMessage("Media probe complete", 3000)
+
+	#============================================
+	def _on_probe_task_error(
+		self, task_id: int, error_text: str,
+	) -> None:
+		"""Handle probe error: clear status and show error message."""
+		if task_id != self._probe_task_id:
+			return
+		self._probe_task_id = None
+		self._status.hide_progress()
+		# show truncated error in status bar
+		msg = f"Media probe error: {error_text[:80]}"
+		self._status.showMessage(msg, 5000)
 
 	#============================================
 	def _on_checked_changed(self, checked: int, total: int) -> None:
@@ -478,6 +524,7 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			dialog = moviemanager.ui.dialogs.movie_chooser.MovieChooserDialog(
 				checked_movies[0], self._api, self,
 				movie_list=checked_movies,
+				task_api=self._task_api,
 			)
 		else:
 			# single movie mode
@@ -489,7 +536,8 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 				)
 				return
 			dialog = moviemanager.ui.dialogs.movie_chooser.MovieChooserDialog(
-				movie, self._api, self
+				movie, self._api, self,
+				task_api=self._task_api,
 			)
 		if dialog.exec() == PySide6.QtWidgets.QDialog.DialogCode.Accepted:
 			# refresh table data in-place (preserves selection)
@@ -837,6 +885,23 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self.unsetCursor()
 		self._status.hide_progress()
 		self._status.showMessage("Operation cancelled", 3000)
+
+	#============================================
+	def _update_jobs_count(self) -> None:
+		"""Update the status bar jobs button with active job count."""
+		self._status.update_job_count(self._task_api.active_count)
+
+	#============================================
+	def _show_jobs_dialog(self) -> None:
+		"""Show the background jobs popup dialog."""
+		if self._jobs_dialog is None:
+			self._jobs_dialog = (
+				moviemanager.ui.dialogs.jobs_dialog.JobsDialog(
+					self._task_api, self
+				)
+			)
+		self._jobs_dialog.show()
+		self._jobs_dialog.raise_()
 
 	#============================================
 	def _focus_search(self) -> None:
@@ -1253,7 +1318,19 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 
 	#============================================
 	def closeEvent(self, event) -> None:
-		"""Save window state on close, warn if downloads running."""
+		"""Save window state on close, warn if jobs or downloads running."""
+		# warn if background scrape jobs are still running
+		if self._task_api.active_count > 0:
+			reply = PySide6.QtWidgets.QMessageBox.question(
+				self, "Jobs In Progress",
+				f"{self._task_api.active_count} background job(s) "
+				"still running.\nQuit anyway?",
+				PySide6.QtWidgets.QMessageBox.StandardButton.Yes
+				| PySide6.QtWidgets.QMessageBox.StandardButton.No,
+			)
+			if reply != PySide6.QtWidgets.QMessageBox.StandardButton.Yes:
+				event.ignore()
+				return
 		# warn if background downloads are still running
 		if self._download_worker:
 			reply = PySide6.QtWidgets.QMessageBox.question(
@@ -1273,6 +1350,8 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		settings.setValue("windowState", self.saveState())
 		# save table column widths and sort state
 		self._movie_panel.save_table_state(settings)
+		# shut down background job manager
+		self._task_api.shutdown()
 		super().closeEvent(event)
 
 	#============================================

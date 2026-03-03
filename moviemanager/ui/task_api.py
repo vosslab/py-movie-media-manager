@@ -1,6 +1,7 @@
 """Qt-integrated background task manager using QThreadPool."""
 
 # Standard Library
+import time
 import threading
 
 # PIP3 modules
@@ -18,12 +19,18 @@ class TaskAPI(PySide6.QtCore.QObject):
 	interface for submitting and querying background work. Emits Qt
 	signals for progress, completion, and errors so the UI can connect
 	directly.
+
+	Also provides a Calibre-style job tracking layer via submit_job()
+	that stores human-readable job names and statuses for display in
+	a status bar indicator and jobs popup.
 	"""
 
 	# signals for UI connection
 	task_finished = PySide6.QtCore.Signal(int, object)
 	task_error = PySide6.QtCore.Signal(int, str)
 	task_progress = PySide6.QtCore.Signal(int, int, int, str)
+	# emitted when any job starts, finishes, or errors
+	job_list_changed = PySide6.QtCore.Signal()
 
 	def __init__(self, max_workers: int = 2, parent=None):
 		"""Initialize the task manager.
@@ -39,6 +46,72 @@ class TaskAPI(PySide6.QtCore.QObject):
 		self._results: dict = {}
 		self._lock = threading.Lock()
 		self._next_id: int = 0
+		# job metadata: task_id -> {name, status, error_text, submitted_at}
+		self._jobs: dict = {}
+
+	#============================================
+	def submit_job(self, name: str, fn, *args, **kwargs) -> int:
+		"""Submit a named job for background execution with UI tracking.
+
+		Like submit(), but stores a human-readable name and status
+		so the jobs popup can display progress.
+
+		Args:
+			name: Display name for the job (e.g. "Scraping The Matrix").
+			fn: Callable to execute.
+			*args: Positional arguments for the callable.
+			**kwargs: Keyword arguments for the callable.
+
+		Returns:
+			Integer task ID for tracking the submitted job.
+		"""
+		task_id = self.submit(fn, *args, **kwargs)
+		# store job metadata under the task_id
+		with self._lock:
+			self._jobs[task_id] = {
+				"name": name,
+				"status": "running",
+				"error_text": "",
+				"submitted_at": time.time(),
+			}
+		self.job_list_changed.emit()
+		return task_id
+
+	#============================================
+	@property
+	def active_count(self) -> int:
+		"""Return the number of currently running jobs."""
+		with self._lock:
+			count = sum(
+				1 for j in self._jobs.values()
+				if j["status"] == "running"
+			)
+		return count
+
+	#============================================
+	@property
+	def all_jobs(self) -> list:
+		"""Return job metadata list sorted newest first."""
+		with self._lock:
+			jobs = [
+				dict(j, task_id=tid)
+				for tid, j in self._jobs.items()
+			]
+		# sort by submitted_at descending (newest first)
+		jobs.sort(key=lambda j: j["submitted_at"], reverse=True)
+		return jobs
+
+	#============================================
+	def clear_completed(self) -> None:
+		"""Remove all finished (done/error) jobs from the list."""
+		with self._lock:
+			done_ids = [
+				tid for tid, j in self._jobs.items()
+				if j["status"] != "running"
+			]
+			for tid in done_ids:
+				del self._jobs[tid]
+		self.job_list_changed.emit()
 
 	#============================================
 	def submit(self, fn, *args, **kwargs) -> int:
@@ -173,7 +246,13 @@ class TaskAPI(PySide6.QtCore.QObject):
 		"""
 		with self._lock:
 			self._results[task_id] = result
+			# update job metadata if this was a named job
+			if task_id in self._jobs:
+				self._jobs[task_id]["status"] = "done"
 		self.task_finished.emit(task_id, result)
+		# emit job list change if this was a tracked job
+		if task_id in self._jobs:
+			self.job_list_changed.emit()
 
 	#============================================
 	def _on_error(self, task_id: int, error_text: str) -> None:
@@ -185,7 +264,14 @@ class TaskAPI(PySide6.QtCore.QObject):
 		"""
 		with self._lock:
 			self._results[task_id] = None
+			# update job metadata if this was a named job
+			if task_id in self._jobs:
+				self._jobs[task_id]["status"] = "error"
+				self._jobs[task_id]["error_text"] = error_text
 		self.task_error.emit(task_id, error_text)
+		# emit job list change if this was a tracked job
+		if task_id in self._jobs:
+			self.job_list_changed.emit()
 
 	#============================================
 	def _on_progress(self, task_id: int, current: int, total: int, message: str) -> None:
