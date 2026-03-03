@@ -38,6 +38,13 @@ class Settings:
 	file_template: str = "{title}-{year}"
 	# replace spaces with underscores in filenames for shell safety
 	spaces_to_underscores: bool = True
+	# separator between appended media tokens (hyphen, dot, or underscore)
+	media_separator: str = "-"
+	# media token checkboxes for renamer
+	rename_resolution: bool = False
+	rename_vcodec: bool = False
+	rename_acodec: bool = False
+	rename_channels: bool = False
 
 	# scanner options
 	skip_hidden_dirs: bool = True
@@ -62,7 +69,7 @@ class Settings:
 	# table column visibility (checkbox col 0 is always visible)
 	visible_columns: list = dataclasses.field(
 		default_factory=lambda: [
-			"Title", "Year", "Rating", "Mtch", "Org", "Art", "Sub", "Trl",
+			"Title", "Year", "Rating", "Min", "M", "O", "A", "S", "T",
 			"S&N", "V&G", "Prof", "A&D", "F&I",
 		]
 	)

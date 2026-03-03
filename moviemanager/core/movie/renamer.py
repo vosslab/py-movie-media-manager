@@ -36,6 +36,20 @@ def expand_template(
 	# determine first letter of title
 	first_letter = movie.title[0].upper() if movie.title else ""
 
+	# find the first video media file for media tokens
+	video_type = moviemanager.core.constants.MediaFileType.VIDEO
+	video_mf = None
+	for mf in movie.media_files:
+		if mf.file_type == video_type:
+			video_mf = mf
+			break
+
+	# extract media token values from the video file
+	resolution = video_mf.resolution_label if video_mf else ""
+	vcodec = video_mf.video_codec if video_mf else ""
+	acodec = video_mf.audio_codec if video_mf else ""
+	channels = video_mf.audio_channels if video_mf else ""
+
 	# build the replacement mapping
 	token_map = {
 		"title": movie.title,
@@ -49,6 +63,13 @@ def expand_template(
 		"director": movie.director,
 		"rating": str(movie.rating),
 		"first_letter": first_letter,
+		# media tokens
+		"resolution": resolution,
+		"vcodec": vcodec,
+		"codec": vcodec,
+		"acodec": acodec,
+		"audio": acodec,
+		"channels": channels,
 	}
 
 	# replace each token in the template
@@ -77,6 +98,41 @@ def expand_template(
 		# strip leading/trailing underscores
 		result = result.strip("_")
 	return result
+
+
+#============================================
+def build_file_template(
+	settings: "moviemanager.core.settings.Settings",
+) -> str:
+	"""Assemble a file template from base template plus enabled media tokens.
+
+	Reads the base file_template from settings and appends media tokens
+	(resolution, vcodec, acodec, channels) if their corresponding
+	checkboxes are enabled. Tokens are joined with the configured separator.
+
+	Args:
+		settings: Settings dataclass with template and checkbox fields.
+
+	Returns:
+		Assembled template string, e.g. "{title}-{year}-{resolution}-{vcodec}".
+	"""
+	template = settings.file_template
+	sep = settings.media_separator
+	# append each enabled media token
+	token_list = []
+	if settings.rename_resolution:
+		token_list.append("{resolution}")
+	if settings.rename_vcodec:
+		token_list.append("{vcodec}")
+	if settings.rename_acodec:
+		token_list.append("{acodec}")
+	if settings.rename_channels:
+		token_list.append("{channels}")
+	# join tokens with separator and append to base template
+	if token_list:
+		suffix = sep.join(token_list)
+		template = template + sep + suffix
+	return template
 
 
 #============================================

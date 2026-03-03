@@ -1,6 +1,7 @@
 """Application settings dialog."""
 
 # Standard Library
+import re
 import webbrowser
 
 # PIP3 modules
@@ -153,7 +154,7 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		# help text for file template variables (#12)
 		file_help = PySide6.QtWidgets.QLabel(
 			"Variables: {title}, {year}, {rating}, "
-			"{resolution}, {codec}, {audio}"
+			"{certification}, {genre}"
 		)
 		# use palette-aware styling instead of hardcoded colors (#23)
 		file_help_font = file_help.font()
@@ -166,6 +167,31 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		)
 		file_help.setWordWrap(True)
 		rename_layout.addRow("", file_help)
+		# separator combo for media tokens
+		self._separator_combo = PySide6.QtWidgets.QComboBox()
+		self._separator_combo.addItem("Hyphen (-)", "-")
+		self._separator_combo.addItem("Dot (.)", ".")
+		self._separator_combo.addItem("Underscore (_)", "_")
+		rename_layout.addRow("Token Separator:", self._separator_combo)
+		# media token checkboxes
+		media_label = PySide6.QtWidgets.QLabel("Append Media Tokens:")
+		rename_layout.addRow(media_label)
+		self._res_check = PySide6.QtWidgets.QCheckBox(
+			"Resolution (1080p, 720p, 4K)"
+		)
+		rename_layout.addRow("", self._res_check)
+		self._vcodec_check = PySide6.QtWidgets.QCheckBox(
+			"Video Codec (h264, hevc)"
+		)
+		rename_layout.addRow("", self._vcodec_check)
+		self._acodec_check = PySide6.QtWidgets.QCheckBox(
+			"Audio Codec (aac, ac3, dts)"
+		)
+		rename_layout.addRow("", self._acodec_check)
+		self._channels_check = PySide6.QtWidgets.QCheckBox(
+			"Audio Channels (5.1, 7.1)"
+		)
+		rename_layout.addRow("", self._channels_check)
 		# shell-safe naming option
 		self._spaces_check = PySide6.QtWidgets.QCheckBox(
 			"Replace spaces with underscores (shell-safe)"
@@ -185,7 +211,25 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		self._path_template_edit.textChanged.connect(
 			self._update_rename_preview
 		)
+		self._file_template_edit.textChanged.connect(
+			self._update_rename_preview
+		)
 		self._spaces_check.stateChanged.connect(
+			self._update_rename_preview
+		)
+		self._separator_combo.currentIndexChanged.connect(
+			self._update_rename_preview
+		)
+		self._res_check.stateChanged.connect(
+			self._update_rename_preview
+		)
+		self._vcodec_check.stateChanged.connect(
+			self._update_rename_preview
+		)
+		self._acodec_check.stateChanged.connect(
+			self._update_rename_preview
+		)
+		self._channels_check.stateChanged.connect(
 			self._update_rename_preview
 		)
 		tabs.addTab(rename_widget, "Renamer")
@@ -299,6 +343,15 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		self._path_template_edit.setText(s.path_template)
 		self._file_template_edit.setText(s.file_template)
 		self._spaces_check.setChecked(s.spaces_to_underscores)
+		# separator combo
+		sep_index = self._separator_combo.findData(s.media_separator)
+		if sep_index >= 0:
+			self._separator_combo.setCurrentIndex(sep_index)
+		# media token checkboxes
+		self._res_check.setChecked(s.rename_resolution)
+		self._vcodec_check.setChecked(s.rename_vcodec)
+		self._acodec_check.setChecked(s.rename_acodec)
+		self._channels_check.setChecked(s.rename_channels)
 		# show initial preview
 		self._update_rename_preview()
 		self._poster_check.setChecked(s.download_poster)
@@ -335,6 +388,11 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		s.path_template = self._path_template_edit.text()
 		s.file_template = self._file_template_edit.text()
 		s.spaces_to_underscores = self._spaces_check.isChecked()
+		s.media_separator = self._separator_combo.currentData()
+		s.rename_resolution = self._res_check.isChecked()
+		s.rename_vcodec = self._vcodec_check.isChecked()
+		s.rename_acodec = self._acodec_check.isChecked()
+		s.rename_channels = self._channels_check.isChecked()
 		s.download_poster = self._poster_check.isChecked()
 		s.download_fanart = self._fanart_check.isChecked()
 		s.download_banner = self._banner_check.isChecked()
@@ -350,26 +408,74 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 
 	#============================================
 	def _update_rename_preview(self) -> None:
-		"""Update the live preview label with example folder name."""
-		template = self._path_template_edit.text()
-		if not template:
+		"""Update the live preview label with example folder and file name."""
+		path_tmpl = self._path_template_edit.text()
+		file_tmpl = self._file_template_edit.text()
+		if not path_tmpl and not file_tmpl:
 			self._rename_preview.setText("")
 			return
-		# substitute example values into template
-		example = template.replace("{title}", "The Matrix")
-		example = example.replace("{year}", "1999")
-		example = example.replace("{rating}", "8.7")
-		example = example.replace("{certification}", "R")
-		example = example.replace("{genre}", "Action")
-		example = example.replace("{director}", "Wachowski")
+
+		# example token values for preview
+		example_tokens = {
+			"{title}": "The Matrix",
+			"{year}": "1999",
+			"{rating}": "8.7",
+			"{certification}": "R",
+			"{genre}": "Action",
+			"{director}": "Wachowski",
+		}
+		# media token example values
+		media_examples = {
+			"{resolution}": "1080p",
+			"{vcodec}": "h264",
+			"{codec}": "h264",
+			"{acodec}": "aac",
+			"{audio}": "aac",
+			"{channels}": "5.1",
+		}
+
+		# build the file portion with appended media tokens
+		sep = self._separator_combo.currentData() or "-"
+		file_part = file_tmpl
+		token_list = []
+		if self._res_check.isChecked():
+			token_list.append("{resolution}")
+		if self._vcodec_check.isChecked():
+			token_list.append("{vcodec}")
+		if self._acodec_check.isChecked():
+			token_list.append("{acodec}")
+		if self._channels_check.isChecked():
+			token_list.append("{channels}")
+		if token_list:
+			suffix = sep.join(token_list)
+			file_part = file_part + sep + suffix
+
+		# substitute example values into path and file templates
+		path_example = path_tmpl
+		file_example = file_part
+		all_tokens = {}
+		all_tokens.update(example_tokens)
+		all_tokens.update(media_examples)
+		for token, value in all_tokens.items():
+			path_example = path_example.replace(token, value)
+			file_example = file_example.replace(token, value)
+
 		# apply spaces_to_underscores if checked
 		if self._spaces_check.isChecked():
-			import re
-			example = example.replace(" ", "_")
-			example = re.sub(r"[(){}\[\]&|;$*?~!#<>]", "", example)
-			example = re.sub(r"_{2,}", "_", example)
-			example = example.strip("_")
-		preview_text = f"Example: {example}/"
+			path_example = path_example.replace(" ", "_")
+			path_example = re.sub(
+				r"[(){}\[\]&|;$*?~!#<>]", "", path_example
+			)
+			path_example = re.sub(r"_{2,}", "_", path_example)
+			path_example = path_example.strip("_")
+			file_example = file_example.replace(" ", "_")
+			file_example = re.sub(
+				r"[(){}\[\]&|;$*?~!#<>]", "", file_example
+			)
+			file_example = re.sub(r"_{2,}", "_", file_example)
+			file_example = file_example.strip("_")
+
+		preview_text = f"Example: {path_example}/{file_example}.mkv"
 		self._rename_preview.setText(preview_text)
 
 	#============================================

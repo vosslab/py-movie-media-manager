@@ -2,7 +2,36 @@
 
 ## 2026-03-03
 
+### Behavior or Interface Changes
+- Reduced status and parental guide icon column widths from ~65px (ResizeToContents) to 36px (Fixed)
+  in `moviemanager/ui/movies/movie_panel.py`. Frees ~300px for the Title column.
+- Shortened status column headers from Mtch/Org/Art/Sub/Trl to single-character M/O/A/S/T in
+  `moviemanager/ui/movies/movie_table_model.py` to fit narrow fixed-width columns.
+- Updated default `visible_columns` in `moviemanager/core/settings.py` to match new single-character
+  header names.
+
 ### Additions and New Features
+- Added "Min" (duration in minutes) column to movie table, sourced from pymediainfo file duration.
+  Column is visible by default, sortable, and uses ResizeToContents mode
+  (`moviemanager/ui/movies/movie_table_model.py`, `moviemanager/core/media_probe.py`).
+- `probe_media_file()` now extracts `duration_seconds` from the General track in pymediainfo.
+  Scanner stores this value in `MediaFile.duration` (`moviemanager/core/movie/scanner.py`).
+
+- Created `moviemanager/core/media_probe.py` wrapping pymediainfo to extract video codec, audio
+  codec, resolution, and audio channels from video files. Normalizes codec names to short labels
+  (AVC -> h264, HEVC -> hevc, AAC -> aac, AC-3 -> ac3) and channel counts to labels (6 -> 5.1).
+- Scanner now calls `probe_media_file()` during scan to populate MediaFile codec/resolution fields
+  (`moviemanager/core/movie/scanner.py`).
+- Renamer `expand_template()` now supports media tokens: `{resolution}`, `{vcodec}`, `{acodec}`,
+  `{channels}`, plus aliases `{codec}` and `{audio}` (`moviemanager/core/movie/renamer.py`).
+- Added `build_file_template()` function to assemble file template from base pattern plus enabled
+  media token checkboxes with configurable separator (`moviemanager/core/movie/renamer.py`).
+- Added settings fields: `media_separator`, `rename_resolution`, `rename_vcodec`, `rename_acodec`,
+  `rename_channels` to Settings dataclass (`moviemanager/core/settings.py`).
+- Settings dialog Renamer tab now includes a Token Separator combo box (hyphen, dot, underscore)
+  and four media token checkboxes (Resolution, Video Codec, Audio Codec, Audio Channels). Live
+  preview shows both folder and file name with example media values
+  (`moviemanager/ui/dialogs/settings_dialog.py`).
 - Redesigned status columns from D(Data) N(NFO) A S T to M(Matched) O(Organized) A S T, reflecting
   the Match -> Organize -> Download workflow. Column 4 now maps to `movie.scraped`, column 5 to
   the new `movie.is_organized` property.
@@ -22,6 +51,9 @@
   correctly named).
 
 ### Fixes and Maintenance
+- Scanner now skips video files with "trailer" in the filename stem (e.g. `movie-trailer.mkv`,
+  `trailer.mp4`). Prevents trailers from appearing as standalone movie entries in the table
+  (`moviemanager/core/movie/scanner.py`).
 - Added common video/audio file extensions (`mp4`, `mkv`, `avi`, `mov`, `m4v`, `webm`, `wmv`,
   `mpg`, `mpeg`, `m2ts`, `vob`, `aac`, `flac`, `mp3`) and common release tags (`hybrid`, `yts`,
   `lt`) to the filename parser STOPWORDS list. Prevents file extensions from leaking into parsed

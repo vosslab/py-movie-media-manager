@@ -16,11 +16,12 @@ _COLUMN_DISPLAY_NAMES = {
 	"Title": "Title",
 	"Year": "Year",
 	"Rating": "Rating",
-	"Mtch": "Matched",
-	"Org": "Organized",
-	"Art": "Artwork",
-	"Sub": "Subtitles",
-	"Trl": "Trailer",
+	"Min": "Duration (minutes)",
+	"M": "Matched",
+	"O": "Organized",
+	"A": "Artwork",
+	"S": "Subtitles",
+	"T": "Trailer",
 	"S&N": "Sex & Nudity",
 	"V&G": "Violence & Gore",
 	"Prof": "Profanity",
@@ -178,19 +179,19 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 		header.setSectionResizeMode(
 			1, PySide6.QtWidgets.QHeaderView.ResizeMode.Stretch
 		)
-		# Year and Rating: fit to contents
-		header.setSectionResizeMode(
-			2, PySide6.QtWidgets.QHeaderView.ResizeMode.ResizeToContents
-		)
-		header.setSectionResizeMode(
-			3, PySide6.QtWidgets.QHeaderView.ResizeMode.ResizeToContents
-		)
-		# status icon columns 4-8 and PG columns 9-13: fit to contents
-		for col_idx in range(4, 14):
+		# Year, Rating, Min: fit to contents
+		for col_idx in (2, 3, 4):
 			header.setSectionResizeMode(
 				col_idx,
 				PySide6.QtWidgets.QHeaderView.ResizeMode.ResizeToContents,
 			)
+		# status icon columns 5-9 and PG columns 10-14: fixed narrow width
+		for col_idx in range(5, 15):
+			header.setSectionResizeMode(
+				col_idx,
+				PySide6.QtWidgets.QHeaderView.ResizeMode.Fixed,
+			)
+			header.resizeSection(col_idx, 36)
 		# right-click context menu on header for column chooser
 		header.setContextMenuPolicy(
 			PySide6.QtCore.Qt.ContextMenuPolicy.CustomContextMenu

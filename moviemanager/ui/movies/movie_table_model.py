@@ -6,29 +6,50 @@ import PySide6.QtGui
 
 
 # column 0 is the checkbox (empty header), then data columns
-COLUMNS = ["", "Title", "Year", "Rating", "Mtch", "Org", "Art", "Sub", "Trl",
+COLUMNS = ["", "Title", "Year", "Rating", "Min", "M", "O", "A", "S", "T",
 	"S&N", "V&G", "Prof", "A&D", "F&I"]
 
 # status column indices and their movie attribute + full label
 STATUS_COLUMNS = {
-	4: ("scraped", "Matched"),
-	5: ("is_organized", "Organized"),
-	6: ("has_poster", "Artwork"),
-	7: ("has_subtitle", "Subtitles"),
-	8: ("has_trailer", "Trailer"),
+	5: ("scraped", "Matched"),
+	6: ("is_organized", "Organized"),
+	7: ("has_poster", "Artwork"),
+	8: ("has_subtitle", "Subtitles"),
+	9: ("has_trailer", "Trailer"),
 }
 
 # parental guide column indices, full category name, and short header
 PG_COLUMNS = {
-	9:  ("Sex & Nudity", "SN"),
-	10: ("Violence & Gore", "VG"),
-	11: ("Profanity", "Pr"),
-	12: ("Alcohol, Drugs & Smoking", "AD"),
-	13: ("Frightening & Intense Scenes", "FI"),
+	10: ("Sex & Nudity", "SN"),
+	11: ("Violence & Gore", "VG"),
+	12: ("Profanity", "Pr"),
+	13: ("Alcohol, Drugs & Smoking", "AD"),
+	14: ("Frightening & Intense Scenes", "FI"),
 }
 
 # severity ordinal mapping for sorting parental guide columns
 SEVERITY_ORDER = {"None": 0, "Mild": 1, "Moderate": 2, "Severe": 3}
+
+# column index for the duration column
+DURATION_COLUMN = 4
+
+
+#============================================
+def _get_duration_minutes(movie) -> int:
+	"""Return the video file duration in minutes for the given movie.
+
+	Args:
+		movie: Movie object with media_files list.
+
+	Returns:
+		Duration in whole minutes, or 0 if no video file found.
+	"""
+	vf = movie.video_file
+	if vf is None or vf.duration <= 0:
+		return 0
+	# convert seconds to minutes, rounding to nearest
+	minutes = round(vf.duration / 60)
+	return minutes
 
 
 #============================================
@@ -163,6 +184,9 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 			key_func = lambda m: m.year.lower()
 		elif col == 3:
 			key_func = lambda m: float(m.rating) if m.rating else 0.0
+		elif col == 4:
+			# sort by duration in minutes from the video file
+			key_func = lambda m: _get_duration_minutes(m)
 		elif col in STATUS_COLUMNS:
 			attr_name = STATUS_COLUMNS[col][0]
 			key_func = lambda m, a=attr_name: getattr(m, a, False)
@@ -347,6 +371,12 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 				# show one decimal place for cleaner display
 				formatted = f"{float(movie.rating):.1f}"
 				return formatted
+			return ""
+		if col == DURATION_COLUMN:
+			# show file duration in minutes
+			minutes = _get_duration_minutes(movie)
+			if minutes > 0:
+				return str(minutes)
 			return ""
 		return None
 
