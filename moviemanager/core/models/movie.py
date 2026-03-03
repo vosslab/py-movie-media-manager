@@ -138,6 +138,11 @@ class Movie:
 	movie_set: moviemanager.core.models.movie_set.MovieSet | None = None
 	# preserve unknown NFO elements for round-trip
 	unknown_elements: list = dataclasses.field(default_factory=list)
+	# cached poster/trailer detection from scanner (avoids re-stat)
+	_has_poster_cache: bool | None = dataclasses.field(
+		default=None, repr=False)
+	_has_trailer_cache: bool | None = dataclasses.field(
+		default=None, repr=False)
 
 	#============================================
 	@property
@@ -197,10 +202,14 @@ class Movie:
 		"""Return whether a trailer video file exists in the movie directory.
 
 		Checks for any file with 'trailer' in the name and a video extension.
+		Uses cached result from scanner when available.
 
 		Returns:
 			True if a trailer file is found on disk.
 		"""
+		# use cached result from scanner when available
+		if self._has_trailer_cache is not None:
+			return self._has_trailer_cache
 		if not self.path or not os.path.isdir(self.path):
 			return False
 		video_exts = moviemanager.core.constants.VIDEO_EXTENSIONS
@@ -277,9 +286,14 @@ class Movie:
 	def has_poster(self) -> bool:
 		"""Return whether poster.jpg exists in the movie directory.
 
+		Uses cached result from scanner when available.
+
 		Returns:
 			True if poster.jpg is found on disk.
 		"""
+		# use cached result from scanner when available
+		if self._has_poster_cache is not None:
+			return self._has_poster_cache
 		if not self.path:
 			return False
 		poster_path = os.path.join(self.path, "poster.jpg")

@@ -3,6 +3,16 @@
 ## 2026-03-03
 
 ### Additions and New Features
+- Added `_has_poster_cache` and `_has_trailer_cache` fields to `Movie` dataclass.
+  Scanner sets these during `os.walk()` using the filenames list, so `has_poster`
+  and `has_trailer` properties skip filesystem re-stat when cached.
+- Added NFO timing breakdown to scanner summary line:
+  `[scan] 74 movies in 76 dirs, 2953ms (nfo=2400ms)`.
+- Moved badge counting (`check_organized` + `has_poster` + `has_trailer` loop)
+  to a background thread in `_finalize_scan`. Badge counts are computed off the
+  main thread and applied via `_apply_badge_counts` callback.
+- Reduced scan batch timer from 1000ms to 200ms so movies appear in the table
+  within ~200ms of discovery instead of ~1s.
 - Switched parental guide fetching from HTML scraping to the IMDB GraphQL API
   (`api.graphql.imdb.com`) via `curl_cffi`. The `__NEXT_DATA__` JSON on the
   parental guide page no longer contains severity data (IMDB moved it to

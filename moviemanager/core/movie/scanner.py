@@ -68,6 +68,7 @@ def scan_directory(
 	"""
 	movies = []
 	dirs_processed = 0
+	nfo_total_ms = 0.0
 	scan_start = time.monotonic()
 
 	for dirpath, dirnames, filenames in os.walk(root_path):
@@ -119,6 +120,10 @@ def scan_directory(
 		# detect artwork files using os.walk filenames to avoid stat calls
 		artwork = detect_artwork_files(dirpath, filenames=filenames)
 
+		# build lowercase set once per directory for poster/trailer cache
+		filename_lower_set = set(f.lower() for f in filenames)
+		video_exts = moviemanager.core.constants.VIDEO_EXTENSIONS
+
 		for vf in video_files:
 			# create a Movie object
 			movie = moviemanager.core.models.movie.Movie()
@@ -144,7 +149,9 @@ def scan_directory(
 				nfo_base, _ = os.path.splitext(nfo_f)
 				if nfo_base.lower() == vbase.lower():
 					nfo_path = os.path.join(dirpath, nfo_f)
+					nfo_t0 = time.monotonic()
 					nfo_movie = moviemanager.core.nfo.reader.read_nfo(nfo_path)
+					nfo_total_ms += (time.monotonic() - nfo_t0) * 1000
 					# merge NFO metadata into the movie
 					_merge_nfo_into_movie(movie, nfo_movie, nfo_path)
 					nfo_found = True
@@ -154,9 +161,11 @@ def scan_directory(
 			if not nfo_found and not is_multi:
 				movie_nfo_path = os.path.join(dirpath, "movie.nfo")
 				if os.path.isfile(movie_nfo_path):
+					nfo_t0 = time.monotonic()
 					nfo_movie = moviemanager.core.nfo.reader.read_nfo(
 						movie_nfo_path
 					)
+					nfo_total_ms += (time.monotonic() - nfo_t0) * 1000
 					_merge_nfo_into_movie(movie, nfo_movie, movie_nfo_path)
 					nfo_found = True
 
@@ -182,6 +191,13 @@ def scan_directory(
 			if "thumb" in artwork:
 				movie.thumb_url = artwork["thumb"]
 
+			# cache poster/trailer detection from filenames (no stat)
+			movie._has_poster_cache = "poster.jpg" in filename_lower_set
+			movie._has_trailer_cache = any(
+				"trailer" in f and os.path.splitext(f)[1].lower() in video_exts
+				for f in filename_lower_set
+			)
+
 			movies.append(movie)
 			# notify callback for incremental delivery
 			if movie_callback:
@@ -191,7 +207,7 @@ def scan_directory(
 	scan_ms = (time.monotonic() - scan_start) * 1000
 	print(
 		f"[scan] {len(movies)} movies in {dirs_processed} dirs, "
-		f"{scan_ms:.0f}ms"
+		f"{scan_ms:.0f}ms (nfo={nfo_total_ms:.0f}ms)"
 	)
 	return movies
 

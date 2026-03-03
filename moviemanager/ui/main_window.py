@@ -89,13 +89,14 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._probe_task_id = None
 		self._rename_task_id = None
 		self._rename_mode = None
+		self._badge_task_id = None
 		# batch buffer for incremental scan results
 		self._scan_batch_buffer = []
 		# throttle progress signals from the scanner thread
 		self._scan_progress_last_emit = 0.0
 		self._scan_batch_timer = PySide6.QtCore.QTimer(self)
-		# flush once per second so the event loop can process user input
-		self._scan_batch_timer.setInterval(1000)
+		# flush every 200ms so movies appear quickly in the table
+		self._scan_batch_timer.setInterval(200)
 		self._scan_batch_timer.timeout.connect(self._flush_scan_batch)
 		# menu bar
 		self._setup_menus()
@@ -456,10 +457,11 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._status.showMessage(
 			f"Scan complete: {total} movies found", 3000
 		)
-		# update toolbar badges with workflow counts
-		t0 = time.monotonic()
-		self._update_toolbar_badges()
-		badges_ms = (time.monotonic() - t0) * 1000
+		# update toolbar badges in a background thread
+		self._badge_task_id = self._task_api.submit(
+			self._compute_badge_counts,
+			self._api.get_movies(),
+		)
 		# launch background media probe for codec/resolution fields
 		self._start_media_probe()
 		# per-step and total timing
@@ -468,7 +470,7 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		print(
 			f"[scan] finalize {finalize_ms:.0f}ms "
 			f"(sort={sort_ms:.0f}, counts={counts_ms:.0f}, "
-			f"badges={badges_ms:.0f}), "
+			f"badges=bg), "
 			f"total {total_ms:.0f}ms"
 		)
 
@@ -564,6 +566,9 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			self._on_probe_task_finished(task_id, result)
 		elif task_id in self._download_task_ids:
 			self._on_download_job_done(task_id, result)
+		elif task_id == self._badge_task_id:
+			self._badge_task_id = None
+			self._apply_badge_counts(result)
 		elif task_id == self._rename_task_id:
 			self._rename_task_id = None
 			mode = self._rename_mode
@@ -651,6 +656,66 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 				if organized and not (m.has_poster and m.has_trailer):
 					incomplete += 1
 		# update button labels
+		if unmatched > 0:
+			self._match_btn.setText(f"1. Match ({unmatched})")
+		else:
+			self._match_btn.setText("1. Match")
+		if unorganized > 0:
+			self._organize_btn.setText(
+				f"2. Organize ({unorganized})"
+			)
+		else:
+			self._organize_btn.setText("2. Organize")
+		if incomplete > 0:
+			self._download_btn.setText(
+				f"3. Download ({incomplete})"
+			)
+		else:
+			self._download_btn.setText("3. Download")
+
+	#============================================
+	@staticmethod
+	def _compute_badge_counts(movies: list) -> tuple:
+		"""Count badge categories in a background thread.
+
+		Pure data work with no Qt calls. Returns counts for
+		unmatched, unorganized, and incomplete movies.
+
+		Args:
+			movies: List of Movie objects to count.
+
+		Returns:
+			Tuple of (unmatched, unorganized, incomplete) counts.
+		"""
+		import moviemanager.core.settings
+		settings = moviemanager.core.settings.load_settings()
+		unmatched = 0
+		unorganized = 0
+		incomplete = 0
+		t0 = time.monotonic()
+		for m in movies:
+			if not m.scraped:
+				unmatched += 1
+			else:
+				organized = m.check_organized(settings)
+				if not organized:
+					unorganized += 1
+				# only check poster/trailer for organized movies
+				if organized and not (m.has_poster and m.has_trailer):
+					incomplete += 1
+		badges_ms = (time.monotonic() - t0) * 1000
+		print(f"[scan] badges {badges_ms:.0f}ms (background)")
+		result = (unmatched, unorganized, incomplete)
+		return result
+
+	#============================================
+	def _apply_badge_counts(self, counts: tuple) -> None:
+		"""Apply badge counts to toolbar buttons on the main thread.
+
+		Args:
+			counts: Tuple of (unmatched, unorganized, incomplete).
+		"""
+		unmatched, unorganized, incomplete = counts
 		if unmatched > 0:
 			self._match_btn.setText(f"1. Match ({unmatched})")
 		else:
