@@ -88,6 +88,12 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._probe_task_id = None
 		self._rename_task_id = None
 		self._rename_mode = None
+		# batch buffer for incremental scan results
+		self._scan_batch_buffer = []
+		self._scan_batch_timer = PySide6.QtCore.QTimer(self)
+		# flush every 100ms so the event loop can process user input
+		self._scan_batch_timer.setInterval(100)
+		self._scan_batch_timer.timeout.connect(self._flush_scan_batch)
 		# menu bar
 		self._setup_menus()
 		# toolbar
@@ -359,8 +365,21 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 
 	#============================================
 	def _on_scan_partial(self, movie) -> None:
-		"""Handle incremental movie delivery on the main thread."""
-		self._movie_panel.append_movies([movie])
+		"""Buffer incremental movie delivery and flush in batches."""
+		self._scan_batch_buffer.append(movie)
+		if not self._scan_batch_timer.isActive():
+			self._scan_batch_timer.start()
+
+	#============================================
+	def _flush_scan_batch(self) -> None:
+		"""Flush buffered movies into the table as one batch insert."""
+		if not self._scan_batch_buffer:
+			self._scan_batch_timer.stop()
+			return
+		# swap out the buffer so new arrivals go into a fresh list
+		batch = self._scan_batch_buffer
+		self._scan_batch_buffer = []
+		self._movie_panel.append_movies(batch)
 
 	#============================================
 	def _on_scan_done(self, movies) -> None:
@@ -369,6 +388,11 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		Movies were already delivered incrementally via partial_result,
 		so this only updates status bar counts and window title.
 		"""
+		# flush any remaining buffered movies
+		self._scan_batch_timer.stop()
+		if self._scan_batch_buffer:
+			self._movie_panel.append_movies(self._scan_batch_buffer)
+			self._scan_batch_buffer = []
 		self.unsetCursor()
 		self._status.hide_progress()
 		scraped = self._api.get_scraped_count()

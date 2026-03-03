@@ -2,6 +2,12 @@
 
 ## 2026-03-03
 
+### Fixes and Maintenance
+- Fixed UI unresponsiveness during directory scan by batching `partial_result` signals
+  in `MainWindow`. Incoming movies are now buffered and flushed every 100ms via a `QTimer`
+  instead of triggering one `beginInsertRows`/`endInsertRows` cycle per movie. The event
+  loop can now process clicks, sorts, and scrolling while the scan is in progress.
+
 ### Additions and New Features
 - Added `get_chosen_movies()` to `MoviePanel` for unified batch operation resolution:
   checked (2+) > selected (2+) > single checked > single selected > empty.
