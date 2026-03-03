@@ -33,6 +33,11 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 		self._setup_ui()
 		# connect to job list updates
 		self._task_api.job_list_changed.connect(self._refresh)
+		# periodic timer keeps elapsed-time column fresh while visible
+		self._tick_timer = PySide6.QtCore.QTimer(self)
+		self._tick_timer.setInterval(2400)
+		self._tick_timer.timeout.connect(self._refresh)
+		self._tick_timer.start()
 		# populate initial state
 		self._refresh()
 
@@ -134,6 +139,24 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 			secs = total_secs % 60
 			text = f"{mins}m {secs}s"
 		return text
+
+	#============================================
+	def showEvent(self, event) -> None:
+		"""Start the refresh timer when the dialog becomes visible."""
+		super().showEvent(event)
+		self._tick_timer.start()
+
+	#============================================
+	def hideEvent(self, event) -> None:
+		"""Stop the refresh timer when the dialog is hidden."""
+		self._tick_timer.stop()
+		super().hideEvent(event)
+
+	#============================================
+	def closeEvent(self, event) -> None:
+		"""Stop the refresh timer when the dialog is closed."""
+		self._tick_timer.stop()
+		super().closeEvent(event)
 
 	#============================================
 	def _clear_completed(self) -> None:

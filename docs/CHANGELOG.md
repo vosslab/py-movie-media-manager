@@ -19,6 +19,11 @@
 - Added "Min" runtime column to the movie chooser results table and a runtime
   label in the preview pane (`moviemanager/ui/dialogs/movie_chooser.py`).
 
+### Behavior or Interface Changes
+- Jobs dialog now refreshes every 1 second via a `QTimer` so the elapsed time
+  column stays current while jobs are running. Timer stops when the dialog is
+  hidden or closed (`moviemanager/ui/dialogs/jobs_dialog.py`).
+
 ### Fixes and Maintenance
 - Fixed `StatusIconDelegate` column range in `moviemanager/ui/movies/movie_panel.py` from
   `range(4, 9)` to `range(5, 10)` so the Min (duration) column no longer gets an icon delegate
