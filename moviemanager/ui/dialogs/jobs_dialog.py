@@ -45,11 +45,11 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 	def _setup_ui(self) -> None:
 		"""Build the dialog layout with jobs table and action buttons."""
 		layout = PySide6.QtWidgets.QVBoxLayout(self)
-		# jobs table with 3 columns: Name, Status, Time
+		# jobs table with 4 columns: Name, Priority, Status, Time
 		self._table = PySide6.QtWidgets.QTableWidget()
-		self._table.setColumnCount(3)
+		self._table.setColumnCount(4)
 		self._table.setHorizontalHeaderLabels(
-			["Name", "Status", "Time"]
+			["Name", "Priority", "Status", "Time"]
 		)
 		self._table.setSelectionBehavior(
 			PySide6.QtWidgets.QAbstractItemView
@@ -93,6 +93,11 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 				job["name"]
 			)
 			self._table.setItem(row, 0, name_item)
+			# priority column
+			pri = job.get("priority", 50)
+			pri_text = self._format_priority(pri)
+			pri_item = PySide6.QtWidgets.QTableWidgetItem(pri_text)
+			self._table.setItem(row, 1, pri_item)
 			# status column
 			status = job["status"]
 			if status == "running":
@@ -107,12 +112,12 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 			status_item = PySide6.QtWidgets.QTableWidgetItem(
 				status_text
 			)
-			self._table.setItem(row, 1, status_item)
+			self._table.setItem(row, 2, status_item)
 			# elapsed time column
 			elapsed = now - job["submitted_at"]
 			time_text = self._format_elapsed(elapsed)
 			time_item = PySide6.QtWidgets.QTableWidgetItem(time_text)
-			self._table.setItem(row, 2, time_item)
+			self._table.setItem(row, 3, time_item)
 		self._table.resizeColumnsToContents()
 		# re-stretch Name column after resize
 		self._table.horizontalHeader().setSectionResizeMode(
@@ -138,6 +143,29 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 			mins = total_secs // 60
 			secs = total_secs % 60
 			text = f"{mins}m {secs}s"
+		return text
+
+	#============================================
+	@staticmethod
+	def _format_priority(priority: int) -> str:
+		"""Format a numeric priority as a human-readable label.
+
+		Args:
+			priority: Integer priority value.
+
+		Returns:
+			Label such as "Critical", "High", "Normal", "Low", or "Background".
+		"""
+		if priority >= 100:
+			text = "Critical"
+		elif priority >= 75:
+			text = "High"
+		elif priority >= 50:
+			text = "Normal"
+		elif priority >= 25:
+			text = "Low"
+		else:
+			text = "Background"
 		return text
 
 	#============================================

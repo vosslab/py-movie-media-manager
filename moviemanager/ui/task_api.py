@@ -10,6 +10,13 @@ import PySide6.QtCore
 # local repo modules
 import moviemanager.ui.workers
 
+# job priority levels for QThreadPool scheduling (higher runs first)
+PRIORITY_CRITICAL = 100
+PRIORITY_HIGH = 75
+PRIORITY_NORMAL = 50
+PRIORITY_LOW = 25
+PRIORITY_BACKGROUND = 0
+
 
 #============================================
 class TaskAPI(PySide6.QtCore.QObject):
@@ -50,22 +57,25 @@ class TaskAPI(PySide6.QtCore.QObject):
 		self._jobs: dict = {}
 
 	#============================================
-	def submit_job(self, name: str, fn, *args, **kwargs) -> int:
+	def submit_job(
+		self, name: str, fn, *args, _priority: int = PRIORITY_NORMAL, **kwargs,
+	) -> int:
 		"""Submit a named job for background execution with UI tracking.
 
-		Like submit(), but stores a human-readable name and status
-		so the jobs popup can display progress.
+		Like submit(), but stores a human-readable name, status, and
+		priority so the jobs popup can display progress.
 
 		Args:
 			name: Display name for the job (e.g. "Scraping The Matrix").
 			fn: Callable to execute.
 			*args: Positional arguments for the callable.
+			_priority: Scheduling priority (higher runs first).
 			**kwargs: Keyword arguments for the callable.
 
 		Returns:
 			Integer task ID for tracking the submitted job.
 		"""
-		task_id = self.submit(fn, *args, **kwargs)
+		task_id = self.submit(fn, *args, _priority=_priority, **kwargs)
 		# store job metadata under the task_id
 		with self._lock:
 			self._jobs[task_id] = {
@@ -73,6 +83,7 @@ class TaskAPI(PySide6.QtCore.QObject):
 				"status": "running",
 				"error_text": "",
 				"submitted_at": time.time(),
+				"priority": _priority,
 			}
 		self.job_list_changed.emit()
 		return task_id
@@ -114,12 +125,15 @@ class TaskAPI(PySide6.QtCore.QObject):
 		self.job_list_changed.emit()
 
 	#============================================
-	def submit(self, fn, *args, **kwargs) -> int:
+	def submit(
+		self, fn, *args, _priority: int = PRIORITY_NORMAL, **kwargs,
+	) -> int:
 		"""Submit a callable for background execution.
 
 		Args:
 			fn: Callable to execute.
 			*args: Positional arguments for the callable.
+			_priority: Scheduling priority (higher runs first).
 			**kwargs: Keyword arguments for the callable.
 
 		Returns:
@@ -144,7 +158,7 @@ class TaskAPI(PySide6.QtCore.QObject):
 		)
 		with self._lock:
 			self._workers[task_id] = worker
-		self._pool.start(worker)
+		self._pool.start(worker, _priority)
 		return task_id
 
 	#============================================

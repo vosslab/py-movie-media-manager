@@ -75,16 +75,16 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._task_api.job_list_changed.connect(
 			self._update_jobs_count
 		)
-		# track download batch completion
-		self._task_api.task_finished.connect(
-			self._on_download_job_done
-		)
+		# central task dispatcher for all TaskAPI signals
+		self._task_api.task_finished.connect(self._on_task_finished)
+		self._task_api.task_error.connect(self._on_task_error)
+		self._task_api.task_progress.connect(self._on_task_progress)
 		self.setStatusBar(self._status)
-		# track the active worker for cancellation
-		self._active_worker = None
-		# track background download task IDs for batch completion
+		# track background task IDs by operation type
+		self._scan_task_id = None
+		self._scrape_task_id = None
+		self._refresh_task_id = None
 		self._download_task_ids = []
-		# track background media probe task ID
 		self._probe_task_id = None
 		# menu bar
 		self._setup_menus()
@@ -298,18 +298,17 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._status.showMessage(f"Scanning {directory}...")
 		self._status.show_progress(0, 0, f"Scanning {directory}...")
 		self.setCursor(PySide6.QtCore.Qt.CursorShape.WaitCursor)
-		# run scan in background (#1)
-		worker = moviemanager.ui.workers.Worker(
+		# run scan in background via TaskAPI (#1)
+		self._scan_task_id = self._task_api.submit_job(
+			f"Scanning {directory}",
 			self._api.scan_directory, directory,
 			progress_callback=self._on_scan_progress_callback,
 			movie_callback=self._on_movie_found_callback,
+			_priority=moviemanager.ui.task_api.PRIORITY_CRITICAL,
 		)
-		worker.signals.partial_result.connect(self._on_scan_partial)
-		worker.signals.finished.connect(self._on_scan_done)
-		worker.signals.error.connect(self._on_scan_error)
-		worker.signals.progress.connect(self._on_scan_progress)
-		self._active_worker = worker
-		self._pool.start(worker)
+		# connect partial_result directly from the worker for incremental delivery
+		scan_worker = self._task_api.get_worker(self._scan_task_id)
+		scan_worker.signals.partial_result.connect(self._on_scan_partial)
 
 	#============================================
 	def _on_scan_progress_callback(self, current: int, message: str) -> None:
@@ -321,8 +320,10 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		"""
 		# emit progress signal to marshal GUI update to the main thread;
 		# direct GUI calls from worker threads cause QPainter segfaults
-		if self._active_worker:
-			self._active_worker.signals.progress.emit(current, 0, message)
+		if self._scan_task_id is not None:
+			worker = self._task_api.get_worker(self._scan_task_id)
+			if worker:
+				worker.signals.progress.emit(current, 0, message)
 
 	#============================================
 	def _on_scan_progress(self, current: int, total: int, message: str) -> None:
@@ -335,8 +336,10 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 
 		Emits partial_result signal to marshal delivery to the main thread.
 		"""
-		if self._active_worker:
-			self._active_worker.signals.partial_result.emit(movie)
+		if self._scan_task_id is not None:
+			worker = self._task_api.get_worker(self._scan_task_id)
+			if worker:
+				worker.signals.partial_result.emit(movie)
 
 	#============================================
 	def _on_scan_partial(self, movie) -> None:
@@ -384,16 +387,9 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			moviemanager.core.media_probe.probe_movie_list,
 			movies,
 			progress_callback=self._on_probe_progress_callback,
+			_priority=moviemanager.ui.task_api.PRIORITY_NORMAL,
 		)
-		self._task_api.task_progress.connect(
-			self._on_probe_task_progress
-		)
-		self._task_api.task_finished.connect(
-			self._on_probe_task_finished
-		)
-		self._task_api.task_error.connect(
-			self._on_probe_task_error
-		)
+		# progress/finished/error routed through _on_task_* dispatchers
 
 	#============================================
 	def _on_probe_progress_callback(
@@ -449,6 +445,41 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		# show truncated error in status bar
 		msg = f"Media probe error: {error_text[:80]}"
 		self._status.showMessage(msg, 5000)
+
+	#============================================
+	def _on_task_finished(self, task_id: int, result) -> None:
+		"""Route task completion to the appropriate handler."""
+		if task_id == self._scan_task_id:
+			self._scan_task_id = None
+			self._on_scan_done(result)
+		elif task_id == self._scrape_task_id:
+			self._scrape_task_id = None
+			self._on_batch_scrape_done(result)
+		elif task_id == self._refresh_task_id:
+			self._refresh_task_id = None
+			self._on_refresh_metadata_done(result)
+		elif task_id == self._probe_task_id:
+			self._on_probe_task_finished(task_id, result)
+		elif task_id in self._download_task_ids:
+			self._on_download_job_done(task_id, result)
+
+	#============================================
+	def _on_task_error(self, task_id: int, error_text: str) -> None:
+		"""Route task errors to the appropriate handler."""
+		if task_id in (self._scan_task_id, self._scrape_task_id,
+					self._refresh_task_id):
+			self._on_scan_error(error_text)
+		elif task_id == self._probe_task_id:
+			self._on_probe_task_error(task_id, error_text)
+
+	#============================================
+	def _on_task_progress(self, task_id: int, cur: int, tot: int, msg: str) -> None:
+		"""Route task progress to the appropriate handler."""
+		if task_id in (self._scan_task_id, self._scrape_task_id,
+					self._refresh_task_id):
+			self._on_scan_progress(cur, tot, msg)
+		elif task_id == self._probe_task_id:
+			self._on_probe_task_progress(task_id, cur, tot, msg)
 
 	#============================================
 	def _on_checked_changed(self, checked: int, total: int) -> None:
@@ -913,9 +944,14 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 	#============================================
 	def _cancel_operation(self) -> None:
 		"""Cancel the currently running background operation."""
-		if self._active_worker:
-			self._active_worker.cancel()
-			self._active_worker = None
+		# cancel scan, scrape, refresh via TaskAPI
+		for tid in (self._scan_task_id, self._scrape_task_id,
+					self._refresh_task_id):
+			if tid is not None:
+				self._task_api.cancel(tid)
+		self._scan_task_id = None
+		self._scrape_task_id = None
+		self._refresh_task_id = None
 		# cancel any pending download jobs
 		for tid in self._download_task_ids:
 			self._task_api.cancel(tid)
@@ -1004,15 +1040,11 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._status.show_progress(
 			0, len(unscraped), "Starting batch scrape..."
 		)
-		# run scraping in background worker
-		worker = moviemanager.ui.workers.Worker(
-			self._batch_scrape_loop, unscraped,
+		# run scraping in background via TaskAPI
+		self._scrape_task_id = self._task_api.submit_job(
+			"Batch scrape", self._batch_scrape_loop, unscraped,
+			_priority=moviemanager.ui.task_api.PRIORITY_HIGH,
 		)
-		worker.signals.progress.connect(self._on_scan_progress)
-		worker.signals.finished.connect(self._on_batch_scrape_done)
-		worker.signals.error.connect(self._on_scan_error)
-		self._active_worker = worker
-		self._pool.start(worker)
 
 	#============================================
 	def _batch_scrape_loop(self, unscraped: list) -> dict:
@@ -1033,12 +1065,13 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		skipped_low_confidence = []
 		no_results_list = []
 		for i, movie in enumerate(unscraped):
-			# check for cancellation
-			if self._active_worker and self._active_worker.is_cancelled:
+			# check for cancellation via TaskAPI worker
+			scrape_worker = self._task_api.get_worker(self._scrape_task_id)
+			if scrape_worker and scrape_worker.is_cancelled:
 				break
 			# emit progress via worker signals
-			if self._active_worker:
-				self._active_worker.signals.progress.emit(
+			if scrape_worker:
+				scrape_worker.signals.progress.emit(
 					i, len(unscraped),
 					f"Scraping: {movie.title}"
 					f" ({i + 1}/{len(unscraped)})",
@@ -1086,7 +1119,6 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			result: Dict with scraped_count, skipped_low_confidence,
 				and no_results_list.
 		"""
-		self._active_worker = None
 		self._status.hide_progress()
 		# refresh table data in-place (preserves selection)
 		self._movie_panel.refresh_data()
@@ -1152,17 +1184,11 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._status.show_progress(
 			0, len(scraped), "Starting metadata refresh..."
 		)
-		# run refresh in background worker
-		worker = moviemanager.ui.workers.Worker(
-			self._refresh_metadata_loop, scraped,
+		# run refresh in background via TaskAPI
+		self._refresh_task_id = self._task_api.submit_job(
+			"Refresh metadata", self._refresh_metadata_loop, scraped,
+			_priority=moviemanager.ui.task_api.PRIORITY_HIGH,
 		)
-		worker.signals.progress.connect(self._on_scan_progress)
-		worker.signals.finished.connect(
-			self._on_refresh_metadata_done
-		)
-		worker.signals.error.connect(self._on_scan_error)
-		self._active_worker = worker
-		self._pool.start(worker)
 
 	#============================================
 	def _refresh_metadata_loop(self, movies: list) -> dict:
@@ -1179,12 +1205,13 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		"""
 		refreshed_count = 0
 		for i, movie in enumerate(movies):
-			# check for cancellation
-			if self._active_worker and self._active_worker.is_cancelled:
+			# check for cancellation via TaskAPI worker
+			refresh_worker = self._task_api.get_worker(self._refresh_task_id)
+			if refresh_worker and refresh_worker.is_cancelled:
 				break
 			# emit progress via worker signals
-			if self._active_worker:
-				self._active_worker.signals.progress.emit(
+			if refresh_worker:
+				refresh_worker.signals.progress.emit(
 					i, len(movies),
 					f"Refreshing: {movie.title}"
 					f" ({i + 1}/{len(movies)})",
@@ -1209,7 +1236,6 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		Args:
 			result: Dict with refreshed_count.
 		"""
-		self._active_worker = None
 		self._status.hide_progress()
 		# refresh table data in-place (preserves selection)
 		self._movie_panel.refresh_data()
@@ -1307,7 +1333,10 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		# submit each task via TaskAPI
 		self._download_task_ids = []
 		for name, fn, args in tasks:
-			task_id = self._task_api.submit_job(name, fn, *args)
+			task_id = self._task_api.submit_job(
+				name, fn, *args,
+				_priority=moviemanager.ui.task_api.PRIORITY_LOW,
+			)
 			self._download_task_ids.append(task_id)
 		self._status.showMessage(
 			f"Queued {task_count} downloads -- see Jobs dialog",
@@ -1404,6 +1433,7 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._task_api.submit_job(
 			f"Trailer: {title}",
 			self._api.download_trailer, movie,
+			_priority=moviemanager.ui.task_api.PRIORITY_LOW,
 		)
 		self._status.showMessage("Trailer download queued", 3000)
 
@@ -1427,6 +1457,7 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._task_api.submit_job(
 			f"Subtitles: {title}",
 			self._api.download_subtitles, movie, languages,
+			_priority=moviemanager.ui.task_api.PRIORITY_LOW,
 		)
 		self._status.showMessage("Subtitle download queued", 3000)
 

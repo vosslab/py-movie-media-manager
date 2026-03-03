@@ -9,6 +9,7 @@ import PySide6.QtCore
 import PySide6.QtWidgets
 
 # local repo modules
+import moviemanager.ui.task_api
 import moviemanager.ui.workers
 
 
@@ -287,7 +288,7 @@ class DownloadDialog(PySide6.QtWidgets.QDialog):
 		worker.signals.finished.connect(self._on_finished)
 		worker.signals.error.connect(self._on_error)
 		self._worker = worker
-		self._pool.start(worker)
+		self._pool.start(worker, moviemanager.ui.task_api.PRIORITY_LOW)
 
 	#============================================
 	def _on_progress(self, current: int, total: int, message: str) -> None:

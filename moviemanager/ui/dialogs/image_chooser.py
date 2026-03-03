@@ -12,6 +12,7 @@ import PySide6.QtGui
 import PySide6.QtCore
 
 # local repo modules
+import moviemanager.ui.task_api
 import moviemanager.ui.widgets.image_label
 import moviemanager.ui.workers
 
@@ -104,7 +105,7 @@ class ImageChooserDialog(PySide6.QtWidgets.QDialog):
 		worker = moviemanager.ui.workers.ImageDownloadWorker(url)
 		worker.signals.finished.connect(self._on_preview_loaded)
 		worker.signals.error.connect(self._on_preview_error)
-		self._pool.start(worker)
+		self._pool.start(worker, moviemanager.ui.task_api.PRIORITY_BACKGROUND)
 
 	#============================================
 	def _on_preview_loaded(self, image_bytes: bytes) -> None:
@@ -174,7 +175,7 @@ class ImageChooserDialog(PySide6.QtWidgets.QDialog):
 		)
 		worker.signals.finished.connect(self._on_download_done)
 		worker.signals.error.connect(self._on_download_error)
-		self._pool.start(worker)
+		self._pool.start(worker, moviemanager.ui.task_api.PRIORITY_BACKGROUND)
 
 	#============================================
 	def _do_download(self, url: str, output_path: str, output_name: str) -> str:

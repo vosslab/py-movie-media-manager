@@ -10,6 +10,7 @@ import PySide6.QtCore
 
 # local repo modules
 import moviemanager.ui.format_movie
+import moviemanager.ui.task_api
 import moviemanager.ui.workers
 import moviemanager.ui.widgets.image_label
 
@@ -224,7 +225,7 @@ class MovieDetailPanel(PySide6.QtWidgets.QTabWidget):
 			self._poster_worker = worker
 		else:
 			self._fanart_worker = worker
-		self._pool.start(worker)
+		self._pool.start(worker, moviemanager.ui.task_api.PRIORITY_BACKGROUND)
 
 	#============================================
 	@staticmethod

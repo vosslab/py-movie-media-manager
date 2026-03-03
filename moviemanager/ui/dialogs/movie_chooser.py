@@ -10,6 +10,7 @@ import PySide6.QtWidgets
 
 # local repo modules
 import moviemanager.ui.format_movie
+import moviemanager.ui.task_api
 import moviemanager.ui.workers
 import moviemanager.ui.widgets.image_label
 
@@ -424,7 +425,7 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 			worker.signals.error.connect(
 				lambda _: self._prematch_poster.setText("No poster")
 			)
-			self._pool.start(worker)
+			self._pool.start(worker, moviemanager.ui.task_api.PRIORITY_BACKGROUND)
 		else:
 			self._prematch_poster.set_image_data(None)
 
@@ -596,7 +597,7 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 				)
 				worker.signals.error.connect(self._on_poster_error)
 				self._poster_worker = worker
-				self._pool.start(worker)
+				self._pool.start(worker, moviemanager.ui.task_api.PRIORITY_BACKGROUND)
 		else:
 			# no poster URL available
 			self._poster_label.set_image_data(None)
@@ -718,7 +719,7 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		)
 		worker.signals.finished.connect(self._on_search_done)
 		worker.signals.error.connect(self._on_search_error)
-		self._pool.start(worker)
+		self._pool.start(worker, moviemanager.ui.task_api.PRIORITY_HIGH)
 
 	#============================================
 	def _do_broader_search(self) -> None:
@@ -738,7 +739,7 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		)
 		worker.signals.finished.connect(self._on_broader_search_done)
 		worker.signals.error.connect(self._on_search_error)
-		self._pool.start(worker)
+		self._pool.start(worker, moviemanager.ui.task_api.PRIORITY_HIGH)
 
 	#============================================
 	def _on_broader_search_done(self, result) -> None:
@@ -910,6 +911,7 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 			job_name = f"Scraping {movie_title}"
 			task_id = self._task_api.submit_job(
 				job_name, self._api.scrape_movie, movie,
+				_priority=moviemanager.ui.task_api.PRIORITY_HIGH,
 				**scrape_kwargs,
 			)
 			# connect TaskAPI signals filtered by this task_id
@@ -934,7 +936,7 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 				lambda err, mp=movie_path:
 				self._on_scrape_error(err, mp)
 			)
-			self._pool.start(worker)
+			self._pool.start(worker, moviemanager.ui.task_api.PRIORITY_HIGH)
 
 	#============================================
 	def _on_scrape_done(self, result, movie_path: str = "") -> None:
@@ -1133,7 +1135,7 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		# silently ignore prefetch errors
 		worker.signals.error.connect(lambda _: None)
 		self._prefetch_worker = worker
-		self._pool.start(worker)
+		self._pool.start(worker, moviemanager.ui.task_api.PRIORITY_HIGH)
 
 	#============================================
 	def _on_prefetch_done(self, movie_path: str, results: list) -> None:
@@ -1158,7 +1160,7 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 			)
 			poster_worker.signals.error.connect(lambda _: None)
 			self._prefetch_poster_worker = poster_worker
-			self._pool.start(poster_worker)
+			self._pool.start(poster_worker, moviemanager.ui.task_api.PRIORITY_BACKGROUND)
 
 	#============================================
 	def _on_prefetch_poster_done(self, movie_path: str, data: bytes) -> None:

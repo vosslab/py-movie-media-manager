@@ -2,6 +2,26 @@
 
 ## 2026-03-03
 
+### Additions and New Features
+- Added job priority constants to `moviemanager/ui/task_api.py`: `PRIORITY_CRITICAL` (100),
+  `PRIORITY_HIGH` (75), `PRIORITY_NORMAL` (50), `PRIORITY_LOW` (25), `PRIORITY_BACKGROUND` (0).
+  `QThreadPool.start(worker, priority)` schedules higher-priority jobs first.
+- Added `_priority` keyword parameter to `TaskAPI.submit()` and `TaskAPI.submit_job()`.
+  Priority is stored in job metadata for display in the Jobs dialog.
+- Added "Priority" column to the Jobs dialog table between Name and Status, showing
+  human-readable labels (Critical, High, Normal, Low, Background).
+- Migrated directory scan, batch scrape, and refresh metadata from direct `Worker`/`_pool`
+  usage to `TaskAPI.submit_job()` with priority. Scan uses `PRIORITY_CRITICAL`, scrape and
+  refresh use `PRIORITY_HIGH`, media probe uses `PRIORITY_NORMAL`, and downloads use
+  `PRIORITY_LOW`.
+- Added central signal dispatchers (`_on_task_finished`, `_on_task_error`,
+  `_on_task_progress`) in `MainWindow` to route TaskAPI signals by task ID to the
+  appropriate handler, replacing per-worker signal connections.
+- Assigned explicit priorities to all `pool.start()` calls in dialogs:
+  `movie_chooser.py` (search: HIGH, posters: BACKGROUND, scrape: HIGH),
+  `download_dialog.py` (LOW), `image_chooser.py` (BACKGROUND),
+  `movie_detail_panel.py` (BACKGROUND).
+
 ### Behavior or Interface Changes
 - Routed all downloads (artwork, trailers, subtitles) through `TaskAPI.submit_job()`
   so each appears as an individual tracked job in the Jobs dialog
