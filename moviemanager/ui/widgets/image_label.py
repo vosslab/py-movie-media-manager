@@ -36,11 +36,12 @@ class ImageLabel(PySide6.QtWidgets.QLabel):
 		self._update_scaled()
 
 	#============================================
-	def set_image_data(self, data: bytes) -> None:
+	def set_image_data(self, data: bytes, source_url: str = "") -> None:
 		"""Load and display an image from raw bytes.
 
 		Args:
 			data: Raw image bytes (e.g. from HTTP response).
+			source_url: Optional URL used for CLI diagnostics on decode failure.
 		"""
 		if not data:
 			self._pixmap = None
@@ -54,6 +55,8 @@ class ImageLabel(PySide6.QtWidgets.QLabel):
 		# load the raw image bytes into a QPixmap
 		loaded = pixmap.loadFromData(data)
 		if not loaded or pixmap.isNull():
+			if source_url:
+				print(f"Image decode failed for URL: {source_url}")
 			self._pixmap = None
 			self.clear()
 			self.setText("Invalid image")

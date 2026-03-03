@@ -24,6 +24,7 @@ import moviemanager.scraper.tmdb_scraper
 
 # module logger
 _LOG = logging.getLogger(__name__)
+_TMDB_POSTER_PREFETCH_LIMIT = 3
 
 
 #============================================
@@ -46,6 +47,9 @@ class MovieAPI:
 		self._movie_list = moviemanager.core.movie.movie_list.MovieList()
 		self._scraper = None
 		self._imdb_cookies_loaded_spec = ""
+		self._tmdb_lookup_scraper = None
+		self._tmdb_lookup_spec = ""
+		self._tmdb_poster_cache = {}
 
 	#============================================
 	def scan_directory(self, root_path: str, progress_callback=None) -> list:
@@ -163,6 +167,63 @@ class MovieAPI:
 		self._imdb_cookies_loaded_spec = spec
 
 	#============================================
+	def _get_tmdb_lookup_scraper(self):
+		"""Return a TMDB scraper for poster lookup, or None if disabled."""
+		api_key = self._settings.tmdb_api_key.strip()
+		if not api_key:
+			return None
+		spec = f"{api_key}|{self._settings.scrape_language}"
+		if (
+			self._tmdb_lookup_scraper is not None
+			and self._tmdb_lookup_spec == spec
+		):
+			return self._tmdb_lookup_scraper
+		self._tmdb_lookup_scraper = moviemanager.scraper.tmdb_scraper.TmdbScraper(
+			api_key=api_key,
+			language=self._settings.scrape_language,
+		)
+		self._tmdb_lookup_spec = spec
+		self._tmdb_poster_cache = {}
+		return self._tmdb_lookup_scraper
+
+	#============================================
+	def _lookup_tmdb_poster_for_imdb_id(self, imdb_id: str) -> tuple:
+		"""Resolve TMDB id/poster URL for an IMDB id with in-memory caching."""
+		if not imdb_id:
+			return (0, "")
+		if imdb_id in self._tmdb_poster_cache:
+			return self._tmdb_poster_cache[imdb_id]
+		lookup_scraper = self._get_tmdb_lookup_scraper()
+		if lookup_scraper is None:
+			self._tmdb_poster_cache[imdb_id] = (0, "")
+			return (0, "")
+		try:
+			tmdb_id, poster_url = lookup_scraper.find_by_imdb_id(imdb_id)
+		except Exception as error:
+			_LOG.warning(
+				"TMDB poster lookup failed for %s: %s",
+				imdb_id, error,
+			)
+			tmdb_id = 0
+			poster_url = ""
+		result = (tmdb_id, poster_url)
+		self._tmdb_poster_cache[imdb_id] = result
+		return result
+
+	#============================================
+	def _prefer_tmdb_poster(self, result) -> None:
+		"""Mutate a SearchResult in-place to prefer TMDB poster URL."""
+		if not result or not result.imdb_id:
+			return
+		tmdb_id, poster_url = self._lookup_tmdb_poster_for_imdb_id(
+			result.imdb_id
+		)
+		if tmdb_id and not result.tmdb_id:
+			result.tmdb_id = tmdb_id
+		if poster_url:
+			result.poster_url = poster_url
+
+	#============================================
 	def search_movie(self, title: str, year: str = "") -> list:
 		"""Search for movie metadata by title.
 
@@ -175,6 +236,12 @@ class MovieAPI:
 		"""
 		self._ensure_scraper()
 		result = self._scraper.search(title, year)
+		if isinstance(
+			self._scraper, moviemanager.scraper.imdb_scraper.ImdbScraper
+		):
+			prefetch_results = result[:_TMDB_POSTER_PREFETCH_LIMIT]
+			for item in prefetch_results:
+				self._prefer_tmdb_poster(item)
 		return result
 
 	#============================================
@@ -291,6 +358,17 @@ class MovieAPI:
 		metadata = self._scraper.get_metadata(
 			tmdb_id=tmdb_id, imdb_id=imdb_id
 		)
+		if isinstance(
+			self._scraper, moviemanager.scraper.imdb_scraper.ImdbScraper
+		):
+			lookup_id = metadata.imdb_id or imdb_id
+			tmdb_match_id, tmdb_poster_url = (
+				self._lookup_tmdb_poster_for_imdb_id(lookup_id)
+			)
+			if tmdb_match_id and not metadata.tmdb_id:
+				metadata.tmdb_id = tmdb_match_id
+			if tmdb_poster_url:
+				metadata.poster_url = tmdb_poster_url
 		# map MediaMetadata fields to the Movie object
 		movie.title = metadata.title or movie.title
 		movie.original_title = metadata.original_title or movie.original_title

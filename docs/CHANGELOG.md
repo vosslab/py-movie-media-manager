@@ -2,6 +2,26 @@
 
 ## 2026-03-03
 
+### Additions and New Features
+- Rebuilt IMDB scraper from scratch using IMDB's GraphQL API
+  (`graphql.imdb.com`) instead of HTML scraping. The GraphQL endpoint
+  currently bypasses AWS WAF challenges that blocked all HTML endpoints.
+- New `moviemanager/scraper/imdb_scraper.py` fetches full movie metadata
+  (title, year, rating, votes, runtime, certification, genres, cast with
+  character roles, director, writer, studio, countries, languages, tagline,
+  keywords, parental guide, poster URL, top250 rank) in a single GraphQL
+  request per movie.
+- New `moviemanager/scraper/browser_cookies.py` loads IMDB cookies from
+  Firefox profiles by reading `cookies.sqlite` via temp-copy to avoid
+  WAL lock conflicts with running Firefox.
+- New `moviemanager/ui/dialogs/imdb_challenge_dialog.py` provides an
+  embedded QWebEngineView dialog for solving WAF challenges manually
+  when the GraphQL endpoint gets blocked.
+- Search filters results to Movie/Short/TV Movie types, excluding
+  TV episodes and podcasts from search results.
+- WAF detection: any HTTP 202 from GraphQL raises `ConnectionError` with
+  "AWS WAF challenge" text, triggering the existing challenge dialog flow.
+
 ### Fixes and Maintenance
 - Root-caused IMDB `HTTP 202` search failures to AWS WAF challenge responses
   (`x-amzn-waf-action: challenge`) on IMDB HTML endpoints such as `/find/`.
@@ -27,8 +47,19 @@
 - Changed IMDB challenge popup to preload configured browser cookies into
   the embedded WebEngine profile before loading IMDB, so challenge retries
   do not start from a fresh cookie session.
+- When poster image decode fails in `ImageLabel` (including Qt allocation-limit
+  rejects), the app now prints the source poster URL to CLI for direct debugging.
+- IMDB provider now prefers TMDB poster URLs by default (when a TMDB API key is
+  configured): top search results are rewritten to TMDB poster URLs, and scrape
+  metadata poster URLs are replaced with the TMDB poster when an imdb_id match exists.
 
 ### Developer Tests and Notes
+- Added `tests/test_scraper_imdb.py` with 29 unit tests covering GraphQL metadata
+  parsing, search result filtering, parental guide extraction, cast/producer mapping,
+  WAF detection, poster URL cleanup, cookie injection, and top250 handling.
+- Added `tests/test_browser_cookies.py` with 8 unit tests covering Firefox profile
+  discovery, cookie database reading with IMDB domain filtering, unsupported browser
+  rejection, and full pipeline integration.
 - Updated IMDB search unit tests to mock `_fetch_page_safe()` instead of `_fetch_page()`.
 - Added `test_search_http_failure_returns_empty` to verify graceful empty-result behavior
   when IMDB search page fetch fails.

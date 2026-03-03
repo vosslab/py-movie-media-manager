@@ -251,3 +251,42 @@ def test_sleep_between_calls(mock_movie_cls, mock_tmdb_cls):
 	with unittest.mock.patch("time.sleep") as mock_sleep:
 		scraper.get_artwork(tmdb_id=1)
 		assert mock_sleep.call_count == 1
+
+
+#============================================
+@unittest.mock.patch("tmdbv3api.TMDb")
+@unittest.mock.patch("tmdbv3api.Movie")
+@unittest.mock.patch("tmdbv3api.Find")
+def test_find_by_imdb_id_returns_tmdb_id_and_poster(
+	mock_find_cls, mock_movie_cls, mock_tmdb_cls
+):
+	"""Verify imdb_id lookup returns TMDB id and poster URL."""
+	fake_match = types.SimpleNamespace(id=155, poster_path="/dk.jpg")
+	fake_find_result = types.SimpleNamespace(movie_results=[fake_match])
+	mock_find_instance = mock_find_cls.return_value
+	mock_find_instance.find_by_imdb_id.return_value = fake_find_result
+	scraper = moviemanager.scraper.tmdb_scraper.TmdbScraper(api_key="fake")
+	scraper._tmdb_find = mock_find_instance
+	with unittest.mock.patch("time.sleep"):
+		tmdb_id, poster_url = scraper.find_by_imdb_id("tt0468569")
+	assert tmdb_id == 155
+	assert poster_url == "https://image.tmdb.org/t/p/w500/dk.jpg"
+
+
+#============================================
+@unittest.mock.patch("tmdbv3api.TMDb")
+@unittest.mock.patch("tmdbv3api.Movie")
+@unittest.mock.patch("tmdbv3api.Find")
+def test_find_by_imdb_id_empty_returns_defaults(
+	mock_find_cls, mock_movie_cls, mock_tmdb_cls
+):
+	"""Verify imdb_id lookup handles no TMDB match."""
+	fake_find_result = types.SimpleNamespace(movie_results=[])
+	mock_find_instance = mock_find_cls.return_value
+	mock_find_instance.find_by_imdb_id.return_value = fake_find_result
+	scraper = moviemanager.scraper.tmdb_scraper.TmdbScraper(api_key="fake")
+	scraper._tmdb_find = mock_find_instance
+	with unittest.mock.patch("time.sleep"):
+		tmdb_id, poster_url = scraper.find_by_imdb_id("tt0000000")
+	assert tmdb_id == 0
+	assert poster_url == ""

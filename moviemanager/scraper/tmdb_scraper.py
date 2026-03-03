@@ -42,6 +42,8 @@ class TmdbScraper(
 		self._tmdb.language = language
 		# reusable Movie endpoint object
 		self._tmdb_movie = tmdbv3api.Movie()
+		# reusable Find endpoint object (for imdb_id -> tmdb mapping)
+		self._tmdb_find = tmdbv3api.Find()
 
 	#============================================
 	def search(self, title: str, year: str = "") -> list:
@@ -213,6 +215,37 @@ class TmdbScraper(
 			trailer_url=trailer_url,
 		)
 		return metadata
+
+	#============================================
+	def find_by_imdb_id(self, imdb_id: str) -> tuple:
+		"""Resolve TMDB movie id and poster URL from an IMDB id.
+
+		Args:
+			imdb_id: IMDB id string like ``tt0468569``.
+
+		Returns:
+			tuple: ``(tmdb_id, poster_url)`` where missing values are
+				``0`` and ``""``.
+		"""
+		if not imdb_id:
+			return (0, "")
+		# rate-limit courtesy pause
+		time.sleep(random.random())
+		result = self._tmdb_find.find_by_imdb_id(imdb_id)
+		movie_results = getattr(result, "movie_results", []) or []
+		if not movie_results:
+			return (0, "")
+		first = movie_results[0]
+		if isinstance(first, dict):
+			tmdb_id = int(first.get("id", 0) or 0)
+			poster_path = first.get("poster_path", "") or ""
+		else:
+			tmdb_id = int(getattr(first, "id", 0) or 0)
+			poster_path = getattr(first, "poster_path", "") or ""
+		poster_url = ""
+		if poster_path:
+			poster_url = f"{_POSTER_BASE}{poster_path}"
+		return (tmdb_id, poster_url)
 
 	#============================================
 	def get_artwork(self, tmdb_id: int = 0, imdb_id: str = "") -> dict:

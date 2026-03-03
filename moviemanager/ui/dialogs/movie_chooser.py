@@ -281,14 +281,17 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 				cached_data = self._prefetch_poster_cache.pop(
 					self._movie.path
 				)
-				self._poster_label.set_image_data(cached_data)
+				self._poster_label.set_image_data(
+					cached_data, source_url=result.poster_url
+				)
 			else:
 				self._poster_label.setText("Loading...")
 				worker = moviemanager.ui.workers.ImageDownloadWorker(
 					result.poster_url
 				)
 				worker.signals.finished.connect(
-					self._on_poster_downloaded
+					lambda data, url=result.poster_url:
+					self._on_poster_downloaded(data, url)
 				)
 				worker.signals.error.connect(self._on_poster_error)
 				self._poster_worker = worker
@@ -298,14 +301,17 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 			self._poster_label.set_image_data(None)
 
 	#============================================
-	def _on_poster_downloaded(self, data: bytes) -> None:
+	def _on_poster_downloaded(
+		self, data: bytes, source_url: str = ""
+	) -> None:
 		"""Display the downloaded poster image.
 
 		Args:
 			data: Raw image bytes from the download worker.
+			source_url: Poster URL for decode-failure diagnostics.
 		"""
 		self._poster_worker = None
-		self._poster_label.set_image_data(data)
+		self._poster_label.set_image_data(data, source_url=source_url)
 
 	#============================================
 	def _on_poster_error(self, error_text: str) -> None:
