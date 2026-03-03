@@ -75,6 +75,9 @@ class FakeTransport:
 		self._event = threading.Event()
 		self._result_html = ""
 		self._load_ok = False
+		# diagnostic timing and stage tracking
+		self._fetch_start = 0.0
+		self._load_finished_fired = False
 		self._page = unittest.mock.Mock()
 		self._load_requested = unittest.mock.Mock()
 		self.challenge_needed = unittest.mock.Mock()
@@ -104,6 +107,7 @@ def _bind_fetch_methods(fake):
 	fake.fetch_html = cls.fetch_html.__get__(fake)
 	fake._fetch_html_main_thread = cls._fetch_html_main_thread.__get__(fake)
 	fake._fetch_html_worker_thread = cls._fetch_html_worker_thread.__get__(fake)
+	fake._timeout_stage_label = cls._timeout_stage_label.__get__(fake)
 
 
 #============================================

@@ -3,6 +3,7 @@
 # Standard Library
 import os
 import time
+import tempfile
 import datetime
 import threading
 
@@ -341,7 +342,8 @@ class TaskAPI(PySide6.QtCore.QObject):
 			job_name: Human-readable job name.
 			error_text: Full error traceback text.
 		"""
-		log_path = os.path.join("/tmp", "movie_manager_errors.log")
+		# use platform temp directory instead of hardcoded /tmp
+		log_path = os.path.join(tempfile.gettempdir(), "movie_manager_errors.log")
 		timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 		# extract last non-empty line for a concise summary
 		lines = error_text.strip().split("\n")

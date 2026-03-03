@@ -72,6 +72,12 @@ def expand_template(
 		"channels": channels,
 	}
 
+	# shell-safe each token value individually before substitution
+	# this preserves template separators (hyphens, dots) while cleaning values
+	if spaces_to_underscores:
+		for token, value in token_map.items():
+			token_map[token] = moviemanager.core.utils.shell_safe_filename(value)
+
 	# replace each token in the template
 	result = template
 	for token, value in token_map.items():
@@ -87,9 +93,6 @@ def expand_template(
 	result = re.sub(r" {2,}", " ", result)
 	# strip leading and trailing whitespace
 	result = result.strip()
-	# optionally make filenames shell-safe
-	if spaces_to_underscores:
-		result = moviemanager.core.utils.shell_safe_filename(result)
 	return result
 
 

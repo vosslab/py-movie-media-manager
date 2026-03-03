@@ -2,6 +2,7 @@
 
 # Standard Library
 import os
+import time
 import shutil
 import importlib.metadata
 
@@ -90,9 +91,11 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._rename_mode = None
 		# batch buffer for incremental scan results
 		self._scan_batch_buffer = []
+		# throttle progress signals from the scanner thread
+		self._scan_progress_last_emit = 0.0
 		self._scan_batch_timer = PySide6.QtCore.QTimer(self)
-		# flush every 100ms so the event loop can process user input
-		self._scan_batch_timer.setInterval(100)
+		# flush once per second so the event loop can process user input
+		self._scan_batch_timer.setInterval(1000)
 		self._scan_batch_timer.timeout.connect(self._flush_scan_batch)
 		# menu bar
 		self._setup_menus()
@@ -317,6 +320,8 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._undo_rename_action.setEnabled(False)
 		# clear table and prepare for incremental loading
 		self._movie_panel.set_movies([])
+		# disable sorting during scan to avoid O(N log N) sort on each batch flush
+		self._movie_panel.set_sorting_enabled(False)
 		self._status.showMessage(f"Scanning {directory}...")
 		self._status.show_progress(0, 0, f"Scanning {directory}...")
 		self.setCursor(PySide6.QtCore.Qt.CursorShape.WaitCursor)
@@ -337,11 +342,14 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		"""Progress callback invoked from scanner thread.
 
 		Emits progress signal to update the UI on the main thread.
-		This is called from the worker thread, so we use the signal
-		mechanism to forward to the main thread.
+		Throttled to at most once per 500ms to avoid flooding the
+		event loop when scanning directories with many subdirectories.
 		"""
-		# emit progress signal to marshal GUI update to the main thread;
-		# direct GUI calls from worker threads cause QPainter segfaults
+		now = time.monotonic()
+		# emit at most every 500ms to avoid flooding the event loop
+		if now - self._scan_progress_last_emit < 0.5:
+			return
+		self._scan_progress_last_emit = now
 		if self._scan_task_id is not None:
 			worker = self._task_api.get_worker(self._scan_task_id)
 			if worker:
@@ -393,6 +401,9 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		if self._scan_batch_buffer:
 			self._movie_panel.append_movies(self._scan_batch_buffer)
 			self._scan_batch_buffer = []
+		# re-enable sorting now that all movies are loaded;
+		# Qt triggers a single sort using the existing sort indicator
+		self._movie_panel.set_sorting_enabled(True)
 		self.unsetCursor()
 		self._status.hide_progress()
 		scraped = self._api.get_scraped_count()

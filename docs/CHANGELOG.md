@@ -2,11 +2,33 @@
 
 ## 2026-03-03
 
+### Developer Tests and Notes
+- Added diagnostic logging to `imdb_browser_transport.py` fetch pipeline: each stage
+  (fetch start, loadFinished, toHtml callback, event loop exit) now logs with elapsed
+  time via `time.monotonic()`. Timeout error messages now indicate which stage stalled
+  ("loadFinished never fired" vs "toHtml callback never returned") to help diagnose
+  WAF blocking, renderer crashes, and Qt event loop starvation.
+
 ### Fixes and Maintenance
+- Fixed `FakeTransport` test mock in `test_imdb_browser_transport.py` to include
+  `_fetch_start`, `_load_finished_fired`, and `_timeout_stage_label` attributes
+  added by the diagnostic logging changes.
+- Replaced hardcoded `/tmp` path in `task_api.py` error log with `tempfile.gettempdir()`
+  to satisfy bandit B108 security check.
+- Fixed `_-` separator collision in movie filenames when `spaces_to_underscores` is enabled.
+  `shell_safe_filename()` is now applied to each template token value individually before
+  substitution instead of on the fully-assembled string. This preserves template separators
+  (hyphens, dots) so `{title}-{year}` produces `After_the_Hunt-2025` instead of
+  `After_the_Hunt_2025_`.
 - Fixed UI unresponsiveness during directory scan by batching `partial_result` signals
-  in `MainWindow`. Incoming movies are now buffered and flushed every 100ms via a `QTimer`
+  in `MainWindow`. Incoming movies are now buffered and flushed every 1000ms via a `QTimer`
   instead of triggering one `beginInsertRows`/`endInsertRows` cycle per movie. The event
   loop can now process clicks, sorts, and scrolling while the scan is in progress.
+- Further reduced scan-time UI lag with three additional fixes: (1) throttled progress
+  signal emission to at most once per 500ms so `os.walk` subdirectory callbacks no longer
+  flood the main-thread event queue, (2) disabled table sorting during scan to avoid an
+  O(N log N) re-sort on every batch flush, re-enabling it once on scan completion, and
+  (3) added `set_sorting_enabled()` to `MoviePanel` to toggle interactive sorting.
 
 ### Additions and New Features
 - Added `get_chosen_movies()` to `MoviePanel` for unified batch operation resolution:

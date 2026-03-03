@@ -261,6 +261,15 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 		)
 
 	#============================================
+	def set_sorting_enabled(self, enabled: bool) -> None:
+		"""Enable or disable interactive table sorting.
+
+		Args:
+			enabled: True to allow sorting, False to suppress it.
+		"""
+		self._table_view.setSortingEnabled(enabled)
+
+	#============================================
 	def set_movies(self, movies: list) -> None:
 		"""Load movies into the table and switch to content view."""
 		was_empty = self._table_model.rowCount() == 0

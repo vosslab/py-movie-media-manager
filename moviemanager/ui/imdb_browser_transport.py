@@ -7,6 +7,7 @@ maintains immunity cookies, bypassing blocks that defeat curl_cffi.
 
 # Standard Library
 import os
+import time
 import logging
 import threading
 
@@ -79,6 +80,9 @@ class ImdbBrowserTransport(PySide6.QtCore.QObject):
 		self._result_html = ""
 		self._load_ok = False
 		self._event = threading.Event()
+		# diagnostic timing and stage tracking
+		self._fetch_start = 0.0
+		self._load_finished_fired = False
 		# flag to ignore loadFinished from about:blank navigation
 		self._navigating_away = False
 		# lock to serialize concurrent fetch_html calls from workers
@@ -150,6 +154,12 @@ class ImdbBrowserTransport(PySide6.QtCore.QObject):
 			self._result_html = ""
 			self._load_ok = False
 			self._navigating_away = False
+			self._load_finished_fired = False
+			self._fetch_start = time.monotonic()
+			_LOG.info(
+				"[main-thread] fetch_html starting for %s (timeout=%ds)",
+				url, timeout_sec
+			)
 			# load directly since we are on the main thread
 			self._do_load(url)
 			# spin a local event loop until page finishes or timeout
@@ -163,17 +173,29 @@ class ImdbBrowserTransport(PySide6.QtCore.QObject):
 			# disconnect to avoid stacking connections on repeated calls
 			self._fetch_done.disconnect(loop.quit)
 			timer.stop()
+			elapsed = time.monotonic() - self._fetch_start
+			_LOG.info(
+				"[main-thread] event loop exited: load_ok=%s, html_len=%d, "
+				"elapsed=%.1fs",
+				self._load_ok, len(self._result_html), elapsed
+			)
 			if not self._load_ok:
 				# navigate away to stop IMDB scripts that crash Chromium
 				self._do_navigate_away()
+				# determine which stage stalled
+				stage = self._timeout_stage_label()
 				raise ConnectionError(
-					f"IMDB page load failed: {url}"
+					f"IMDB page load failed after {elapsed:.1f}s "
+					f"({stage}): {url}"
 				)
 			if not self._result_html:
 				# navigate away to stop IMDB scripts that crash Chromium
 				self._do_navigate_away()
+				# determine which stage stalled
+				stage = self._timeout_stage_label()
 				raise ConnectionError(
-					f"IMDB page load timed out after {timeout_sec}s: {url}"
+					f"IMDB page load timed out after {timeout_sec}s "
+					f"({stage}): {url}"
 				)
 			html = self._result_html
 			return html
@@ -201,21 +223,38 @@ class ImdbBrowserTransport(PySide6.QtCore.QObject):
 			self._result_html = ""
 			self._load_ok = False
 			self._navigating_away = False
+			self._load_finished_fired = False
+			self._fetch_start = time.monotonic()
+			_LOG.info(
+				"[worker-thread] fetch_html starting for %s (timeout=%ds)",
+				url, timeout_sec
+			)
 			# emit signal to trigger load on the main thread
 			self._load_requested.emit(url)
+			_LOG.info("[worker-thread] _load_requested emitted, waiting...")
 			# block calling thread until load completes or times out
 			finished = self._event.wait(timeout=timeout_sec)
+			elapsed = time.monotonic() - self._fetch_start
+			_LOG.info(
+				"[worker-thread] event.wait returned: finished=%s, "
+				"load_ok=%s, html_len=%d, elapsed=%.1fs",
+				finished, self._load_ok,
+				len(self._result_html), elapsed
+			)
 			if not finished:
 				# signal main thread to navigate away and stop IMDB scripts
 				self._stop_requested.emit()
+				# determine which stage stalled
+				stage = self._timeout_stage_label()
 				raise ConnectionError(
-					f"IMDB page load timed out after {timeout_sec}s: {url}"
+					f"IMDB page load timed out after {timeout_sec}s "
+					f"({stage}): {url}"
 				)
 			if not self._load_ok:
 				# signal main thread to navigate away and stop IMDB scripts
 				self._stop_requested.emit()
 				raise ConnectionError(
-					f"IMDB page load failed: {url}"
+					f"IMDB page load failed after {elapsed:.1f}s: {url}"
 				)
 			html = self._result_html
 			return html
@@ -252,12 +291,17 @@ class ImdbBrowserTransport(PySide6.QtCore.QObject):
 		if self._navigating_away:
 			self._navigating_away = False
 			return
+		elapsed = time.monotonic() - self._fetch_start
+		self._load_finished_fired = True
 		if not ok:
-			_LOG.warning("Transport page load failed")
+			_LOG.warning(
+				"loadFinished fired: ok=False, elapsed=%.1fs", elapsed
+			)
 			self._load_ok = False
 			self._event.set()
 			self._fetch_done.emit()
 			return
+		_LOG.info("loadFinished fired: ok=True, elapsed=%.1fs", elapsed)
 		# extract HTML content from the loaded page
 		self._load_ok = True
 		self._page.toHtml(self._on_html_received)
@@ -273,6 +317,11 @@ class ImdbBrowserTransport(PySide6.QtCore.QObject):
 		Args:
 			html: Full page HTML content.
 		"""
+		elapsed = time.monotonic() - self._fetch_start
+		_LOG.info(
+			"toHtml callback received: html_len=%d, elapsed=%.1fs",
+			len(html), elapsed
+		)
 		self._result_html = html
 		# check for CAPTCHA indicators (not just JS challenge)
 		if "captcha" in html.lower() and "aws-waf" in html.lower():
@@ -285,3 +334,16 @@ class ImdbBrowserTransport(PySide6.QtCore.QObject):
 		# unblock the waiting thread (worker path) and signal done (main path)
 		self._event.set()
 		self._fetch_done.emit()
+
+	#============================================
+	def _timeout_stage_label(self) -> str:
+		"""Return a human-readable label for where the fetch stalled.
+
+		Returns:
+			str: Description of the stalled stage.
+		"""
+		if not self._load_finished_fired:
+			label = "loadFinished never fired"
+			return label
+		label = "toHtml callback never returned"
+		return label
