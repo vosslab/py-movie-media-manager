@@ -28,6 +28,11 @@
   in `MainWindow`. Incoming movies are now buffered and flushed every 1000ms via a `QTimer`
   instead of triggering one `beginInsertRows`/`endInsertRows` cycle per movie. The event
   loop can now process clicks, sorts, and scrolling while the scan is in progress.
+- Added chunked insertion to `_flush_scan_batch()` in `main_window.py`. Each flush now
+  inserts movies in chunks of 50 with `QTimer.singleShot(0, ...)` between chunks, yielding
+  to the event loop so the UI stays responsive during large batch inserts. Extracted
+  `_finalize_scan()` from `_on_scan_done()` so post-scan cleanup (re-enable sorting, update
+  status, start media probe) runs after all chunked inserts have drained.
 - Further reduced scan-time UI lag with three additional fixes: (1) throttled progress
   signal emission to at most once per 500ms so `os.walk` subdirectory callbacks no longer
   flood the main-thread event queue, (2) disabled table sorting during scan to avoid an

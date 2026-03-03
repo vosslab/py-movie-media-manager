@@ -380,14 +380,39 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 
 	#============================================
 	def _flush_scan_batch(self) -> None:
-		"""Flush buffered movies into the table as one batch insert."""
+		"""Flush buffered movies into the table in small chunks.
+
+		Each chunk inserts up to 50 movies then yields to the event
+		loop via QTimer.singleShot(0, ...) so the UI stays responsive.
+		"""
 		if not self._scan_batch_buffer:
 			self._scan_batch_timer.stop()
 			return
 		# swap out the buffer so new arrivals go into a fresh list
 		batch = self._scan_batch_buffer
 		self._scan_batch_buffer = []
-		self._movie_panel.append_movies(batch)
+		chunk_size = 50
+		self._insert_chunk(batch, 0, chunk_size)
+
+	#============================================
+	def _insert_chunk(self, batch: list, offset: int, chunk_size: int) -> None:
+		"""Insert one chunk of movies and schedule the next chunk.
+
+		Args:
+			batch: Full list of movies from the flush buffer.
+			offset: Start index into batch for this chunk.
+			chunk_size: Number of movies per chunk.
+		"""
+		chunk = batch[offset:offset + chunk_size]
+		if not chunk:
+			return
+		self._movie_panel.append_movies(chunk)
+		next_offset = offset + chunk_size
+		if next_offset < len(batch):
+			# yield to event loop, then insert next chunk
+			PySide6.QtCore.QTimer.singleShot(
+				0, lambda: self._insert_chunk(batch, next_offset, chunk_size)
+			)
 
 	#============================================
 	def _on_scan_done(self, movies) -> None:
@@ -396,11 +421,19 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		Movies were already delivered incrementally via partial_result,
 		so this only updates status bar counts and window title.
 		"""
-		# flush any remaining buffered movies
+		# flush any remaining buffered movies via chunked insertion
 		self._scan_batch_timer.stop()
 		if self._scan_batch_buffer:
-			self._movie_panel.append_movies(self._scan_batch_buffer)
+			final_batch = self._scan_batch_buffer
 			self._scan_batch_buffer = []
+			chunk_size = 50
+			self._insert_chunk(final_batch, 0, chunk_size)
+		# defer post-scan cleanup until event loop drains insert chunks
+		PySide6.QtCore.QTimer.singleShot(0, self._finalize_scan)
+
+	#============================================
+	def _finalize_scan(self) -> None:
+		"""Post-scan cleanup after all chunked inserts are done."""
 		# re-enable sorting now that all movies are loaded;
 		# Qt triggers a single sort using the existing sort indicator
 		self._movie_panel.set_sorting_enabled(True)
