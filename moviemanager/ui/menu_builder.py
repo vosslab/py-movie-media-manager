@@ -89,6 +89,8 @@ def _build_action_map(window) -> dict:
 		"select_none": window._select_none,
 		"select_unscraped": window._select_unscraped,
 		"batch_scrape_unscraped": window._batch_scrape_unscraped,
+		"refresh_metadata": window._refresh_metadata,
+		"refresh_file_stats": window._refresh_file_stats,
 		"toggle_dark_mode": window._toggle_dark_mode,
 		"show_about": window._show_about,
 		"focus_search": window._focus_search,

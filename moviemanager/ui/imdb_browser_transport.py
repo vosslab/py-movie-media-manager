@@ -45,6 +45,8 @@ class ImdbBrowserTransport(PySide6.QtCore.QObject):
 
 	# signal for requesting a page load from the main thread
 	_load_requested = PySide6.QtCore.Signal(str)
+	# signal to navigate away from the current page (timeout cleanup)
+	_stop_requested = PySide6.QtCore.Signal()
 	# signal emitted when page fetch is complete (success or failure)
 	_fetch_done = PySide6.QtCore.Signal()
 	# signal emitted when a WAF CAPTCHA is detected (not just JS challenge)
@@ -83,6 +85,8 @@ class ImdbBrowserTransport(PySide6.QtCore.QObject):
 		self._lock = threading.Lock()
 		# connect internal signal so worker threads can request loads
 		self._load_requested.connect(self._do_load)
+		# connect stop signal so worker threads can cancel on timeout
+		self._stop_requested.connect(self._do_navigate_away)
 		# connect page load completion
 		self._page.loadFinished.connect(self._on_load_finished)
 
@@ -160,10 +164,14 @@ class ImdbBrowserTransport(PySide6.QtCore.QObject):
 			self._fetch_done.disconnect(loop.quit)
 			timer.stop()
 			if not self._load_ok:
+				# navigate away to stop IMDB scripts that crash Chromium
+				self._do_navigate_away()
 				raise ConnectionError(
 					f"IMDB page load failed: {url}"
 				)
 			if not self._result_html:
+				# navigate away to stop IMDB scripts that crash Chromium
+				self._do_navigate_away()
 				raise ConnectionError(
 					f"IMDB page load timed out after {timeout_sec}s: {url}"
 				)
@@ -198,10 +206,14 @@ class ImdbBrowserTransport(PySide6.QtCore.QObject):
 			# block calling thread until load completes or times out
 			finished = self._event.wait(timeout=timeout_sec)
 			if not finished:
+				# signal main thread to navigate away and stop IMDB scripts
+				self._stop_requested.emit()
 				raise ConnectionError(
 					f"IMDB page load timed out after {timeout_sec}s: {url}"
 				)
 			if not self._load_ok:
+				# signal main thread to navigate away and stop IMDB scripts
+				self._stop_requested.emit()
 				raise ConnectionError(
 					f"IMDB page load failed: {url}"
 				)
@@ -217,6 +229,17 @@ class ImdbBrowserTransport(PySide6.QtCore.QObject):
 		"""
 		_LOG.info("Transport loading: %s", url)
 		self._page.load(PySide6.QtCore.QUrl(url))
+
+	#============================================
+	def _do_navigate_away(self) -> None:
+		"""Navigate to about:blank to stop IMDB scripts. Runs on Qt main thread.
+
+		Called after a timeout to prevent ad/tracker scripts from crashing
+		the Chromium renderer process.
+		"""
+		_LOG.info("Transport navigating away after timeout")
+		self._navigating_away = True
+		self._page.setUrl(PySide6.QtCore.QUrl("about:blank"))
 
 	#============================================
 	def _on_load_finished(self, ok: bool) -> None:

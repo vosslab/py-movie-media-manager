@@ -8,3 +8,4 @@ requests  # Simple HTTP library
 rich  # Pretty console output, logging, progress bars, and tracebacks
 tabulate  # Pretty print tables in plain text
 tmdbv3api  # TMDB v3 API wrapper for movie metadata
+unidecode

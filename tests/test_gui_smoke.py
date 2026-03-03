@@ -320,6 +320,11 @@ class TestMainWindowScan:
 		monkeypatch.setattr(
 			moviemanager.core.settings, "save_settings", lambda *a, **kw: None,
 		)
+		# auto-accept "quit anyway?" dialog from background media probe
+		monkeypatch.setattr(
+			PySide6.QtWidgets.QMessageBox, "question",
+			lambda *a, **kw: PySide6.QtWidgets.QMessageBox.StandardButton.Yes,
+		)
 		window = moviemanager.ui.main_window.MainWindow(
 			settings, directory=root,
 		)
@@ -352,7 +357,8 @@ class TestMainWindowLastDirectory:
 
 		def _question_stub(*args, **kwargs):
 			question_called["called"] = True
-			return PySide6.QtWidgets.QMessageBox.StandardButton.No
+			# return Yes so closeEvent proceeds during teardown
+			return PySide6.QtWidgets.QMessageBox.StandardButton.Yes
 
 		monkeypatch.setattr(
 			PySide6.QtWidgets.QMessageBox, "question", _question_stub,

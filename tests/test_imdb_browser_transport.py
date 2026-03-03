@@ -80,6 +80,8 @@ class FakeTransport:
 		self.challenge_needed = unittest.mock.Mock()
 		# signal mock for fetch completion
 		self._fetch_done = unittest.mock.Mock()
+		# signal mock for stop/navigate-away requests
+		self._stop_requested = unittest.mock.Mock()
 		# flag to ignore loadFinished from about:blank navigation
 		self._navigating_away = False
 		# lock to serialize concurrent fetch_html calls

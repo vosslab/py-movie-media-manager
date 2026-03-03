@@ -44,6 +44,11 @@ menus:
       - label: "Match All &Unscraped"
         action: "batch_scrape_unscraped"
       - separator: true
+      - label: "Refresh &Metadata"
+        action: "refresh_metadata"
+      - label: "Refresh File &Stats"
+        action: "refresh_file_stats"
+      - separator: true
       - label: "Download &Trailer"
         action: "download_trailer"
       - label: "Download &Subtitles"

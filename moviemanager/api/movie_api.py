@@ -462,7 +462,7 @@ class MovieAPI:
 		return score
 
 	#============================================
-	def scrape_movie(self, movie, tmdb_id: int = 0, imdb_id: str = "") -> None:
+	def scrape_movie(self, movie, tmdb_id: int = 0, imdb_id: str = "", bypass_cache: bool = False) -> None:
 		"""Fetch and apply metadata to a movie from the active scraper.
 
 		Maps MediaMetadata fields onto the Movie object, marks it
@@ -472,6 +472,7 @@ class MovieAPI:
 			movie: Movie instance to update with scraped metadata.
 			tmdb_id: TMDB ID to fetch metadata for.
 			imdb_id: IMDB ID to fetch metadata for.
+			bypass_cache: Skip cache lookup and force fresh fetch.
 		"""
 		self._ensure_scraper()
 		is_imdb = isinstance(
@@ -480,10 +481,12 @@ class MovieAPI:
 		cache_type = "imdb_metadata" if is_imdb else "tmdb_metadata"
 		# use imdb_id as the key for both scrapers (TMDB returns imdb_id)
 		cache_key = imdb_id
-		# check persistent cache before network call
-		cached_dict = self._cache.get_metadata(
-			cache_type, cache_key
-		) if cache_key else None
+		# check persistent cache before network call (skip when refreshing)
+		cached_dict = None
+		if not bypass_cache and cache_key:
+			cached_dict = self._cache.get_metadata(
+				cache_type, cache_key
+			)
 		if cached_dict is not None:
 			# reconstruct CastMember lists from nested dicts
 			actors_raw = cached_dict.pop("actors", [])
@@ -519,12 +522,14 @@ class MovieAPI:
 				)
 		# supplement parental guide from IMDB when using TMDB
 		if (self._imdb_scraper is not None
-				and not metadata.parental_guide
+				and (bypass_cache or not metadata.parental_guide)
 				and metadata.imdb_id):
-			# check parental guide cache first
-			cached_guide = self._cache.get_parental_guide(
-				metadata.imdb_id
-			)
+			# check parental guide cache first (skip when refreshing)
+			cached_guide = None
+			if not bypass_cache:
+				cached_guide = self._cache.get_parental_guide(
+					metadata.imdb_id
+				)
 			if cached_guide is not None:
 				metadata.parental_guide = cached_guide
 			else:

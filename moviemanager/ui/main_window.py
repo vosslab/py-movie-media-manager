@@ -114,6 +114,7 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		Layout: Open | sep | 1. Match | 2. Organize | 3. Download | spacer | Settings | Quit
 		"""
 		toolbar = self.addToolBar("Main")
+		toolbar.setObjectName("MainToolBar")
 		toolbar.setMovable(False)
 		# text-under-icon layout with larger icons
 		toolbar.setToolButtonStyle(
@@ -190,6 +191,35 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			PySide6.QtWidgets.QSizePolicy.Policy.Preferred,
 		)
 		toolbar.addWidget(spacer)
+		toolbar.addSeparator()
+		# refresh metadata button -- re-fetch IMDB/TMDB data
+		refresh_meta_btn = PySide6.QtGui.QAction("Refresh Metadata", self)
+		refresh_meta_icon = PySide6.QtGui.QIcon.fromTheme(
+			"view-refresh",
+			self.style().standardIcon(
+				PySide6.QtWidgets.QStyle.StandardPixmap.SP_BrowserReload
+			),
+		)
+		refresh_meta_btn.setIcon(refresh_meta_icon)
+		refresh_meta_btn.setToolTip(
+			"Re-fetch metadata for matched movies from IMDB/TMDB"
+		)
+		refresh_meta_btn.triggered.connect(self._refresh_metadata)
+		toolbar.addAction(refresh_meta_btn)
+		# refresh file stats button -- re-probe video files
+		refresh_stats_btn = PySide6.QtGui.QAction("Refresh Stats", self)
+		refresh_stats_icon = PySide6.QtGui.QIcon.fromTheme(
+			"document-properties",
+			self.style().standardIcon(
+				PySide6.QtWidgets.QStyle.StandardPixmap.SP_FileIcon
+			),
+		)
+		refresh_stats_btn.setIcon(refresh_stats_icon)
+		refresh_stats_btn.setToolTip(
+			"Re-probe video files for codec, resolution, and duration"
+		)
+		refresh_stats_btn.triggered.connect(self._refresh_file_stats)
+		toolbar.addAction(refresh_stats_btn)
 		toolbar.addSeparator()
 		# settings button -- gear icon
 		settings_btn = PySide6.QtGui.QAction("Settings", self)
@@ -1078,6 +1108,120 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			self, "Batch Scrape Complete", summary_text
 		)
 		self._update_toolbar_badges()
+
+	#============================================
+	def _refresh_metadata(self) -> None:
+		"""Re-fetch metadata from IMDB/TMDB for matched movies.
+
+		Collects checked movies that are already scraped, or falls
+		back to all scraped movies if none are checked. Launches a
+		background worker to re-scrape each with cache bypass.
+		"""
+		# collect checked scraped movies, or fall back to all scraped
+		checked_movies = self._movie_panel.get_checked_movies()
+		scraped = [m for m in checked_movies if m.scraped]
+		if not scraped:
+			# fall back to all scraped movies
+			all_movies = self._api.get_movies()
+			scraped = [m for m in all_movies if m.scraped]
+		if not scraped:
+			PySide6.QtWidgets.QMessageBox.information(
+				self, "Refresh Metadata",
+				"No matched movies to refresh."
+			)
+			return
+		# confirm with the user
+		reply = PySide6.QtWidgets.QMessageBox.question(
+			self, "Refresh Metadata",
+			f"Re-fetch metadata for {len(scraped)} matched"
+			f" movie{'s' if len(scraped) != 1 else ''}?",
+			PySide6.QtWidgets.QMessageBox.StandardButton.Yes
+			| PySide6.QtWidgets.QMessageBox.StandardButton.No,
+		)
+		if reply != PySide6.QtWidgets.QMessageBox.StandardButton.Yes:
+			return
+		# show progress in status bar
+		self._status.show_progress(
+			0, len(scraped), "Starting metadata refresh..."
+		)
+		# run refresh in background worker
+		worker = moviemanager.ui.workers.Worker(
+			self._refresh_metadata_loop, scraped,
+		)
+		worker.signals.progress.connect(self._on_scan_progress)
+		worker.signals.finished.connect(
+			self._on_refresh_metadata_done
+		)
+		worker.signals.error.connect(self._on_scan_error)
+		self._active_worker = worker
+		self._pool.start(worker)
+
+	#============================================
+	def _refresh_metadata_loop(self, movies: list) -> dict:
+		"""Execute metadata refresh loop in a background thread.
+
+		Re-scrapes each movie with cache bypass to get fresh
+		metadata from the remote provider.
+
+		Args:
+			movies: List of scraped Movie instances to refresh.
+
+		Returns:
+			Dict with refreshed_count.
+		"""
+		refreshed_count = 0
+		for i, movie in enumerate(movies):
+			# check for cancellation
+			if self._active_worker and self._active_worker.is_cancelled:
+				break
+			# emit progress via worker signals
+			if self._active_worker:
+				self._active_worker.signals.progress.emit(
+					i, len(movies),
+					f"Refreshing: {movie.title}"
+					f" ({i + 1}/{len(movies)})",
+				)
+			# re-scrape with cache bypass
+			self._api.scrape_movie(
+				movie,
+				tmdb_id=movie.tmdb_id,
+				imdb_id=movie.imdb_id,
+				bypass_cache=True,
+			)
+			refreshed_count += 1
+		result = {"refreshed_count": refreshed_count}
+		return result
+
+	#============================================
+	def _on_refresh_metadata_done(self, result: dict) -> None:
+		"""Handle metadata refresh completion.
+
+		Refreshes the movie table and shows a summary dialog.
+
+		Args:
+			result: Dict with refreshed_count.
+		"""
+		self._active_worker = None
+		self._status.hide_progress()
+		# refresh table data in-place (preserves selection)
+		self._movie_panel.refresh_data()
+		self._refresh_status_counts()
+		count = result["refreshed_count"]
+		PySide6.QtWidgets.QMessageBox.information(
+			self, "Refresh Metadata Complete",
+			f"Refreshed metadata for {count}"
+			f" movie{'s' if count != 1 else ''}."
+		)
+		self._update_toolbar_badges()
+
+	#============================================
+	def _refresh_file_stats(self) -> None:
+		"""Re-probe video files for codec, resolution, and duration.
+
+		Delegates to the existing media probe infrastructure which
+		handles background probing, progress, and table refresh.
+		"""
+		self._start_media_probe()
 
 	#============================================
 	def _toggle_dark_mode(self) -> None:

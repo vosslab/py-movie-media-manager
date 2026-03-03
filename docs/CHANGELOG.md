@@ -2,7 +2,19 @@
 
 ## 2026-03-03
 
+### Fixes and Maintenance
+- Added missing `_stop_requested` mock to `FakeTransport` in
+  `tests/test_imdb_browser_transport.py`, fixing 2 test failures
+  (`test_transport_fetch_html_timeout`, `test_transport_fetch_html_load_failure`).
+
 ### Additions and New Features
+- Added "Refresh Metadata" toolbar button and Movie menu item to re-fetch
+  IMDB/TMDB metadata for matched movies with cache bypass
+  (`moviemanager/ui/main_window.py`, `moviemanager/api/movie_api.py`).
+- Added "Refresh Stats" toolbar button and Movie menu item to re-probe video
+  files for codec, resolution, and duration (`moviemanager/ui/main_window.py`).
+- Added `bypass_cache` parameter to `scrape_movie()` in `movie_api.py` to skip
+  metadata and parental guide cache lookups when refreshing.
 - Added runtime proximity scoring to match confidence
   (`moviemanager/api/match_confidence.py`). Uses a Gaussian bell curve
   (sigma=15 min) so close runtimes boost confidence and large mismatches
@@ -25,6 +37,12 @@
   hidden or closed (`moviemanager/ui/dialogs/jobs_dialog.py`).
 
 ### Fixes and Maintenance
+- Added `objectName("MainToolBar")` to the main toolbar in `main_window.py` so
+  `saveState()` during `closeEvent` no longer crashes with `Trace/BPT trap: 5`.
+- Added timeout cleanup to `imdb_browser_transport.py`: on timeout or load
+  failure, navigate to `about:blank` to stop IMDB ad/tracker scripts that would
+  otherwise crash the Chromium renderer (`Trace/BPT trap: 5`). Worker threads
+  use a `_stop_requested` signal to safely invoke navigation on the main thread.
 - Fixed `StatusIconDelegate` column range in `moviemanager/ui/movies/movie_panel.py` from
   `range(4, 9)` to `range(5, 10)` so the Min (duration) column no longer gets an icon delegate
   that paints nothing. Similarly fixed `SeverityDelegate` range from `range(9, 14)` to
