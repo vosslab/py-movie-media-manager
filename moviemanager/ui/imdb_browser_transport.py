@@ -12,6 +12,7 @@ import threading
 
 # PIP3 modules
 import PySide6.QtCore
+import PySide6.QtWidgets
 import PySide6.QtWebEngineCore
 
 
@@ -44,6 +45,8 @@ class ImdbBrowserTransport(PySide6.QtCore.QObject):
 
 	# signal for requesting a page load from the main thread
 	_load_requested = PySide6.QtCore.Signal(str)
+	# signal emitted when page fetch is complete (success or failure)
+	_fetch_done = PySide6.QtCore.Signal()
 	# signal emitted when a WAF CAPTCHA is detected (not just JS challenge)
 	challenge_needed = PySide6.QtCore.Signal(str)
 
@@ -74,6 +77,10 @@ class ImdbBrowserTransport(PySide6.QtCore.QObject):
 		self._result_html = ""
 		self._load_ok = False
 		self._event = threading.Event()
+		# flag to ignore loadFinished from about:blank navigation
+		self._navigating_away = False
+		# lock to serialize concurrent fetch_html calls from workers
+		self._lock = threading.Lock()
 		# connect internal signal so worker threads can request loads
 		self._load_requested.connect(self._do_load)
 		# connect page load completion
@@ -92,9 +99,9 @@ class ImdbBrowserTransport(PySide6.QtCore.QObject):
 	def fetch_html(self, url: str, timeout_sec: int = 30) -> str:
 		"""Load a URL and return the page HTML. Thread-safe.
 
-		Blocks the calling thread until the page finishes loading
-		on the Qt main thread. The Chromium engine handles any WAF
-		JavaScript challenge automatically during the load.
+		Detects the calling thread and uses the appropriate strategy:
+		main thread uses QEventLoop, worker threads use threading.Event.
+		A threading.Lock serializes concurrent calls from multiple workers.
 
 		Args:
 			url: Full URL to load (e.g. https://www.imdb.com/title/tt0109445/).
@@ -106,21 +113,100 @@ class ImdbBrowserTransport(PySide6.QtCore.QObject):
 		Raises:
 			ConnectionError: If page load fails or times out.
 		"""
-		self._event.clear()
-		self._result_html = ""
-		self._load_ok = False
-		# emit signal to trigger load on the main thread
-		self._load_requested.emit(url)
-		# block calling thread until load completes or times out
-		finished = self._event.wait(timeout=timeout_sec)
-		if not finished:
-			raise ConnectionError(
-				f"IMDB page load timed out after {timeout_sec}s: {url}"
-			)
-		if not self._load_ok:
-			raise ConnectionError(f"IMDB page load failed: {url}")
-		html = self._result_html
-		return html
+		# detect whether caller is on the Qt main thread
+		app = PySide6.QtWidgets.QApplication.instance()
+		on_main = (
+			app is not None
+			and PySide6.QtCore.QThread.currentThread() == app.thread()
+		)
+		if on_main:
+			return self._fetch_html_main_thread(url, timeout_sec)
+		return self._fetch_html_worker_thread(url, timeout_sec)
+
+	#============================================
+	def _fetch_html_main_thread(
+		self, url: str, timeout_sec: int
+	) -> str:
+		"""Fetch HTML when called from the Qt main thread.
+
+		Uses a local QEventLoop so the main thread stays responsive
+		while waiting for the page to load.
+
+		Args:
+			url: URL to load.
+			timeout_sec: Maximum wait time in seconds.
+
+		Returns:
+			str: Page HTML content.
+
+		Raises:
+			ConnectionError: If page load fails or times out.
+		"""
+		with self._lock:
+			self._result_html = ""
+			self._load_ok = False
+			self._navigating_away = False
+			# load directly since we are on the main thread
+			self._do_load(url)
+			# spin a local event loop until page finishes or timeout
+			loop = PySide6.QtCore.QEventLoop()
+			timer = PySide6.QtCore.QTimer()
+			timer.setSingleShot(True)
+			timer.timeout.connect(loop.quit)
+			self._fetch_done.connect(loop.quit)
+			timer.start(timeout_sec * 1000)
+			loop.exec()
+			# disconnect to avoid stacking connections on repeated calls
+			self._fetch_done.disconnect(loop.quit)
+			timer.stop()
+			if not self._load_ok:
+				raise ConnectionError(
+					f"IMDB page load failed: {url}"
+				)
+			if not self._result_html:
+				raise ConnectionError(
+					f"IMDB page load timed out after {timeout_sec}s: {url}"
+				)
+			html = self._result_html
+			return html
+
+	#============================================
+	def _fetch_html_worker_thread(
+		self, url: str, timeout_sec: int
+	) -> str:
+		"""Fetch HTML when called from a worker thread.
+
+		Uses a threading.Event bridged to the main thread via signal.
+
+		Args:
+			url: URL to load.
+			timeout_sec: Maximum wait time in seconds.
+
+		Returns:
+			str: Page HTML content.
+
+		Raises:
+			ConnectionError: If page load fails or times out.
+		"""
+		with self._lock:
+			self._event.clear()
+			self._result_html = ""
+			self._load_ok = False
+			self._navigating_away = False
+			# emit signal to trigger load on the main thread
+			self._load_requested.emit(url)
+			# block calling thread until load completes or times out
+			finished = self._event.wait(timeout=timeout_sec)
+			if not finished:
+				raise ConnectionError(
+					f"IMDB page load timed out after {timeout_sec}s: {url}"
+				)
+			if not self._load_ok:
+				raise ConnectionError(
+					f"IMDB page load failed: {url}"
+				)
+			html = self._result_html
+			return html
 
 	#============================================
 	def _do_load(self, url: str) -> None:
@@ -139,10 +225,15 @@ class ImdbBrowserTransport(PySide6.QtCore.QObject):
 		Args:
 			ok: True if the page loaded successfully.
 		"""
+		# ignore the loadFinished from navigating to about:blank
+		if self._navigating_away:
+			self._navigating_away = False
+			return
 		if not ok:
 			_LOG.warning("Transport page load failed")
 			self._load_ok = False
 			self._event.set()
+			self._fetch_done.emit()
 			return
 		# extract HTML content from the loaded page
 		self._load_ok = True
@@ -151,6 +242,10 @@ class ImdbBrowserTransport(PySide6.QtCore.QObject):
 	#============================================
 	def _on_html_received(self, html: str) -> None:
 		"""Store the received HTML and unblock the waiting thread.
+
+		Navigates the page to about:blank after extracting HTML to
+		stop IMDB ad/tracker scripts that would otherwise crash the
+		Chromium renderer process.
 
 		Args:
 			html: Full page HTML content.
@@ -161,4 +256,9 @@ class ImdbBrowserTransport(PySide6.QtCore.QObject):
 			page_url = self._page.url().toString()
 			_LOG.warning("CAPTCHA detected at %s", page_url)
 			self.challenge_needed.emit(page_url)
+		# navigate away to stop ad/tracker scripts that crash Chromium
+		self._navigating_away = True
+		self._page.setUrl(PySide6.QtCore.QUrl("about:blank"))
+		# unblock the waiting thread (worker path) and signal done (main path)
 		self._event.set()
+		self._fetch_done.emit()

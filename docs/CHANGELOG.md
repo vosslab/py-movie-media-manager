@@ -3,6 +3,202 @@
 ## 2026-03-03
 
 ### Additions and New Features
+- Redesigned status columns from D(Data) N(NFO) A S T to M(Matched) O(Organized) A S T, reflecting
+  the Match -> Organize -> Download workflow. Column 4 now maps to `movie.scraped`, column 5 to
+  the new `movie.is_organized` property.
+- Added `is_organized` property to `Movie` model (`moviemanager/core/models/movie.py`). Returns True
+  when `multi_movie_dir` is False and the folder name contains the movie title (normalized for
+  underscores and hyphens).
+- Added `spaces_to_underscores` setting (default True) to `Settings` dataclass. When enabled, the
+  renamer replaces spaces with underscores and strips shell-unsafe characters from folder/file names.
+- Changed default renamer templates from `{title} ({year})` to `{title}-{year}` for Unix-safe folder
+  naming. Example output: `The_Matrix-1999/`.
+- Added "Replace spaces with underscores" checkbox and live folder name preview to the Renamer tab
+  in Settings dialog (`moviemanager/ui/dialogs/settings_dialog.py`).
+- Renamer now collects subtitle and trailer files alongside video, NFO, and artwork when organizing
+  movies into folders (`moviemanager/core/movie/renamer.py`).
+- Renamer removes empty old directories after moving all files to the new location.
+- Renamer skips generating rename pairs when source paths equal destination paths (movie already
+  correctly named).
+
+### Fixes and Maintenance
+- Moved `task_api.py` from `moviemanager/api/` to `moviemanager/ui/` because it depends on PySide6
+  and violates the rule that `api/` must not import Qt. Fixes `test_no_pyside6_in_core.py` failure.
+- Fixed `FakeTransport` in `tests/test_imdb_browser_transport.py` to include all attributes
+  referenced by bound methods: `_fetch_done`, `_navigating_away`, `_lock`. Added `_bind_fetch_methods()`
+  helper to bind all fetch methods at once. Tests now use the worker-thread path directly to avoid
+  QEventLoop conflicts when a QApplication exists from other tests.
+- Added `RuntimeError` guards to `ImageDownloadWorker.run()` signal emissions
+  (`moviemanager/ui/workers.py`). The `Worker` class already had these guards but
+  `ImageDownloadWorker` did not, causing sporadic "Signal source has been deleted" errors when a
+  dialog closes while a download worker is still running.
+- Fixed `restore_table_state()` to force locked columns (Title + Mtch/Org/Art/Sub/Trl) visible
+  after both `restoreState()` and the visibility list restore. Stale QSettings from before the
+  column rename (D/N to Mtch/Org) were hiding the new status columns on startup.
+
+### Behavior or Interface Changes
+- Title and all five status columns (Mtch, Org, Art, Sub, Trl) are now locked and cannot be hidden
+  via the header right-click context menu (`moviemanager/ui/movies/movie_panel.py`).
+- `restore_table_state()` now re-applies programmatic resize modes after restoring QSettings header
+  state, preventing stale settings from giving Stretch size to the wrong column.
+- Toolbar badge counts updated: Organize badge counts `scraped and not is_organized`, Download badge
+  counts `is_organized and not (has_poster and has_trailer)`.
+- `_update_movie_paths()` now sets `movie.multi_movie_dir = False` after rename, since the movie is
+  in its own dedicated folder by definition.
+- Replaced modal `DownloadDialog` with non-blocking background download worker. Downloads run via
+  status bar progress while user can continue matching and organizing. Confirmation dialog shown
+  before starting.
+- `closeEvent` now warns if background downloads are still running and allows user to cancel quit.
+- Updated `visible_columns` default list in Settings to use new column keys: Mtch, Org instead of
+  D, N.
+
+### Fixes and Maintenance
+- Updated `tests/test_gui_smoke.py` assertions to match new default template format
+  (`The_Dark_Knight-2008` instead of `The Dark Knight (2008)`).
+
+### Previous additions
+- Rebuilt `TaskAPI` (`moviemanager/api/task_api.py`) as a Qt-integrated task manager using
+  `QThreadPool` and `Worker`/`WorkerSignals` instead of `ThreadPoolExecutor`. Emits Qt signals
+  (`task_finished`, `task_error`, `task_progress`) for direct UI connection. Supports submit,
+  cancel, is_running, is_done, get_result, and get_worker.
+- Moved batch download loop in `DownloadDialog` off the main thread. Extracted download logic
+  into `_run_batch_download()` standalone function, run via `Worker` in `QThreadPool`. UI stays
+  responsive during downloads; cancel button calls `worker.cancel()`. Progress bar and status
+  label update via signals.
+- Moved batch scrape (`_batch_scrape_unscraped`) off the main thread. Replaced modal
+  `QProgressDialog` with status bar progress. Extracted scraping loop into `_batch_scrape_loop()`
+  method run via `Worker`. Results delivered via `_on_batch_scrape_done()` signal handler.
+- Replaced generic toolbar icons with descriptive themed icons: Match uses `edit-find` (magnifying
+  glass), Organize uses `folder-new`, Download uses `go-down`, Settings uses `preferences-system`,
+  Quit uses `application-exit`. All use `QIcon.fromTheme()` with system fallbacks.
+- Added separator between workflow buttons (Match/Organize/Download) and utility buttons
+  (Settings/Quit) for clearer visual grouping.
+- Changed column headers from cryptic single-letter abbreviations to readable compact labels:
+  D/N/A/S/T became Data/NFO/Art/Sub/Trl; SN/VG/Pr/AD/FI became S&N/V&G/Prof/A&D/F&I. Updated
+  `_COLUMN_DISPLAY_NAMES` in `movie_panel.py` to match.
+- Renamed table columns 4-5 from Data/NFO (col headers "Data"/"NFO") to Mtch/Org (headers
+  "Mtch"/"Org") in `movie_table_model.py` COLUMNS and STATUS_COLUMNS. Column 4 now maps to
+  `scraped` attribute ("Matched" tooltip), column 5 maps to `is_organized` attribute ("Organized"
+  tooltip). Updated `_COLUMN_DISPLAY_NAMES` in `movie_panel.py` accordingly.
+- Locked Title (col 1) and all five status columns (cols 4-8) from being hidden via the header
+  right-click context menu in `movie_panel.py`. Added `locked_columns = {1, 4, 5, 6, 7, 8}` set
+  and skip logic in `_show_header_context_menu`.
+- Added resize-mode reapplication in `restore_table_state` in `movie_panel.py` to prevent stale
+  QSettings from giving Stretch resize mode to wrong columns after header state restore.
+- Added `checked_changed` signal to `MovieTableModel`, emitted on check/uncheck/check_all/
+  uncheck_all/check_unscraped. Bubbled through `MoviePanel` to `MainWindow` for status bar
+  checked count display.
+- Added Select All / Select None / Select Unmatched buttons above the movie table in
+  `MoviePanel` for quick batch selection.
+- Auto-select first movie row after scan completes so the detail panel shows info immediately
+  instead of remaining blank.
+- Added "No movie selected" placeholder text in detail panel title label when no movie is
+  selected. Added placeholder text "No plot available" on the plot QTextEdit.
+- Added workflow count badges on toolbar buttons: "1. Match (N)" shows unmatched count,
+  "2. Organize (N)" shows matched-but-no-NFO count, "3. Download (N)" shows incomplete count.
+  Badges update after scan, scrape, organize, and download operations.
+- Added dark mode toggle button in toolbar between Settings and Quit. Uses checkable action
+  with `weather-clear-night` themed icon.
+- Enhanced dark theme with QSS stylesheet in `theme.py` for polished scrollbars, table headers,
+  toolbar hover/pressed states, button styling, tab bar, status bar, progress bar, group boxes,
+  and checkboxes. Light/system themes clear the stylesheet.
+- Fixed tooltip background in dark theme: changed `ToolTipBase` from white to dark gray so
+  tooltip text is readable against its background.
+- Implemented progressive directory scanning. Movies now fill into the table incrementally as
+  they are discovered, instead of waiting for the full scan to complete. Added `partial_result`
+  signal to `WorkerSignals`, `movie_callback` parameter to `scanner.scan_directory()` and
+  `MovieAPI.scan_directory()`, `append_movies()` to `MovieTableModel` and `MoviePanel`, and
+  wired up incremental delivery in `MainWindow._scan_directory()`.
+- Optimized `detect_artwork_files()` to accept the `filenames` list from `os.walk()` and use
+  set membership checks instead of ~17 `os.path.isfile()` stat calls per directory.
+- Cached stopwords set at module level in `moviemanager/core/utils.py` as `STOPWORDS_LOWER`
+  frozenset, avoiding per-call set construction in `parse_title_year()`.
+- Extracted `MovieTableModel._matches_filter()` helper for filter logic reuse between
+  `_apply_filter()` and `append_movies()`.
+
+### Behavior or Interface Changes
+- Replaced modal `DownloadDialog` with non-blocking background worker in `MainWindow._download_content()`.
+  User confirms with a question dialog then downloads run in `QThreadPool` via `_run_background_downloads()`.
+  Progress shown in status bar; completion and errors handled by `_on_background_download_done()` and
+  `_on_background_download_error()`. Added `_download_worker` attribute initialized in `__init__` to
+  track and guard against concurrent downloads. `closeEvent` now warns and asks confirmation if a
+  download is still running.
+- Fixed `_update_toolbar_badges()` unorganized count: now uses `not m.is_organized` instead of
+  `not m.has_nfo`. Incomplete count now requires `m.is_organized` as a prerequisite (only organized
+  movies that lack poster or trailer are counted). Removed incorrect `else` nesting that caused all
+  scraped movies regardless of organization state to be counted for incomplete.
+- Moved all lazy dialog imports in `main_window.py` to top-level module imports. Eliminates
+  ~500ms first-click delay on Match, Organize, Download, Edit, Settings, and Dark Mode toggle
+  buttons. Affected imports: `movie_chooser`, `movie_editor`, `rename_preview`, `download_dialog`,
+  `settings_dialog`, `theme`, `os`, `shutil`.
+- Replaced full table model resets (`set_movies`) with targeted `refresh_data()` after scrape,
+  edit, and download operations. New `MovieTableModel.refresh()` emits `dataChanged` for all
+  visible cells without resetting the model, preserving selection, scroll position, and checked
+  state. Full `set_movies()` is now only used on initial directory scan and rename (where paths
+  change).
+- Moved rename dry-run computation and rename execution to background threads. Single and batch
+  rename now compute file pairs via `Worker` in `QThreadPool`, show preview dialog on completion,
+  and execute renames in background. UI remains responsive during file I/O operations.
+- Loaded detail panel artwork (poster.jpg, fanart.jpg) asynchronously in background threads.
+  `MovieDetailPanel.set_movie()` now reads image files via `Worker` and updates `ImageLabel`
+  via `set_image_data()` on completion. Cancels in-flight image loads on selection change.
+  Eliminates main-thread blocking from disk I/O during row navigation.
+- Optimized `_update_toolbar_badges()` from three separate list comprehensions over all movies
+  to a single pass, reducing iterations by 2/3.
+- Fixed auto-select first row behavior: now only auto-selects on initial table load (when table
+  was previously empty), not on every refresh. Prevents selection jumping to row 0 after scrape,
+  edit, or download when user was viewing a different movie.
+- Removed redundant `resizeColumnsToContents()` call from `MoviePanel.set_movies()` since column
+  resize modes are already configured in `_build_content()`.
+
+### Behavior or Interface Changes
+- Rating column in the movie table now displays one decimal place (e.g., "7.3" instead of "7.258")
+  for cleaner, more consistent formatting.
+- Movie editor dialog now shows the poster image alongside the metadata form. Poster is displayed
+  on the left side of the dialog, loaded from the movie's `poster_url` or `poster.jpg` in the
+  movie directory.
+- IMDB ID and TMDB ID fields in the movie editor now have "Open" buttons that launch the
+  corresponding IMDB or TMDB page in the default browser. Buttons are disabled when no ID is set.
+
+### Fixes and Maintenance
+- Fixed prematch view not showing for NFO-loaded movies. `_merge_nfo_into_movie()` in
+  `scanner.py` now sets `movie.scraped = True` when the NFO provides an external ID (`imdb_id` or
+  `tmdb_id`). Previously the `scraped` flag stayed `False` after NFO loading, so the movie chooser
+  never showed the "Existing Match" card with Keep/Re-match options for previously matched movies.
+- Fixed prematch poster not loading for NFO-loaded movies. `_merge_nfo_into_movie()` was not
+  copying `poster_url` or `fanart_url` from the parsed NFO data, so the prematch card had no URL
+  to download from. Also updated `_get_movie_poster_path()` in `movie_chooser.py` to check for
+  standard `poster.jpg` first before falling back to movie-specific cache path.
+- Fixed segfault when clicking Accept Match in movie chooser. The QWebEnginePage continued
+  executing IMDB ad/tracker JavaScript after HTML extraction, eventually crashing the Chromium
+  renderer process. Now navigates to `about:blank` after extracting HTML to stop all scripts.
+- Fixed deadlock when auto-match or main-thread code called `fetch_html()` on the IMDB browser
+  transport. The signal+`threading.Event` pattern only works from worker threads. Added
+  `QEventLoop`-based main-thread path that detects caller thread automatically.
+- Fixed race condition in batch mode where multiple background scrape workers shared one
+  transport instance. Concurrent `fetch_html()` calls corrupted shared state. Added
+  `threading.Lock` to serialize concurrent calls.
+- Fixed batch hang at end of movie chooser queue. Replaced background scrape worker with
+  synchronous main-thread scrape using `QEventLoop`-based `fetch_html()`. Removed
+  `_pending_scrape_count` and `_is_last_movie_scraping` tracking since scrapes complete
+  before the dialog advances.
+
+### Additions and New Features
+- Created [docs/NFO_FILE_FORMAT.md](docs/NFO_FILE_FORMAT.md) documenting the Kodi NFO XML
+  file format. Covers tag reference table, full sample NFO, reader/writer implementation
+  details, combination NFO behavior, round-trip element preservation, and differences from
+  the modern Kodi v17+ format. Includes parental guide custom extension documentation.
+- Created `moviemanager/ui/format_movie.py` with pure formatting functions for movie
+  metadata display. Consolidates duplicated `int->str` / `float->str` conversion logic
+  from `MovieDetailPanel.set_movie()` and `MovieChooserDialog._show_prematch_view()` into
+  shared functions: `format_rating()`, `format_genres()`, `format_runtime()`, `format_ids()`,
+  and `format_movie_fields()`. Added `tests/test_format_movie.py` with 13 tests.
+
+### Behavior or Interface Changes
+- Refactored `MovieDetailPanel.set_movie()` in `moviemanager/ui/movies/movie_detail_panel.py`
+  and `MovieChooserDialog._show_prematch_view()` in `moviemanager/ui/dialogs/movie_chooser.py`
+  to use shared `moviemanager.ui.format_movie.format_movie_fields()` instead of inline
+  formatting. No visible behavior change.
 - Persist parents guide severity data in NFO files. Writer emits `<parental_guide>`
   with `<advisory category="...">` children, reader parses them back, and scanner
   merges them on startup. Data now survives app restarts instead of being discarded
@@ -84,6 +280,12 @@
   widget methods from the scanner worker thread. Changed to emit the worker's
   `signals.progress` signal instead, which marshals the update to the main
   thread via Qt's signal-slot mechanism.
+- Fixed segfault when clicking Accept Match in the movie chooser dialog.
+  The scrape worker thread called `_ensure_imdb_transport()` which created
+  `QWebEngineProfile` and `QWebEnginePage` from a non-main thread. Added
+  eager `get_imdb_transport()` call in `_start_scrape_worker()` on the main
+  thread before launching the worker, so the transport already exists when
+  the worker runs.
 - Fixed batch match count including in-flight "pending" scrapes as matched by
   using `is True` check instead of truthiness (which counted `"pending"` strings).
 - Fixed progress bar showing current position instead of completed count in batch

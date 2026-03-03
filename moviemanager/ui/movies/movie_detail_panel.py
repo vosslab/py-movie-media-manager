@@ -9,6 +9,8 @@ import PySide6.QtWidgets
 import PySide6.QtCore
 
 # local repo modules
+import moviemanager.ui.format_movie
+import moviemanager.ui.workers
 import moviemanager.ui.widgets.image_label
 
 
@@ -82,6 +84,10 @@ class MovieDetailPanel(PySide6.QtWidgets.QTabWidget):
 
 	def __init__(self, parent=None):
 		super().__init__(parent)
+		self._pool = PySide6.QtCore.QThreadPool()
+		# track in-flight image workers for cancellation
+		self._poster_worker = None
+		self._fanart_worker = None
 		# Info tab
 		self._info_widget = PySide6.QtWidgets.QWidget()
 		self._setup_info_tab()
@@ -110,6 +116,7 @@ class MovieDetailPanel(PySide6.QtWidgets.QTabWidget):
 		self._plot_text.setReadOnly(True)
 		self._plot_text.setMinimumHeight(80)
 		self._plot_text.setMaximumHeight(300)
+		self._plot_text.setPlaceholderText("No plot available")
 		layout.addRow("Title:", self._title_label)
 		layout.addRow("Year:", self._year_label)
 		layout.addRow("Rating:", self._rating_label)
@@ -117,6 +124,8 @@ class MovieDetailPanel(PySide6.QtWidgets.QTabWidget):
 		layout.addRow("Certification:", self._certification_label)
 		layout.addRow("Genres:", self._genres_label)
 		layout.addRow("Plot:", self._plot_text)
+		# show empty state placeholder
+		self._title_label.setText("No movie selected")
 
 	#============================================
 	def _setup_artwork_tab(self):
@@ -157,31 +166,95 @@ class MovieDetailPanel(PySide6.QtWidgets.QTabWidget):
 		if movie is None:
 			self._clear()
 			return
-		self._title_label.setText(movie.title)
-		self._year_label.setText(movie.year)
-		rating_text = f"{movie.rating}/10" if movie.rating else ""
-		self._rating_label.setText(rating_text)
-		self._director_label.setText(movie.director)
-		self._certification_label.setText(movie.certification)
-		self._genres_label.setText(", ".join(movie.genres))
-		self._plot_text.setText(movie.plot)
-		# artwork - look for poster.jpg/fanart.jpg in movie path
+		# cancel any in-flight image loads
+		self._cancel_image_workers()
+		# format all display fields via shared formatter
+		fields = moviemanager.ui.format_movie.format_movie_fields(movie)
+		self._title_label.setText(fields["title"])
+		self._year_label.setText(fields["year"])
+		self._rating_label.setText(fields["rating"])
+		self._director_label.setText(fields["director"])
+		self._certification_label.setText(fields["certification"])
+		self._genres_label.setText(fields["genres"])
+		self._plot_text.setText(fields["plot"])
+		# artwork - load async to avoid blocking the main thread
 		if movie.path:
 			poster = os.path.join(movie.path, "poster.jpg")
 			fanart = os.path.join(movie.path, "fanart.jpg")
-			self._poster_label.set_image(poster)
-			self._fanart_label.set_image(fanart)
+			self._load_image_async(
+				poster, self._poster_label, "poster"
+			)
+			self._load_image_async(
+				fanart, self._fanart_label, "fanart"
+			)
 		else:
 			self._poster_label.set_image("")
 			self._fanart_label.set_image("")
 		# media files via model
 		self._media_model.set_files(movie.media_files)
-		self._media_view.resizeColumnsToContents()
+
+	#============================================
+	def _load_image_async(
+		self, path: str,
+		label: moviemanager.ui.widgets.image_label.ImageLabel,
+		tag: str,
+	) -> None:
+		"""Load an image from disk in a background thread.
+
+		Args:
+			path: File path to load.
+			label: ImageLabel widget to display the image.
+			tag: "poster" or "fanart" for worker tracking.
+		"""
+		if not path or not os.path.exists(path):
+			label.set_image("")
+			return
+		# read file bytes in background thread
+		worker = moviemanager.ui.workers.Worker(
+			self._read_file_bytes, path,
+		)
+		worker.signals.finished.connect(
+			lambda data, lbl=label: lbl.set_image_data(data)
+		)
+		worker.signals.error.connect(
+			lambda _err, lbl=label: lbl.set_image("")
+		)
+		# track worker for cancellation
+		if tag == "poster":
+			self._poster_worker = worker
+		else:
+			self._fanart_worker = worker
+		self._pool.start(worker)
+
+	#============================================
+	@staticmethod
+	def _read_file_bytes(path: str) -> bytes:
+		"""Read a file into bytes (runs in worker thread).
+
+		Args:
+			path: Absolute file path to read.
+
+		Returns:
+			Raw file bytes.
+		"""
+		with open(path, "rb") as f:
+			data = f.read()
+		return data
+
+	#============================================
+	def _cancel_image_workers(self) -> None:
+		"""Cancel any in-flight image loading workers."""
+		if self._poster_worker is not None:
+			self._poster_worker.cancel()
+			self._poster_worker = None
+		if self._fanart_worker is not None:
+			self._fanart_worker.cancel()
+			self._fanart_worker = None
 
 	#============================================
 	def _clear(self) -> None:
-		"""Clear all detail fields."""
-		self._title_label.clear()
+		"""Clear all detail fields and show empty state."""
+		self._title_label.setText("No movie selected")
 		self._year_label.clear()
 		self._rating_label.clear()
 		self._director_label.clear()

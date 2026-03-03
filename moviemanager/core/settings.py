@@ -34,8 +34,10 @@ class Settings:
 	certification_country: str = "US"
 
 	# renamer templates
-	path_template: str = "{title} ({year})"
-	file_template: str = "{title} ({year})"
+	path_template: str = "{title}-{year}"
+	file_template: str = "{title}-{year}"
+	# replace spaces with underscores in filenames for shell safety
+	spaces_to_underscores: bool = True
 
 	# scanner options
 	skip_hidden_dirs: bool = True
@@ -60,8 +62,8 @@ class Settings:
 	# table column visibility (checkbox col 0 is always visible)
 	visible_columns: list = dataclasses.field(
 		default_factory=lambda: [
-			"Title", "Year", "Rating", "D", "N", "A", "S", "T",
-			"SN", "VG", "Pr", "AD", "FI",
+			"Title", "Year", "Rating", "Mtch", "Org", "Art", "Sub", "Trl",
+			"S&N", "V&G", "Prof", "A&D", "F&I",
 		]
 	)
 

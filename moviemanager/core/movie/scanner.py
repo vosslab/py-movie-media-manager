@@ -12,31 +12,45 @@ import moviemanager.core.utils
 
 
 #============================================
-def detect_artwork_files(dir_path: str) -> dict:
+def detect_artwork_files(dir_path: str, filenames: list = None) -> dict:
 	"""Scan a directory for artwork files matching known artwork filenames.
 
 	Checks for each artwork type defined in ARTWORK_FILENAMES and returns
 	a mapping of artwork type to the first matching file path found.
+	When filenames is provided, uses set membership instead of stat calls.
 
 	Args:
 		dir_path: Path to the directory to scan for artwork.
+		filenames: Optional list of filenames from os.walk() to avoid stat calls.
 
 	Returns:
 		Dict mapping artwork type string to the full file path found.
 	"""
+	# build a lowercase set for fast membership checks
+	if filenames is not None:
+		filename_set = set(f.lower() for f in filenames)
+	else:
+		filename_set = None
 	artwork = {}
-	for art_type, filenames in moviemanager.core.constants.ARTWORK_FILENAMES.items():
-		for fname in filenames:
-			full_path = os.path.join(dir_path, fname)
-			if os.path.isfile(full_path):
-				artwork[art_type] = full_path
-				# use the first match for this artwork type
-				break
+	for art_type, art_names in moviemanager.core.constants.ARTWORK_FILENAMES.items():
+		for fname in art_names:
+			if filename_set is not None:
+				# check set membership instead of stat() call
+				if fname.lower() in filename_set:
+					artwork[art_type] = os.path.join(dir_path, fname)
+					break
+			else:
+				full_path = os.path.join(dir_path, fname)
+				if os.path.isfile(full_path):
+					artwork[art_type] = full_path
+					break
 	return artwork
 
 
 #============================================
-def scan_directory(root_path: str, progress_callback=None) -> list:
+def scan_directory(
+	root_path: str, progress_callback=None, movie_callback=None,
+) -> list:
 	"""Recursively scan a directory tree for movie files.
 
 	Walks root_path, skipping hidden directories and directories listed
@@ -46,6 +60,7 @@ def scan_directory(root_path: str, progress_callback=None) -> list:
 	Args:
 		root_path: Root directory path to begin scanning.
 		progress_callback: Optional callable(current, message) for progress.
+		movie_callback: Optional callable(movie) for incremental delivery.
 
 	Returns:
 		List of Movie objects discovered during the scan.
@@ -97,8 +112,8 @@ def scan_directory(root_path: str, progress_callback=None) -> list:
 		# multi-movie if multiple videos and not all have matching NFOs
 		is_multi = len(video_files) > 1
 
-		# detect artwork files in this directory
-		artwork = detect_artwork_files(dirpath)
+		# detect artwork files using os.walk filenames to avoid stat calls
+		artwork = detect_artwork_files(dirpath, filenames=filenames)
 
 		for vf in video_files:
 			# create a Movie object
@@ -164,6 +179,9 @@ def scan_directory(root_path: str, progress_callback=None) -> list:
 				movie.thumb_url = artwork["thumb"]
 
 			movies.append(movie)
+			# notify callback for incremental delivery
+			if movie_callback:
+				movie_callback(movie)
 
 	return movies
 
@@ -233,6 +251,11 @@ def _merge_nfo_into_movie(
 		movie.actors.extend(nfo_movie.actors)
 	if nfo_movie.producers:
 		movie.producers.extend(nfo_movie.producers)
+	# URLs
+	if nfo_movie.poster_url:
+		movie.poster_url = nfo_movie.poster_url
+	if nfo_movie.fanart_url:
+		movie.fanart_url = nfo_movie.fanart_url
 	# movie set
 	if nfo_movie.movie_set:
 		movie.movie_set = nfo_movie.movie_set
@@ -244,3 +267,6 @@ def _merge_nfo_into_movie(
 		movie.watched = nfo_movie.watched
 	if nfo_movie.date_added:
 		movie.date_added = nfo_movie.date_added
+	# mark as scraped if NFO provided external IDs
+	if movie.imdb_id or movie.tmdb_id:
+		movie.scraped = True

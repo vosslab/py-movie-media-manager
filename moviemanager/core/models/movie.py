@@ -223,6 +223,30 @@ class Movie:
 
 	#============================================
 	@property
+	def is_organized(self) -> bool:
+		"""Return whether movie is in its own dedicated folder.
+
+		True when the movie is the only video in its directory and the
+		folder name contains the movie title, indicating it was placed
+		into a dedicated folder by the organize step.
+
+		Returns:
+			True if the movie directory is a dedicated movie folder.
+		"""
+		if not self.path or self.multi_movie_dir:
+			return False
+		if not self.title:
+			return False
+		# normalize folder name and title for comparison
+		folder_name = os.path.basename(self.path).lower()
+		# strip underscores and hyphens for flexible matching
+		folder_normalized = folder_name.replace("_", " ").replace("-", " ")
+		title_lower = self.title.lower()
+		is_match = title_lower in folder_normalized
+		return is_match
+
+	#============================================
+	@property
 	def has_poster(self) -> bool:
 		"""Return whether poster.jpg exists in the movie directory.
 

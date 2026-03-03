@@ -16,16 +16,16 @@ _COLUMN_DISPLAY_NAMES = {
 	"Title": "Title",
 	"Year": "Year",
 	"Rating": "Rating",
-	"D": "Data (D)",
-	"N": "NFO (N)",
-	"A": "Artwork (A)",
-	"S": "Subtitles (S)",
-	"T": "Trailer (T)",
-	"SN": "Sex & Nudity (SN)",
-	"VG": "Violence & Gore (VG)",
-	"Pr": "Profanity (Pr)",
-	"AD": "Alcohol, Drugs & Smoking (AD)",
-	"FI": "Frightening & Intense Scenes (FI)",
+	"Mtch": "Matched",
+	"Org": "Organized",
+	"Art": "Artwork",
+	"Sub": "Subtitles",
+	"Trl": "Trailer",
+	"S&N": "Sex & Nudity",
+	"V&G": "Violence & Gore",
+	"Prof": "Profanity",
+	"A&D": "Alcohol, Drugs & Smoking",
+	"F&I": "Frightening & Intense Scenes",
 }
 
 
@@ -39,6 +39,8 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 	movie_double_clicked = PySide6.QtCore.Signal()
 	# signal emitted for context menu actions (action_name, movie)
 	context_action = PySide6.QtCore.Signal(str, object)
+	# signal emitted when check state changes (checked, total)
+	checked_changed = PySide6.QtCore.Signal(int, int)
 
 	def __init__(self, parent=None):
 		super().__init__(parent)
@@ -104,6 +106,24 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 		# search field
 		self._search = moviemanager.ui.widgets.search_field.SearchField()
 		layout.addWidget(self._search)
+		# selection buttons row
+		sel_layout = PySide6.QtWidgets.QHBoxLayout()
+		sel_all_btn = PySide6.QtWidgets.QPushButton("Select All")
+		sel_all_btn.setMaximumWidth(100)
+		sel_all_btn.clicked.connect(self.check_all)
+		sel_layout.addWidget(sel_all_btn)
+		sel_none_btn = PySide6.QtWidgets.QPushButton("Select None")
+		sel_none_btn.setMaximumWidth(100)
+		sel_none_btn.clicked.connect(self.uncheck_all)
+		sel_layout.addWidget(sel_none_btn)
+		sel_unmatched_btn = PySide6.QtWidgets.QPushButton(
+			"Select Unmatched"
+		)
+		sel_unmatched_btn.setMaximumWidth(130)
+		sel_unmatched_btn.clicked.connect(self.check_unscraped)
+		sel_layout.addWidget(sel_unmatched_btn)
+		sel_layout.addStretch()
+		layout.addLayout(sel_layout)
 		# splitter: table on left, detail on right
 		self._splitter = PySide6.QtWidgets.QSplitter(
 			PySide6.QtCore.Qt.Orientation.Horizontal
@@ -204,15 +224,50 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 		selection_model.currentRowChanged.connect(
 			self._on_row_changed
 		)
+		# forward checked_changed from model to panel signal
+		self._table_model.checked_changed.connect(
+			self.checked_changed.emit
+		)
 
 	#============================================
 	def set_movies(self, movies: list) -> None:
 		"""Load movies into the table and switch to content view."""
+		was_empty = self._table_model.rowCount() == 0
 		self._table_model.set_movies(movies)
-		# auto-resize columns to fit content
-		self._table_view.resizeColumnsToContents()
 		# switch from empty state to content
 		self._stack.setCurrentIndex(1)
+		# auto-select first row only on initial load (not refresh)
+		if movies and was_empty:
+			first_index = self._table_model.index(0, 1)
+			self._table_view.setCurrentIndex(first_index)
+
+	#============================================
+	def refresh_data(self) -> None:
+		"""Refresh displayed data without resetting the model.
+
+		Preserves selection, scroll position, and checked state.
+		Use after metadata updates (scrape, edit, rename, download).
+		"""
+		self._table_model.refresh()
+		# refresh the detail panel for the current selection
+		current = self._table_view.currentIndex()
+		if current.isValid():
+			movie = self._table_model.get_movie(current.row())
+			self._detail.set_movie(movie)
+
+	#============================================
+	def append_movies(self, movies: list) -> None:
+		"""Append movies incrementally without resetting the table.
+
+		Switches from empty state to content view on first batch.
+
+		Args:
+			movies: List of Movie objects to append.
+		"""
+		self._table_model.append_movies(movies)
+		# switch to content view on first batch
+		if self._stack.currentIndex() == 0:
+			self._stack.setCurrentIndex(1)
 
 	#============================================
 	def get_selected_movie(self):
@@ -339,8 +394,12 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 		header = self._table_view.horizontalHeader()
 		menu = PySide6.QtWidgets.QMenu(self)
 		columns = moviemanager.ui.movies.movie_table_model.COLUMNS
+		# columns that cannot be hidden (Title + status indicators)
+		locked_columns = {1, 4, 5, 6, 7, 8}
 		# skip col 0 (checkbox) -- always visible
 		for col_idx in range(1, len(columns)):
+			if col_idx in locked_columns:
+				continue
 			col_key = columns[col_idx]
 			display_name = _COLUMN_DISPLAY_NAMES.get(col_key, col_key)
 			action = menu.addAction(display_name)
@@ -388,11 +447,31 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 	#============================================
 	def restore_table_state(self, settings) -> None:
 		"""Restore column widths, sort state, and visibility from QSettings."""
+		# columns that must always be visible (Title + status indicators)
+		locked_columns = {1, 4, 5, 6, 7, 8}
 		header_state = settings.value("movieTable/headerState")
 		if header_state:
 			self._table_view.horizontalHeader().restoreState(
 				header_state
 			)
+			# re-apply resize modes after restoring state to prevent
+			# stale QSettings from giving flex size to wrong columns
+			header = self._table_view.horizontalHeader()
+			header.setSectionResizeMode(
+				0, PySide6.QtWidgets.QHeaderView.ResizeMode.ResizeToContents
+			)
+			header.setSectionResizeMode(
+				1, PySide6.QtWidgets.QHeaderView.ResizeMode.Stretch
+			)
+			for fix_col in range(2, header.count()):
+				header.setSectionResizeMode(
+					fix_col,
+					PySide6.QtWidgets.QHeaderView.ResizeMode.ResizeToContents,
+				)
+			# force locked columns visible after restoreState in case
+			# stale QSettings hid columns that were renamed
+			for col_idx in locked_columns:
+				self._table_view.setColumnHidden(col_idx, False)
 		sort_col = settings.value("movieTable/sortColumn")
 		sort_order = settings.value("movieTable/sortOrder")
 		if sort_col is not None and sort_order is not None:
@@ -400,11 +479,15 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 				int(sort_col),
 				PySide6.QtCore.Qt.SortOrder(int(sort_order))
 			)
-		# restore column visibility
+		# restore column visibility from saved settings
 		visible_cols = settings.value("movieTable/visibleColumns")
 		if visible_cols is not None:
 			columns = moviemanager.ui.movies.movie_table_model.COLUMNS
 			for col_idx in range(1, len(columns)):
+				# locked columns are always shown regardless of saved state
+				if col_idx in locked_columns:
+					self._table_view.setColumnHidden(col_idx, False)
+					continue
 				col_key = columns[col_idx]
 				is_visible = col_key in visible_cols
 				self._table_view.setColumnHidden(col_idx, not is_visible)

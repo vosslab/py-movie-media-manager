@@ -2,6 +2,7 @@
 
 # Standard Library
 import os
+import traceback
 
 # PIP3 modules
 import PySide6.QtGui
@@ -9,6 +10,7 @@ import PySide6.QtCore
 import PySide6.QtWidgets
 
 # local repo modules
+import moviemanager.ui.format_movie
 import moviemanager.ui.workers
 import moviemanager.ui.widgets.image_label
 
@@ -62,9 +64,6 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		self._batch_mode = movie_list is not None and len(movie_list) > 1
 		self._pending_scrape_movie = None
 		self._pending_scrape_kwargs = {}
-		# track in-flight scrapes and whether the last movie is scraping
-		self._pending_scrape_count = 0
-		self._is_last_movie_scraping = False
 		# pre-match mode: show existing match instead of search
 		self._in_prematch_mode = False
 		# tracks whether user came from prematch view (for return path)
@@ -381,27 +380,20 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 		self._search_widget.hide()
 		self._splitter.hide()
 		self._no_results_widget.hide()
-		# populate prematch title (banner handles "Existing Match" label)
-		self._prematch_title.setText(movie.title or "Unknown")
+		# format all display fields via shared formatter
+		fields = moviemanager.ui.format_movie.format_movie_fields(movie)
+		# prematch title falls back to "Unknown" (view-specific override)
+		self._prematch_title.setText(fields["title"] or "Unknown")
 		# populate individual metadata fields
-		self._prematch_year_label.setText(movie.year or "")
-		rating_text = f"{movie.rating}/10" if movie.rating else ""
-		self._prematch_rating_label.setText(rating_text)
-		self._prematch_director_label.setText(movie.director or "")
-		self._prematch_cert_label.setText(movie.certification or "")
-		genre_text = ", ".join(movie.genres) if movie.genres else ""
-		self._prematch_genres_label.setText(genre_text)
-		runtime_text = f"{movie.runtime} min" if movie.runtime else ""
-		self._prematch_runtime_label.setText(runtime_text)
-		# build IDs string from imdb_id and tmdb_id
-		id_parts = []
-		if movie.imdb_id:
-			id_parts.append(f"IMDB: {movie.imdb_id}")
-		if movie.tmdb_id:
-			id_parts.append(f"TMDB: {movie.tmdb_id}")
-		self._prematch_ids_label.setText("  ".join(id_parts))
+		self._prematch_year_label.setText(fields["year"])
+		self._prematch_rating_label.setText(fields["rating"])
+		self._prematch_director_label.setText(fields["director"])
+		self._prematch_cert_label.setText(fields["certification"])
+		self._prematch_genres_label.setText(fields["genres"])
+		self._prematch_runtime_label.setText(fields["runtime"])
+		self._prematch_ids_label.setText(fields["ids"])
 		# populate plot text area
-		self._prematch_plot_text.setPlainText(movie.plot or "")
+		self._prematch_plot_text.setPlainText(fields["plot"])
 		# show prematch widget
 		self._prematch_widget.show()
 		# update OK button text
@@ -433,27 +425,32 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 
 	#============================================
 	def _get_movie_poster_path(self, movie) -> str:
-		"""Build a movie-specific poster cache path from the video filename.
+		"""Find existing poster or build a movie-specific cache path.
 
-		Uses the video file basename (without extension) plus '-poster.jpg',
-		e.g. 'The.Dark.Knight.2008.BluRay.x264-poster.jpg'. This avoids
-		ambiguity with the generic 'poster.jpg' which may belong to a
-		different movie in multi-movie directories.
+		Checks for an existing poster.jpg first (the standard download
+		location), then returns a movie-specific cache path using the
+		video file basename plus '.poster.jpg',
+		e.g. 'The.Dark.Knight.2008.BluRay.x264.poster.jpg'.
 
 		Args:
 			movie: Movie instance with video_file and path.
 
 		Returns:
-			Full path to the movie-specific poster, or empty string.
+			Full path to the poster file, or empty string.
 		"""
 		if not movie.path:
 			return ""
+		# check for standard poster.jpg first
+		standard_poster = os.path.join(movie.path, "poster.jpg")
+		if os.path.isfile(standard_poster):
+			return standard_poster
+		# build movie-specific cache path from video filename
 		video = movie.video_file
 		if not video or not video.filename:
 			return ""
-		# strip the video extension and append -poster.jpg
+		# strip the video extension and append .poster.jpg
 		basename = os.path.splitext(video.filename)[0]
-		poster_name = f"{basename}-poster.jpg"
+		poster_name = f"{basename}.poster.jpg"
 		poster_path = os.path.join(movie.path, poster_name)
 		return poster_path
 
@@ -835,10 +832,11 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 
 	#============================================
 	def _accept_selection(self) -> None:
-		"""Accept the selected result and scrape.
+		"""Accept the selected result and scrape synchronously.
 
-		In batch mode, immediately advances to the next movie while
-		the scrape runs in the background, for a faster workflow.
+		The scrape runs on the main thread using QEventLoop-based
+		fetch_html, so the UI stays responsive during page loads.
+		In batch mode, advances to the next movie after scrape completes.
 		"""
 		row = self._results_table.currentRow()
 		if row < 0 or row >= len(self._results):
@@ -854,65 +852,45 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 			scrape_kwargs["tmdb_id"] = result.tmdb_id
 		elif result.imdb_id:
 			scrape_kwargs["imdb_id"] = result.imdb_id
-		# capture current movie for the background scrape
+		# capture current movie for scrape and possible retry
 		movie_to_scrape = self._movie
 		self._pending_scrape_movie = movie_to_scrape
 		self._pending_scrape_kwargs = dict(scrape_kwargs)
 		# mark as pending (not yet confirmed by scrape callback)
 		self._batch_results[movie_to_scrape.path] = "pending"
-		# detect whether this is the last movie in the batch
-		is_last = (
-			self._current_index >= len(self._movie_list) - 1
-		)
-		if is_last:
-			self._is_last_movie_scraping = True
+		# scrape synchronously on the main thread
 		self._start_scrape_worker(movie_to_scrape, scrape_kwargs)
-		# in batch mode, advance immediately without waiting for scrape
+		# in batch mode, advance after the synchronous scrape
 		if self._batch_mode:
-			if not is_last:
-				self._advance_to_next()
-				return
-			# last movie in batch: close after scrape finishes
-			self._ok_btn.setEnabled(False)
-			self._ok_btn.setText("Saving...")
-			self.setCursor(
-				PySide6.QtCore.Qt.CursorShape.WaitCursor
-			)
-		else:
-			# single mode: wait for scrape to finish
-			self._ok_btn.setEnabled(False)
-			self._ok_btn.setText("Saving...")
-			self.setCursor(
-				PySide6.QtCore.Qt.CursorShape.WaitCursor
-			)
+			self._advance_to_next()
 
 	#============================================
 	def _start_scrape_worker(self, movie, scrape_kwargs: dict) -> None:
-		"""Start a background scrape worker for the given movie."""
+		"""Run scrape synchronously on the main thread.
+
+		The IMDB browser transport uses QEventLoop when called from the
+		main thread, so the UI stays responsive during page loads.
+		"""
 		movie_path = movie.path
-		self._pending_scrape_count += 1
-		worker = moviemanager.ui.workers.Worker(
-			self._api.scrape_movie,
-			movie, **scrape_kwargs
-		)
-		worker.signals.finished.connect(
-			lambda result, p=movie_path: self._on_scrape_done(result, p)
-		)
-		worker.signals.error.connect(
-			lambda error, p=movie_path: self._on_scrape_error(error, p)
-		)
-		self._pool.start(worker)
+		# disable button and show wait cursor during scrape
+		self._ok_btn.setEnabled(False)
+		self._ok_btn.setText("Saving...")
+		self.setCursor(PySide6.QtCore.Qt.CursorShape.WaitCursor)
+		try:
+			self._api.scrape_movie(movie, **scrape_kwargs)
+			self._on_scrape_done(None, movie_path)
+		except Exception:
+			error_text = traceback.format_exc()
+			self._on_scrape_error(error_text, movie_path)
 
 	#============================================
 	def _on_scrape_done(self, result, movie_path: str = "") -> None:
 		"""Handle scrape completion.
 
-		In batch mode, only closes the dialog when the last movie's
-		scrape has completed. For single mode, always closes.
+		Marks the movie as scraped, updates batch counts, and restores
+		button state. The caller (_accept_selection) handles advancing
+		or closing the dialog.
 		"""
-		self._pending_scrape_count = max(
-			0, self._pending_scrape_count - 1
-		)
 		# mark movie as successfully scraped
 		if movie_path:
 			self._batch_results[movie_path] = True
@@ -930,31 +908,29 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 			if failed:
 				label_text += f", {failed} failed"
 			self._match_count_label.setText(label_text)
-		# only close if single mode OR last movie scrape completed
+		# restore button and cursor state
+		self.unsetCursor()
+		self._ok_btn.setEnabled(True)
+		self._ok_btn.setText("Accept Match")
+		# in single mode, close the dialog after successful scrape
 		if not self._batch_mode:
-			self.unsetCursor()
-			self.accept()
-		elif (
-			self._is_last_movie_scraping
-			and self._pending_scrape_count == 0
-		):
-			self.unsetCursor()
 			self.accept()
 
 	#============================================
 	def _on_scrape_error(
 		self, error_text: str, movie_path: str = ""
 	) -> None:
-		"""Handle scrape error."""
-		self._pending_scrape_count = max(
-			0, self._pending_scrape_count - 1
-		)
+		"""Handle scrape error.
+
+		Marks the movie as failed in batch results, updates count labels,
+		and shows an error popup. In single mode with an AWS WAF challenge,
+		offers to retry after the user completes the CAPTCHA.
+		"""
 		# mark movie as failed in batch results
 		if movie_path:
 			self._batch_results[movie_path] = False
-		# in batch mode for non-last movies: update count label, don't show popup
-		if self._batch_mode and not self._is_last_movie_scraping:
-			# update match count label to include failure count
+		# update batch count label
+		if self._batch_mode:
 			failed = sum(
 				1 for v in self._batch_results.values() if v is False
 			)
@@ -965,11 +941,11 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 			if failed:
 				label_text += f", {failed} failed"
 			self._match_count_label.setText(label_text)
-			return
-		# for single mode or last movie: show error
+		# restore button and cursor state
 		self.unsetCursor()
 		self._ok_btn.setEnabled(True)
 		self._ok_btn.setText("Accept Match")
+		# in single mode, offer WAF challenge retry if applicable
 		if (
 			not self._batch_mode
 			and "AWS WAF challenge" in error_text

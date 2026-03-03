@@ -249,8 +249,8 @@ class TestRenameAfterScrape:
 		# verify final directory names
 		dk = [m for m in movies if "Dark Knight" in m.title][0]
 		gf = [m for m in movies if "Godfather" in m.title][0]
-		assert os.path.basename(dk.path) == "The Dark Knight (2008)"
-		assert os.path.basename(gf.path) == "The Godfather (1972)"
+		assert os.path.basename(dk.path) == "The_Dark_Knight-2008"
+		assert os.path.basename(gf.path) == "The_Godfather-1972"
 		# verify video files exist in new locations
 		assert dk.video_file is not None
 		assert os.path.isfile(dk.video_file.path)
@@ -294,8 +294,8 @@ class TestFullPipeline:
 		dk = [m for m in movies if "Dark Knight" in m.title][0]
 		gf = [m for m in movies if "Godfather" in m.title][0]
 		# directories renamed correctly
-		assert "The Dark Knight (2008)" in dk.path
-		assert "The Godfather (1972)" in gf.path
+		assert "The_Dark_Knight-2008" in dk.path
+		assert "The_Godfather-1972" in gf.path
 		# NFO files exist in new locations
 		assert os.path.isfile(dk.nfo_path)
 		assert os.path.isfile(gf.nfo_path)

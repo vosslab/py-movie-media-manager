@@ -6,13 +6,13 @@ import PySide6.QtGui
 
 
 # column 0 is the checkbox (empty header), then data columns
-COLUMNS = ["", "Title", "Year", "Rating", "D", "N", "A", "S", "T",
-	"SN", "VG", "Pr", "AD", "FI"]
+COLUMNS = ["", "Title", "Year", "Rating", "Mtch", "Org", "Art", "Sub", "Trl",
+	"S&N", "V&G", "Prof", "A&D", "F&I"]
 
 # status column indices and their movie attribute + full label
 STATUS_COLUMNS = {
-	4: ("has_data", "Data"),
-	5: ("has_nfo", "NFO"),
+	4: ("scraped", "Matched"),
+	5: ("is_organized", "Organized"),
 	6: ("has_poster", "Artwork"),
 	7: ("has_subtitle", "Subtitles"),
 	8: ("has_trailer", "Trailer"),
@@ -35,6 +35,9 @@ SEVERITY_ORDER = {"None": 0, "Mild": 1, "Moderate": 2, "Severe": 3}
 class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 	"""Table model displaying movie list data with checkbox column."""
 
+	# emitted when check state changes (checked_count, total_count)
+	checked_changed = PySide6.QtCore.Signal(int, int)
+
 	def __init__(self, parent=None):
 		super().__init__(parent)
 		self._movies = []
@@ -56,6 +59,73 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 		self.endResetModel()
 
 	#============================================
+	def refresh(self) -> None:
+		"""Notify views that data changed without resetting the model.
+
+		Use after metadata updates (scrape, edit, rename) when the
+		movie list itself has not changed. Preserves selection,
+		scroll position, and checked state.
+		"""
+		if not self._filtered:
+			return
+		top = self.index(0, 0)
+		bottom = self.index(
+			len(self._filtered) - 1, len(COLUMNS) - 1
+		)
+		self.dataChanged.emit(top, bottom)
+
+	#============================================
+	def append_movies(self, new_movies: list) -> None:
+		"""Append movies incrementally without resetting the model.
+
+		Adds new movies to the backing list and inserts matching rows
+		into the filtered view so the table updates progressively.
+
+		Args:
+			new_movies: List of Movie objects to append.
+		"""
+		if not new_movies:
+			return
+		self._movies.extend(new_movies)
+		# find which new movies pass the current filter
+		matching = [m for m in new_movies if self._matches_filter(m)]
+		if not matching:
+			return
+		# insert new rows at the end of the filtered list
+		start = len(self._filtered)
+		end = start + len(matching) - 1
+		self.beginInsertRows(PySide6.QtCore.QModelIndex(), start, end)
+		self._filtered.extend(matching)
+		self.endInsertRows()
+
+	#============================================
+	def _matches_filter(self, movie) -> bool:
+		"""Check if a movie matches the current filter text.
+
+		Args:
+			movie: Movie object to test.
+
+		Returns:
+			True if the movie matches or no filter is active.
+		"""
+		if not self._filter_text:
+			return True
+		# check title
+		if self._filter_text in movie.title.lower():
+			return True
+		# check year
+		if self._filter_text in movie.year.lower():
+			return True
+		# check genres
+		genres_str = ", ".join(movie.genres).lower()
+		if self._filter_text in genres_str:
+			return True
+		# check director
+		if self._filter_text in movie.director.lower():
+			return True
+		return False
+
+	#============================================
 	def set_filter(self, text: str) -> None:
 		"""Filter movies by substring match (#10)."""
 		self.beginResetModel()
@@ -72,26 +142,9 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 		if not self._filter_text:
 			self._filtered = list(self._movies)
 		else:
-			filtered = []
-			for m in self._movies:
-				# check title
-				if self._filter_text in m.title.lower():
-					filtered.append(m)
-					continue
-				# check year
-				if self._filter_text in m.year.lower():
-					filtered.append(m)
-					continue
-				# check genres (joined as comma-separated string)
-				genres_str = ", ".join(m.genres).lower()
-				if self._filter_text in genres_str:
-					filtered.append(m)
-					continue
-				# check director
-				if self._filter_text in m.director.lower():
-					filtered.append(m)
-					continue
-			self._filtered = filtered
+			self._filtered = [
+				m for m in self._movies if self._matches_filter(m)
+			]
 		# re-apply sort after filtering
 		if self._sort_column is not None:
 			self._do_sort()
@@ -154,6 +207,9 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 		top = self.index(0, 0)
 		bottom = self.index(self.rowCount() - 1, 0)
 		self.dataChanged.emit(top, bottom)
+		self.checked_changed.emit(
+			len(self._checked), len(self._filtered)
+		)
 
 	#============================================
 	def uncheck_all(self) -> None:
@@ -162,6 +218,7 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 		top = self.index(0, 0)
 		bottom = self.index(self.rowCount() - 1, 0)
 		self.dataChanged.emit(top, bottom)
+		self.checked_changed.emit(0, len(self._filtered))
 
 	#============================================
 	def check_unscraped(self) -> None:
@@ -173,6 +230,9 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 		top = self.index(0, 0)
 		bottom = self.index(self.rowCount() - 1, 0)
 		self.dataChanged.emit(top, bottom)
+		self.checked_changed.emit(
+			len(self._checked), len(self._filtered)
+		)
 
 	#============================================
 	def get_checked_movies(self) -> list:
@@ -283,7 +343,11 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 		if col == 2:
 			return movie.year
 		if col == 3:
-			return str(movie.rating) if movie.rating else ""
+			if movie.rating:
+				# show one decimal place for cleaner display
+				formatted = f"{float(movie.rating):.1f}"
+				return formatted
+			return ""
 		return None
 
 	#============================================
@@ -299,5 +363,8 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 				else:
 					self._checked.discard(id(movie))
 				self.dataChanged.emit(index, index)
+				self.checked_changed.emit(
+					len(self._checked), len(self._filtered)
+				)
 				return True
 		return False

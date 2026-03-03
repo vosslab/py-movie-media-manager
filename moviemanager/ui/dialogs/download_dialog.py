@@ -9,6 +9,101 @@ import PySide6.QtCore
 import PySide6.QtWidgets
 
 # local repo modules
+import moviemanager.ui.workers
+
+
+#============================================
+def _run_batch_download(
+	movies: list, api, settings,
+	download_artwork: bool, download_trailers: bool,
+	download_subs: bool, worker=None,
+) -> dict:
+	"""Execute batch download loop in a background thread.
+
+	Downloads artwork, trailers, and subtitles for each movie
+	respecting rate limits and cancellation.
+
+	Args:
+		movies: List of scraped Movie instances.
+		api: MovieAPI instance for download methods.
+		settings: Application Settings instance.
+		download_artwork: Whether to download artwork.
+		download_trailers: Whether to download trailers.
+		download_subs: Whether to download subtitles.
+		worker: Worker instance for cancellation checks.
+
+	Returns:
+		dict with counts: art_count, trailer_count, sub_count,
+		errors list, and cancelled flag.
+	"""
+	art_count = 0
+	trailer_count = 0
+	sub_count = 0
+	errors = []
+	cancelled = False
+	for i, movie in enumerate(movies):
+		# check for cancellation
+		if worker and worker.is_cancelled:
+			cancelled = True
+			break
+		# emit progress via worker signals
+		if worker:
+			progress_msg = (
+				f"Processing: {movie.title}"
+				f" ({i + 1}/{len(movies)})"
+			)
+			worker.signals.progress.emit(
+				i, len(movies), progress_msg
+			)
+		# download artwork
+		if download_artwork and not movie.has_poster:
+			try:
+				downloaded = api.download_artwork(movie)
+				if downloaded:
+					art_count += len(downloaded)
+			except Exception as exc:
+				errors.append(
+					f"Artwork for {movie.title}: {exc}"
+				)
+			# rate limit between downloads
+			time.sleep(random.random())
+		# download trailer
+		if (download_trailers
+				and not movie.has_trailer
+				and movie.trailer_url):
+			try:
+				result = api.download_trailer(movie)
+				if result:
+					trailer_count += 1
+			except Exception as exc:
+				errors.append(
+					f"Trailer for {movie.title}: {exc}"
+				)
+			time.sleep(random.random())
+		# download subtitles
+		if (download_subs
+				and not movie.has_subtitle
+				and movie.imdb_id):
+			try:
+				languages = settings.subtitle_languages
+				downloaded = api.download_subtitles(
+					movie, languages
+				)
+				if downloaded:
+					sub_count += len(downloaded)
+			except Exception as exc:
+				errors.append(
+					f"Subtitles for {movie.title}: {exc}"
+				)
+			time.sleep(random.random())
+	result = {
+		"art_count": art_count,
+		"trailer_count": trailer_count,
+		"sub_count": sub_count,
+		"errors": errors,
+		"cancelled": cancelled,
+	}
+	return result
 
 
 #============================================
@@ -16,7 +111,8 @@ class DownloadDialog(PySide6.QtWidgets.QDialog):
 	"""Batch download dialog showing a checklist per movie.
 
 	Displays what content is available vs missing for each movie
-	(artwork, trailer, subtitles) and downloads missing items.
+	(artwork, trailer, subtitles) and downloads missing items
+	in a background thread.
 
 	Args:
 		movies: List of scraped Movie instances to process.
@@ -30,7 +126,8 @@ class DownloadDialog(PySide6.QtWidgets.QDialog):
 		self._movies = movies
 		self._api = api
 		self._settings = settings
-		self._cancelled = False
+		self._worker = None
+		self._pool = PySide6.QtCore.QThreadPool()
 		self.setWindowTitle(
 			f"Download Content - {len(movies)} movies"
 		)
@@ -156,100 +253,108 @@ class DownloadDialog(PySide6.QtWidgets.QDialog):
 	#============================================
 	def _on_cancel(self) -> None:
 		"""Handle cancel/stop button click."""
-		self._cancelled = True
-		self.reject()
+		if self._worker:
+			self._worker.cancel()
+		else:
+			self.reject()
 
 	#============================================
 	def _start_download(self) -> None:
-		"""Run batch download for missing content.
+		"""Start batch download in a background worker thread.
 
-		Downloads artwork, trailers, and subtitles sequentially
-		for each movie, respecting rate limits and user options.
+		Disables controls and runs the download loop off the main
+		thread so the UI stays responsive.
 		"""
 		self._start_btn.setEnabled(False)
+		self._artwork_check.setEnabled(False)
+		self._trailer_check.setEnabled(False)
+		self._subs_check.setEnabled(False)
 		self._cancel_btn.setText("Stop")
 		self._progress.show()
 		self._progress.setMaximum(len(self._movies))
-		self._cancelled = False
-		# track download counts for summary
-		art_count = 0
-		trailer_count = 0
-		sub_count = 0
-		errors = []
-		for i, movie in enumerate(self._movies):
-			if self._cancelled:
-				break
-			self._progress.setValue(i)
-			self._status_label.setText(
-				f"Processing: {movie.title} ({i + 1}/{len(self._movies)})"
-			)
-			# process Qt events to keep UI responsive
-			PySide6.QtWidgets.QApplication.processEvents()
-			# download artwork
-			if self._artwork_check.isChecked() and not movie.has_poster:
-				try:
-					downloaded = self._api.download_artwork(movie)
-					if downloaded:
-						art_count += len(downloaded)
-				except Exception as exc:
-					errors.append(
-						f"Artwork for {movie.title}: {exc}"
-					)
-				# rate limit between downloads
-				time.sleep(random.random())
-			# download trailer
-			if (self._trailer_check.isChecked()
-					and not movie.has_trailer
-					and movie.trailer_url):
-				try:
-					result = self._api.download_trailer(movie)
-					if result:
-						trailer_count += 1
-				except Exception as exc:
-					errors.append(
-						f"Trailer for {movie.title}: {exc}"
-					)
-				time.sleep(random.random())
-			# download subtitles
-			if (self._subs_check.isChecked()
-					and not movie.has_subtitle
-					and movie.imdb_id):
-				try:
-					languages = self._settings.subtitle_languages
-					downloaded = self._api.download_subtitles(
-						movie, languages
-					)
-					if downloaded:
-						sub_count += len(downloaded)
-				except Exception as exc:
-					errors.append(
-						f"Subtitles for {movie.title}: {exc}"
-					)
-				time.sleep(random.random())
+		# create background worker for the download loop
+		worker = moviemanager.ui.workers.Worker(
+			_run_batch_download,
+			self._movies, self._api, self._settings,
+			self._artwork_check.isChecked(),
+			self._trailer_check.isChecked(),
+			self._subs_check.isChecked(),
+		)
+		# pass worker reference so the loop can check cancellation
+		worker.kwargs["worker"] = worker
+		# connect signals
+		worker.signals.progress.connect(self._on_progress)
+		worker.signals.finished.connect(self._on_finished)
+		worker.signals.error.connect(self._on_error)
+		self._worker = worker
+		self._pool.start(worker)
+
+	#============================================
+	def _on_progress(self, current: int, total: int, message: str) -> None:
+		"""Update progress bar and status label from worker thread.
+
+		Args:
+			current: Current movie index.
+			total: Total number of movies.
+			message: Status message to display.
+		"""
+		self._progress.setValue(current)
+		self._status_label.setText(message)
+
+	#============================================
+	def _on_finished(self, result: dict) -> None:
+		"""Handle download worker completion.
+
+		Updates the table, shows summary, and re-enables buttons.
+
+		Args:
+			result: Dict with art_count, trailer_count, sub_count,
+				errors list, and cancelled flag.
+		"""
+		self._worker = None
 		# update progress to complete
 		self._progress.setValue(len(self._movies))
-		# show summary
+		# build summary text
 		parts = []
-		if art_count:
-			parts.append(f"{art_count} artwork files")
-		if trailer_count:
-			parts.append(f"{trailer_count} trailers")
-		if sub_count:
-			parts.append(f"{sub_count} subtitle files")
+		if result["art_count"]:
+			parts.append(f"{result['art_count']} artwork files")
+		if result["trailer_count"]:
+			parts.append(f"{result['trailer_count']} trailers")
+		if result["sub_count"]:
+			parts.append(f"{result['sub_count']} subtitle files")
 		if parts:
 			summary = "Downloaded: " + ", ".join(parts)
-		elif self._cancelled:
+		elif result["cancelled"]:
 			summary = "Download cancelled"
 		else:
 			summary = "Nothing to download -- all content present"
-		if errors:
-			summary += f" ({len(errors)} errors)"
+		if result["errors"]:
+			error_count = len(result["errors"])
+			summary += f" ({error_count} errors)"
 		self._status_label.setText(summary)
 		# update table to reflect new status
 		self._populate_table()
-		# re-enable buttons
+		# re-enable buttons for closing
 		self._start_btn.setEnabled(True)
 		self._start_btn.setText("Done")
 		self._start_btn.clicked.disconnect()
 		self._start_btn.clicked.connect(self.accept)
 		self._cancel_btn.setText("Close")
+		self._artwork_check.setEnabled(True)
+		self._trailer_check.setEnabled(True)
+		self._subs_check.setEnabled(True)
+
+	#============================================
+	def _on_error(self, error_text: str) -> None:
+		"""Handle download worker error.
+
+		Args:
+			error_text: Full traceback text.
+		"""
+		self._worker = None
+		self._status_label.setText(f"Error: {error_text[:200]}")
+		self._start_btn.setEnabled(True)
+		self._cancel_btn.setText("Close")
+		self._artwork_check.setEnabled(True)
+		self._trailer_check.setEnabled(True)
+		self._subs_check.setEnabled(True)

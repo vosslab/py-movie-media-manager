@@ -19,6 +19,8 @@ class WorkerSignals(PySide6.QtCore.QObject):
 	error = PySide6.QtCore.Signal(str)
 	# emitted to report progress (current, total, message)
 	progress = PySide6.QtCore.Signal(int, int, str)
+	# emitted to deliver partial results during streaming operations
+	partial_result = PySide6.QtCore.Signal(object)
 
 
 #============================================
@@ -104,7 +106,12 @@ class ImageDownloadWorker(PySide6.QtCore.QRunnable):
 
 	#============================================
 	def run(self) -> None:
-		"""Download the image and emit raw bytes or error."""
+		"""Download the image and emit raw bytes or error.
+
+		Guards signal emission against RuntimeError in case the
+		receiver has been deleted (e.g., dialog closed while worker
+		is still running in the thread pool).
+		"""
 		if self._cancelled:
 			return
 		try:
@@ -141,6 +148,12 @@ class ImageDownloadWorker(PySide6.QtCore.QRunnable):
 					f"downloading {self._url}"
 				)
 				self.signals.error.emit(error_msg)
+		except RuntimeError:
+			# signal source was deleted; silently ignore
+			pass
 		except Exception:
 			if not self._cancelled:
-				self.signals.error.emit(traceback.format_exc())
+				try:
+					self.signals.error.emit(traceback.format_exc())
+				except RuntimeError:
+					pass

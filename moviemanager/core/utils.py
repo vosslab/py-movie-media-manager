@@ -8,6 +8,11 @@ import datetime
 # local repo modules
 import moviemanager.core.constants
 
+# cached lowercase stopwords set for fast lookup
+STOPWORDS_LOWER = frozenset(
+	w.lower() for w in moviemanager.core.constants.STOPWORDS
+)
+
 
 #============================================
 def is_video_file(path: str) -> bool:
@@ -45,10 +50,8 @@ def parse_title_year(filename: str) -> tuple:
 	# remove empty tokens
 	tokens = [t for t in tokens if t]
 
-	# build lowercase stopword set for fast lookup
-	stopwords_lower = set(
-		w.lower() for w in moviemanager.core.constants.STOPWORDS
-	)
+	# use module-level cached stopwords set
+	stopwords_lower = STOPWORDS_LOWER
 
 	# imdb id pattern
 	imdb_pattern = re.compile(r"^tt\d{7,}$", re.IGNORECASE)

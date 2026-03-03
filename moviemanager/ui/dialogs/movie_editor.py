@@ -4,6 +4,8 @@
 import os
 
 # PIP3 modules
+import PySide6.QtCore
+import PySide6.QtGui
 import PySide6.QtWidgets
 
 # local repo modules
@@ -30,8 +32,23 @@ class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 
 	#============================================
 	def _setup_ui(self):
-		"""Build the scrollable form and buttons."""
+		"""Build the scrollable form with poster and buttons."""
 		layout = PySide6.QtWidgets.QVBoxLayout(self)
+		# top section: poster on left, form on right
+		top_layout = PySide6.QtWidgets.QHBoxLayout()
+		# poster image
+		self._poster_label = PySide6.QtWidgets.QLabel()
+		self._poster_label.setFixedWidth(180)
+		self._poster_label.setMinimumHeight(260)
+		self._poster_label.setAlignment(
+			PySide6.QtCore.Qt.AlignmentFlag.AlignTop
+			| PySide6.QtCore.Qt.AlignmentFlag.AlignHCenter
+		)
+		self._poster_label.setStyleSheet(
+			"background: #222; border: 1px solid #444;"
+		)
+		self._poster_label.setText("No poster")
+		top_layout.addWidget(self._poster_label)
 		# scroll area for form
 		scroll = PySide6.QtWidgets.QScrollArea()
 		scroll.setWidgetResizable(True)
@@ -49,14 +66,29 @@ class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 		self._year_edit = PySide6.QtWidgets.QLineEdit()
 		self._year_edit.setMaximumWidth(80)
 		form_layout.addRow("Year:", self._year_edit)
+		# IMDB ID with clickable link button
+		imdb_layout = PySide6.QtWidgets.QHBoxLayout()
 		self._imdb_edit = PySide6.QtWidgets.QLineEdit()
-		form_layout.addRow("IMDB ID:", self._imdb_edit)
-		# use QSpinBox for TMDB ID to prevent non-numeric input (#14)
+		imdb_layout.addWidget(self._imdb_edit)
+		self._imdb_link_btn = PySide6.QtWidgets.QPushButton("Open")
+		self._imdb_link_btn.setMaximumWidth(50)
+		self._imdb_link_btn.setToolTip("Open IMDB page in browser")
+		self._imdb_link_btn.clicked.connect(self._open_imdb)
+		imdb_layout.addWidget(self._imdb_link_btn)
+		form_layout.addRow("IMDB ID:", imdb_layout)
+		# TMDB ID with clickable link button (#14)
+		tmdb_layout = PySide6.QtWidgets.QHBoxLayout()
 		self._tmdb_edit = PySide6.QtWidgets.QSpinBox()
 		self._tmdb_edit.setRange(0, 999999999)
 		self._tmdb_edit.setSpecialValueText("")
 		self._tmdb_edit.setMaximumWidth(120)
-		form_layout.addRow("TMDB ID:", self._tmdb_edit)
+		tmdb_layout.addWidget(self._tmdb_edit)
+		self._tmdb_link_btn = PySide6.QtWidgets.QPushButton("Open")
+		self._tmdb_link_btn.setMaximumWidth(50)
+		self._tmdb_link_btn.setToolTip("Open TMDB page in browser")
+		self._tmdb_link_btn.clicked.connect(self._open_tmdb)
+		tmdb_layout.addWidget(self._tmdb_link_btn)
+		form_layout.addRow("TMDB ID:", tmdb_layout)
 		self._tagline_edit = PySide6.QtWidgets.QLineEdit()
 		form_layout.addRow("Tagline:", self._tagline_edit)
 		self._plot_edit = PySide6.QtWidgets.QTextEdit()
@@ -100,7 +132,8 @@ class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 		)
 		form_layout.addRow("", self._watched_check)
 		scroll.setWidget(form_widget)
-		layout.addWidget(scroll)
+		top_layout.addWidget(scroll)
+		layout.addLayout(top_layout)
 		# buttons
 		btn_layout = PySide6.QtWidgets.QHBoxLayout()
 		btn_layout.addStretch()
@@ -111,6 +144,28 @@ class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 		cancel_btn.clicked.connect(self.reject)
 		btn_layout.addWidget(cancel_btn)
 		layout.addLayout(btn_layout)
+
+	#============================================
+	def _open_imdb(self) -> None:
+		"""Open IMDB page for the current IMDB ID in the browser."""
+		imdb_id = self._imdb_edit.text().strip()
+		if not imdb_id:
+			return
+		url = PySide6.QtCore.QUrl(
+			f"https://www.imdb.com/title/{imdb_id}/"
+		)
+		PySide6.QtGui.QDesktopServices.openUrl(url)
+
+	#============================================
+	def _open_tmdb(self) -> None:
+		"""Open TMDB page for the current TMDB ID in the browser."""
+		tmdb_id = self._tmdb_edit.value()
+		if not tmdb_id:
+			return
+		url = PySide6.QtCore.QUrl(
+			f"https://www.themoviedb.org/movie/{tmdb_id}"
+		)
+		PySide6.QtGui.QDesktopServices.openUrl(url)
 
 	#============================================
 	def _connect_dirty_signals(self) -> None:
@@ -201,8 +256,13 @@ class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 
 	#============================================
 	def _load_movie(self):
-		"""Populate form fields from movie."""
+		"""Populate form fields and poster from movie."""
 		m = self._movie
+		# load poster image
+		self._load_poster(m)
+		# enable/disable link buttons based on IDs
+		self._imdb_link_btn.setEnabled(bool(m.imdb_id))
+		self._tmdb_link_btn.setEnabled(bool(m.tmdb_id))
 		self._title_edit.setText(m.title)
 		self._original_title_edit.setText(m.original_title)
 		self._sort_title_edit.setText(m.sort_title)
@@ -223,6 +283,39 @@ class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 		self._country_edit.setText(m.country)
 		self._languages_edit.setText(m.spoken_languages)
 		self._watched_check.setChecked(m.watched)
+
+	#============================================
+	def _load_poster(self, movie) -> None:
+		"""Load and display the poster image for the movie.
+
+		Checks poster_url from NFO/scanner, then falls back to
+		poster.jpg in the movie directory.
+
+		Args:
+			movie: Movie object with path and poster_url attributes.
+		"""
+		poster_path = ""
+		# check poster_url from NFO or scanner
+		if movie.poster_url and os.path.isfile(movie.poster_url):
+			poster_path = movie.poster_url
+		elif movie.path:
+			# fall back to poster.jpg in movie directory
+			candidate = os.path.join(movie.path, "poster.jpg")
+			if os.path.isfile(candidate):
+				poster_path = candidate
+		if not poster_path:
+			self._poster_label.setText("No poster")
+			return
+		pixmap = PySide6.QtGui.QPixmap(poster_path)
+		if pixmap.isNull():
+			self._poster_label.setText("No poster")
+			return
+		# scale to fit the label width while keeping aspect ratio
+		scaled = pixmap.scaledToWidth(
+			170,
+			PySide6.QtCore.Qt.TransformationMode.SmoothTransformation,
+		)
+		self._poster_label.setPixmap(scaled)
 
 	#============================================
 	def _save(self):

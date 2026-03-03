@@ -13,7 +13,11 @@ import moviemanager.core.utils
 
 
 #============================================
-def expand_template(template: str, movie: moviemanager.core.models.movie.Movie) -> str:
+def expand_template(
+	template: str,
+	movie: moviemanager.core.models.movie.Movie,
+	spaces_to_underscores: bool = False,
+) -> str:
 	"""Substitute template tokens with movie field values.
 
 	Supported tokens use curly braces: {title}, {original_title},
@@ -62,6 +66,16 @@ def expand_template(template: str, movie: moviemanager.core.models.movie.Movie) 
 	result = re.sub(r" {2,}", " ", result)
 	# strip leading and trailing whitespace
 	result = result.strip()
+	# optionally make filenames shell-safe
+	if spaces_to_underscores:
+		# replace spaces with underscores
+		result = result.replace(" ", "_")
+		# strip shell-unsafe characters
+		result = re.sub(r"[(){}\[\]&|;$*?~!#<>]", "", result)
+		# collapse multiple underscores to one
+		result = re.sub(r"_{2,}", "_", result)
+		# strip leading/trailing underscores
+		result = result.strip("_")
 	return result
 
 
@@ -102,26 +116,34 @@ def rename_movie(
 	path_template: str,
 	file_template: str,
 	dry_run: bool = True,
+	spaces_to_underscores: bool = False,
 ) -> list:
 	"""Rename and move movie files according to templates.
 
 	Builds target directory and file names from templates, then
-	collects all associated files (video, NFO, artwork) and
-	computes rename pairs. When dry_run is False, files are moved
-	and the movie object is updated.
+	collects all associated files (video, NFO, artwork, subtitles,
+	trailers) and computes rename pairs. When dry_run is False,
+	files are moved and the movie object is updated.
 
 	Args:
 		movie: Movie dataclass with current file paths.
 		path_template: template for the target directory name.
 		file_template: template for the target file basename.
 		dry_run: if True, compute pairs without moving files.
+		spaces_to_underscores: if True, replace spaces with underscores.
 
 	Returns:
 		List of (source_path, dest_path) tuples for all files.
 	"""
 	# expand templates for directory and file basename
-	target_dir = expand_template(path_template, movie)
-	target_basename = expand_template(file_template, movie)
+	target_dir = expand_template(
+		path_template, movie,
+		spaces_to_underscores=spaces_to_underscores,
+	)
+	target_basename = expand_template(
+		file_template, movie,
+		spaces_to_underscores=spaces_to_underscores,
+	)
 
 	# determine the parent of the current movie directory
 	parent_dir = os.path.dirname(movie.path) if movie.path else ""
@@ -153,6 +175,35 @@ def rename_movie(
 		art_dest = os.path.join(dest_dir, art_name)
 		rename_pairs.append((art_path, art_dest))
 
+	# collect subtitle files from the movie directory
+	subtitle_exts = moviemanager.core.constants.SUBTITLE_EXTENSIONS
+	if os.path.isdir(movie.path):
+		for entry in os.listdir(movie.path):
+			ext = os.path.splitext(entry)[1].lower()
+			if ext in subtitle_exts:
+				sub_src = os.path.join(movie.path, entry)
+				sub_dest = os.path.join(dest_dir, entry)
+				rename_pairs.append((sub_src, sub_dest))
+
+	# collect trailer files from the movie directory
+	video_exts = moviemanager.core.constants.VIDEO_EXTENSIONS
+	if os.path.isdir(movie.path):
+		for entry in os.listdir(movie.path):
+			name_lower = entry.lower()
+			ext = os.path.splitext(entry)[1].lower()
+			if "trailer" in name_lower and ext in video_exts:
+				trailer_src = os.path.join(movie.path, entry)
+				trailer_dest = os.path.join(dest_dir, entry)
+				rename_pairs.append((trailer_src, trailer_dest))
+
+	# skip when all source paths equal dest paths (already organized)
+	all_same = all(src == dst for src, dst in rename_pairs)
+	if all_same:
+		return []
+
+	# remember old directory for potential cleanup
+	old_dir = movie.path
+
 	if not dry_run:
 		# create the target directory
 		os.makedirs(dest_dir, exist_ok=True)
@@ -161,6 +212,11 @@ def rename_movie(
 			_move_file(source, dest)
 		# update the movie object paths
 		_update_movie_paths(movie, dest_dir, target_basename, rename_pairs)
+		# remove old empty directory after move
+		if old_dir != dest_dir and os.path.isdir(old_dir):
+			remaining = os.listdir(old_dir)
+			if not remaining:
+				os.rmdir(old_dir)
 
 	return rename_pairs
 
@@ -196,6 +252,8 @@ def _update_movie_paths(
 		rename_pairs: list of (source, dest) tuples that were moved.
 	"""
 	movie.path = dest_dir
+	# movie is now in its own dedicated folder
+	movie.multi_movie_dir = False
 
 	# update NFO path if it was moved
 	nfo_dest = os.path.join(dest_dir, target_basename + ".nfo")

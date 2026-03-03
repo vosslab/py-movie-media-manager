@@ -57,18 +57,22 @@ class MovieAPI:
 		self._tmdb_poster_cache = {}
 
 	#============================================
-	def scan_directory(self, root_path: str, progress_callback=None) -> list:
+	def scan_directory(
+		self, root_path: str, progress_callback=None, movie_callback=None,
+	) -> list:
 		"""Scan a directory for movie files and add them to the library.
 
 		Args:
 			root_path: Root directory path to scan.
 			progress_callback: Optional callable(current, message) for progress.
+			movie_callback: Optional callable(movie) for incremental delivery.
 
 		Returns:
 			List of Movie instances discovered during the scan.
 		"""
 		movies = moviemanager.core.movie.scanner.scan_directory(
-			root_path, progress_callback=progress_callback
+			root_path, progress_callback=progress_callback,
+			movie_callback=movie_callback,
 		)
 		for movie in movies:
 			self._movie_list.add(movie)
@@ -595,6 +599,7 @@ class MovieAPI:
 			file_template = self._settings.file_template
 		result = moviemanager.core.movie.renamer.rename_movie(
 			movie, path_template, file_template, dry_run=dry_run,
+			spaces_to_underscores=self._settings.spaces_to_underscores,
 		)
 		return result
 

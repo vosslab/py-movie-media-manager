@@ -166,6 +166,28 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		)
 		file_help.setWordWrap(True)
 		rename_layout.addRow("", file_help)
+		# shell-safe naming option
+		self._spaces_check = PySide6.QtWidgets.QCheckBox(
+			"Replace spaces with underscores (shell-safe)"
+		)
+		rename_layout.addRow("", self._spaces_check)
+		# live preview of folder name
+		self._rename_preview = PySide6.QtWidgets.QLabel("")
+		preview_font = self._rename_preview.font()
+		preview_font.setPointSizeF(preview_font.pointSizeF() * 0.9)
+		self._rename_preview.setFont(preview_font)
+		self._rename_preview.setForegroundRole(
+			PySide6.QtGui.QPalette.ColorRole.PlaceholderText
+		)
+		self._rename_preview.setWordWrap(True)
+		rename_layout.addRow("Preview:", self._rename_preview)
+		# connect signals to update preview on changes
+		self._path_template_edit.textChanged.connect(
+			self._update_rename_preview
+		)
+		self._spaces_check.stateChanged.connect(
+			self._update_rename_preview
+		)
 		tabs.addTab(rename_widget, "Renamer")
 		# Downloads tab (artwork + trailer + subtitles)
 		downloads_widget = PySide6.QtWidgets.QWidget()
@@ -276,6 +298,9 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		self._cert_country_edit.setText(s.certification_country)
 		self._path_template_edit.setText(s.path_template)
 		self._file_template_edit.setText(s.file_template)
+		self._spaces_check.setChecked(s.spaces_to_underscores)
+		# show initial preview
+		self._update_rename_preview()
 		self._poster_check.setChecked(s.download_poster)
 		self._fanart_check.setChecked(s.download_fanart)
 		self._banner_check.setChecked(s.download_banner)
@@ -309,6 +334,7 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		s.certification_country = self._cert_country_edit.text()
 		s.path_template = self._path_template_edit.text()
 		s.file_template = self._file_template_edit.text()
+		s.spaces_to_underscores = self._spaces_check.isChecked()
 		s.download_poster = self._poster_check.isChecked()
 		s.download_fanart = self._fanart_check.isChecked()
 		s.download_banner = self._banner_check.isChecked()
@@ -321,6 +347,30 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		# write to disk
 		moviemanager.core.settings.save_settings(s)
 		self.accept()
+
+	#============================================
+	def _update_rename_preview(self) -> None:
+		"""Update the live preview label with example folder name."""
+		template = self._path_template_edit.text()
+		if not template:
+			self._rename_preview.setText("")
+			return
+		# substitute example values into template
+		example = template.replace("{title}", "The Matrix")
+		example = example.replace("{year}", "1999")
+		example = example.replace("{rating}", "8.7")
+		example = example.replace("{certification}", "R")
+		example = example.replace("{genre}", "Action")
+		example = example.replace("{director}", "Wachowski")
+		# apply spaces_to_underscores if checked
+		if self._spaces_check.isChecked():
+			import re
+			example = example.replace(" ", "_")
+			example = re.sub(r"[(){}\[\]&|;$*?~!#<>]", "", example)
+			example = re.sub(r"_{2,}", "_", example)
+			example = example.strip("_")
+		preview_text = f"Example: {example}/"
+		self._rename_preview.setText(preview_text)
 
 	#============================================
 	def get_settings(self):
