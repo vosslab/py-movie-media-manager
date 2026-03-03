@@ -2,6 +2,7 @@
 
 # Standard Library
 import os
+import time
 
 # PIP3 modules
 import pymediainfo
@@ -211,9 +212,13 @@ def probe_movie_list(movies: list, progress_callback=None) -> None:
 				video_pairs.append((movie, mf))
 
 	total = len(video_pairs)
+	probed_count = 0
+	skipped_count = 0
+	probe_start = time.monotonic()
 	for i, (movie, mf) in enumerate(video_pairs):
 		# skip files already probed
 		if mf.video_codec:
+			skipped_count += 1
 			if progress_callback:
 				progress_callback(i + 1, total, f"Skipping: {mf.filename}")
 			continue
@@ -221,6 +226,7 @@ def probe_movie_list(movies: list, progress_callback=None) -> None:
 		if progress_callback:
 			progress_callback(i + 1, total, f"Probing: {mf.filename}")
 		# probe and populate fields in-place
+		probed_count += 1
 		probe_data = probe_media_file(mf.path)
 		mf.video_codec = probe_data["video_codec"]
 		mf.video_width = probe_data["video_width"]
@@ -235,3 +241,14 @@ def probe_movie_list(movies: list, progress_callback=None) -> None:
 		# auto-save probe results to NFO if an NFO file exists
 		if movie.nfo_path and os.path.isfile(movie.nfo_path):
 			moviemanager.core.nfo.writer.write_nfo(movie, movie.nfo_path)
+
+	# summary timing for the full probe pass
+	probe_ms = (time.monotonic() - probe_start) * 1000
+	if probed_count > 0:
+		avg_ms = probe_ms / probed_count
+		print(
+			f"[probe] {probed_count} probed, {skipped_count} skipped, "
+			f"{probe_ms:.0f}ms total, {avg_ms:.0f}ms/file"
+		)
+	else:
+		print(f"[probe] {skipped_count} skipped, nothing to probe")

@@ -61,6 +61,18 @@ class MovieAPI:
 		self._failed_parental_guides = []
 
 	#============================================
+	def shutdown(self) -> None:
+		"""Clean up resources for a clean exit.
+
+		Shuts down the IMDB browser transport so QWebEnginePage is
+		deleted before its QWebEngineProfile, preventing the segfault
+		on application exit.
+		"""
+		if self._imdb_transport is not None:
+			self._imdb_transport.shutdown()
+			self._imdb_transport = None
+
+	#============================================
 	def scan_directory(
 		self, root_path: str, progress_callback=None, movie_callback=None,
 	) -> list:

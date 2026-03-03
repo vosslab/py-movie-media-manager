@@ -236,15 +236,32 @@ class Movie:
 		Returns:
 			True if the movie directory is a dedicated movie folder.
 		"""
+		result = self.check_organized()
+		return result
+
+	#============================================
+	def check_organized(self, settings=None) -> bool:
+		"""Check whether movie folder matches the expected path template.
+
+		When settings is provided, skips the load_settings() disk read.
+		This allows batch callers to load settings once and pass it in.
+
+		Args:
+			settings: Optional pre-loaded Settings object. Loaded from
+				disk when None.
+
+		Returns:
+			True if the movie directory is a dedicated movie folder.
+		"""
 		if not self.path or self.multi_movie_dir:
 			return False
 		if not self.title:
 			return False
 		# lazy import to avoid circular dependency (renamer imports movie)
 		import moviemanager.core.movie.renamer
-		import moviemanager.core.settings
-		# load user settings for the path template
-		settings = moviemanager.core.settings.load_settings()
+		if settings is None:
+			import moviemanager.core.settings
+			settings = moviemanager.core.settings.load_settings()
 		# expand the template to get the expected folder name
 		expected = moviemanager.core.movie.renamer.expand_template(
 			settings.path_template, self,

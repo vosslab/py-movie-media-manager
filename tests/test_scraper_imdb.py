@@ -1,7 +1,7 @@
-"""Unit tests for the IMDB scraper with CDN suggestion API and HTML parsing.
+"""Unit tests for the IMDB scraper with CDN suggestion API and GraphQL.
 
 Tests cover suggestion search, __NEXT_DATA__ metadata parsing, parental guide
-HTML parsing, cast extraction, poster URL cleanup, and transport integration.
+GraphQL API, cast extraction, poster URL cleanup, and transport integration.
 """
 
 # Standard Library
@@ -762,17 +762,51 @@ def test_get_metadata_with_transport():
 # Tests for get_parental_guide
 #============================================
 
-def test_get_parental_guide_with_transport():
-	"""get_parental_guide falls back to browser transport when curl_cffi fails."""
+def test_get_parental_guide_graphql_success():
+	"""get_parental_guide returns data from GraphQL API."""
+	graphql_result = {
+		"Sex & Nudity": "Moderate",
+		"Violence & Gore": "Mild",
+		"Profanity": "Severe",
+		"Alcohol, Drugs & Smoking": "Moderate",
+		"Frightening & Intense Scenes": "Mild",
+	}
+	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
+	with unittest.mock.patch(
+		"moviemanager.scraper.imdb_scraper._fetch_parental_guide_graphql",
+		return_value=graphql_result,
+	):
+		guide = scraper.get_parental_guide("tt0109445")
+	assert len(guide) == 5
+	assert guide["Sex & Nudity"] == "Moderate"
+	assert guide["Profanity"] == "Severe"
+
+
+#============================================
+def test_get_parental_guide_graphql_no_data():
+	"""get_parental_guide returns empty dict when movie has no guide data."""
+	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
+	# GraphQL returns empty dict for movies without parental guide data
+	with unittest.mock.patch(
+		"moviemanager.scraper.imdb_scraper._fetch_parental_guide_graphql",
+		return_value={},
+	):
+		guide = scraper.get_parental_guide("tt0119937")
+	assert guide == {}
+
+
+#============================================
+def test_get_parental_guide_graphql_failure_fallback():
+	"""get_parental_guide falls back to browser transport when GraphQL fails."""
 	html = _make_title_html(SAMPLE_NEXT_DATA_PARENTAL_GUIDE)
 	mock_transport = unittest.mock.Mock()
 	mock_transport.fetch_html.return_value = html
 	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
 	scraper.set_transport(mock_transport)
-	# mock curl_cffi path to return empty so browser transport is used
+	# GraphQL raises ConnectionError so browser transport is used
 	with unittest.mock.patch(
-		"moviemanager.scraper.imdb_scraper._fetch_parental_guide_curl",
-		return_value={},
+		"moviemanager.scraper.imdb_scraper._fetch_parental_guide_graphql",
+		side_effect=ConnectionError("HTTP 503"),
 	):
 		guide = scraper.get_parental_guide("tt0109445")
 	assert len(guide) == 5
@@ -793,12 +827,12 @@ def test_get_parental_guide_empty_id():
 
 #============================================
 def test_get_parental_guide_no_transport():
-	"""get_parental_guide returns empty dict when both curl_cffi and transport fail."""
+	"""get_parental_guide returns empty dict when GraphQL fails and no transport set."""
 	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
-	# mock curl_cffi path to return empty so it falls through to transport check
+	# GraphQL raises ConnectionError and no transport is configured
 	with unittest.mock.patch(
-		"moviemanager.scraper.imdb_scraper._fetch_parental_guide_curl",
-		return_value={},
+		"moviemanager.scraper.imdb_scraper._fetch_parental_guide_graphql",
+		side_effect=ConnectionError("HTTP 503"),
 	):
 		guide = scraper.get_parental_guide("tt0109445")
 	assert guide == {}

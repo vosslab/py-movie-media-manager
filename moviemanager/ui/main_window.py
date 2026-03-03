@@ -311,6 +311,7 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		Movies are delivered incrementally via the partial_result signal
 		so the table fills progressively as directories are scanned.
 		"""
+		self._scan_start_time = time.monotonic()
 		self._current_directory = directory
 		# save last opened directory to settings
 		self._settings.last_directory = directory
@@ -434,13 +435,18 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 	#============================================
 	def _finalize_scan(self) -> None:
 		"""Post-scan cleanup after all chunked inserts are done."""
+		finalize_start = time.monotonic()
 		# re-enable sorting now that all movies are loaded;
 		# Qt triggers a single sort using the existing sort indicator
+		t0 = time.monotonic()
 		self._movie_panel.set_sorting_enabled(True)
+		sort_ms = (time.monotonic() - t0) * 1000
 		self.unsetCursor()
 		self._status.hide_progress()
+		t0 = time.monotonic()
 		scraped = self._api.get_scraped_count()
 		total = self._api.get_movie_count()
+		counts_ms = (time.monotonic() - t0) * 1000
 		self._status.set_movie_count(total, scraped)
 		# update window title with current directory
 		self.setWindowTitle(
@@ -451,9 +457,20 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			f"Scan complete: {total} movies found", 3000
 		)
 		# update toolbar badges with workflow counts
+		t0 = time.monotonic()
 		self._update_toolbar_badges()
+		badges_ms = (time.monotonic() - t0) * 1000
 		# launch background media probe for codec/resolution fields
 		self._start_media_probe()
+		# per-step and total timing
+		finalize_ms = (time.monotonic() - finalize_start) * 1000
+		total_ms = (time.monotonic() - self._scan_start_time) * 1000
+		print(
+			f"[scan] finalize {finalize_ms:.0f}ms "
+			f"(sort={sort_ms:.0f}, counts={counts_ms:.0f}, "
+			f"badges={badges_ms:.0f}), "
+			f"total {total_ms:.0f}ms"
+		)
 
 	#============================================
 	def _start_media_probe(self) -> None:
@@ -500,11 +517,9 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		if task_id != self._probe_task_id:
 			return
 		self._status.show_progress(current, total, message)
-		# refresh table periodically so new values appear live
-		if current % 5 == 0 or current == total:
+		# refresh table less frequently; Qt repaints asynchronously
+		if current % 25 == 0 or current == total:
 			self._movie_panel.refresh_data()
-			# force UI repaint so updated cells are visible immediately
-			PySide6.QtWidgets.QApplication.processEvents()
 
 	#============================================
 	def _on_probe_task_finished(self, task_id: int, result) -> None:
@@ -619,6 +634,8 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		Single pass over the movie list for all three counts.
 		"""
 		movies = self._api.get_movies()
+		# load settings once to avoid per-movie YAML reads
+		settings = moviemanager.core.settings.load_settings()
 		# count all three categories in a single pass
 		unmatched = 0
 		unorganized = 0
@@ -626,10 +643,13 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		for m in movies:
 			if not m.scraped:
 				unmatched += 1
-			elif not m.is_organized:
-				unorganized += 1
-			if m.is_organized and not (m.has_poster and m.has_trailer):
-				incomplete += 1
+			else:
+				organized = m.check_organized(settings)
+				if not organized:
+					unorganized += 1
+				# only check poster/trailer for organized movies
+				if organized and not (m.has_poster and m.has_trailer):
+					incomplete += 1
 		# update button labels
 		if unmatched > 0:
 			self._match_btn.setText(f"1. Match ({unmatched})")
@@ -1730,6 +1750,8 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._movie_panel.save_table_state(settings)
 		# shut down background job manager
 		self._task_api.shutdown()
+		# clean up IMDB browser transport (page before profile) to avoid segfault
+		self._api.shutdown()
 		super().closeEvent(event)
 
 	#============================================

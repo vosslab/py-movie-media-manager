@@ -66,6 +66,9 @@ def main():
 	signal_timer.timeout.connect(lambda: None)
 	signal_timer.start(200)
 	exit_code = app.exec()
+	# process pending deleteLater calls so QWebEnginePage is destroyed
+	# before QWebEngineProfile, preventing segfault on exit
+	app.processEvents()
 	raise SystemExit(exit_code)
 
 

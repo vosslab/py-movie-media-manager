@@ -1,10 +1,9 @@
 """IMDB scraper using CDN suggestion API, curl_cffi, and QWebEnginePage.
 
-Search uses the IMDB suggestion CDN (no WAF). Parental guide uses curl_cffi
-with Chrome TLS impersonation as primary transport (bypasses WAF without a
-browser engine), falling back to QWebEnginePage if curl_cffi fails. Metadata
-uses QWebEnginePage to load HTML pages, which solves AWS WAF JavaScript
-challenges automatically via the Chromium engine.
+Search uses the IMDB suggestion CDN (no WAF). Parental guide uses the IMDB
+GraphQL API via curl_cffi with Chrome TLS impersonation (fast, no HTML
+parsing needed). Metadata uses QWebEnginePage to load HTML pages, which
+solves AWS WAF JavaScript challenges automatically via the Chromium engine.
 """
 
 # Standard Library
@@ -281,51 +280,65 @@ def _parse_parental_guide_from_above_fold(page_props: dict) -> dict:
 
 
 #============================================
-def _fetch_parental_guide_curl(imdb_id: str) -> dict:
-	"""Fetch parental guide via curl_cffi, bypassing WAF with browser TLS.
+def _fetch_parental_guide_graphql(imdb_id: str) -> dict:
+	"""Fetch parental guide via IMDB GraphQL API with curl_cffi.
 
-	curl_cffi impersonates Chrome's TLS fingerprint, which is enough
-	for parental guide pages (they return full __NEXT_DATA__ JSON).
-	This avoids the QWebEnginePage browser transport entirely.
+	Calls the IMDB GraphQL endpoint directly instead of scraping HTML.
+	This is faster and more reliable than parsing __NEXT_DATA__ from
+	the parental guide page, which no longer contains severity data.
 
 	Args:
 		imdb_id: IMDB movie ID (tt format).
 
 	Returns:
-		dict: Category name to severity string mapping, or empty dict on failure.
+		dict: Category name to severity string mapping, or empty dict
+		      if the movie has no parental guide data on IMDB.
+
+	Raises:
+		ConnectionError: If the GraphQL request fails (network error,
+		                 non-200 status, or unexpected response structure).
 	"""
-	url = f"{_IMDB_BASE}/title/{imdb_id}/parentalguide"
+	graphql_url = "https://api.graphql.imdb.com/"
+	# GraphQL query for parental guide severity data
+	query = (
+		"query ParentsGuide($titleId: ID!) {"
+		"  title(id: $titleId) {"
+		"    parentsGuide {"
+		"      categories {"
+		"        category { id text }"
+		"        severity { text }"
+		"      }"
+		"    }"
+		"  }"
+		"}"
+	)
+	payload = {
+		"query": query,
+		"variables": {"titleId": imdb_id},
+	}
 	# rate-limit courtesy pause
 	time.sleep(random.random())
-	response = curl_cffi.requests.get(
-		url, impersonate="chrome", timeout=15,
+	response = curl_cffi.requests.post(
+		graphql_url, json=payload, impersonate="chrome", timeout=15,
 	)
 	if response.status_code != 200:
-		_LOG.warning(
-			"curl_cffi parental guide returned HTTP %d for %s",
-			response.status_code, imdb_id,
-		)
+		msg = f"IMDB GraphQL returned HTTP {response.status_code} for {imdb_id}"
+		_LOG.warning(msg)
+		raise ConnectionError(msg)
+	data = response.json()
+	# navigate to categories list
+	categories = _safe_get(
+		data, "data", "title", "parentsGuide", "categories", default=None
+	)
+	# categories is null when the movie has no parental guide data
+	if categories is None:
 		return {}
-	html = response.text
-	data = _extract_next_data_json(html)
-	if not data:
-		return {}
-	# curl_cffi response uses categories[] path instead of section.items[]
-	page_props = _safe_get(data, "props", "pageProps", default={})
-	content_data = _safe_get(page_props, "contentData", default={})
-	categories = content_data.get("categories", []) or []
 	guide = {}
 	for cat in categories:
-		cat_name = cat.get("title", "")
-		severity = _safe_get(cat, "severitySummary", "text", default="")
+		cat_name = _safe_get(cat, "category", "text", default="")
+		severity = _safe_get(cat, "severity", "text", default="")
 		if cat_name and severity:
 			guide[cat_name] = severity
-	# fallback: try the browser-style section.items path
-	if not guide:
-		guide = _parse_parental_guide_html(html)
-	# fallback: try aboveTheFoldData path
-	if not guide:
-		guide = _parse_parental_guide_from_above_fold(page_props)
 	return guide
 
 
@@ -715,10 +728,12 @@ class ImdbScraper(moviemanager.scraper.interfaces.MetadataProvider):
 
 	#============================================
 	def get_parental_guide(self, imdb_id: str) -> dict:
-		"""Fetch parental guide data for a movie.
+		"""Fetch parental guide data for a movie via IMDB GraphQL API.
 
-		Tries curl_cffi first (fast, no browser needed), then falls back
-		to the QWebEnginePage browser transport if curl_cffi fails.
+		Uses the GraphQL API via curl_cffi as the primary (and usually
+		only) transport. Falls back to the QWebEnginePage browser
+		transport only if the GraphQL request itself fails (network
+		error, non-200 status).
 
 		Args:
 			imdb_id: IMDB movie ID (tt format).
@@ -728,16 +743,28 @@ class ImdbScraper(moviemanager.scraper.interfaces.MetadataProvider):
 		"""
 		if not imdb_id:
 			return {}
-		# try curl_cffi first -- bypasses WAF without browser transport
-		guide = _fetch_parental_guide_curl(imdb_id)
-		if guide:
-			_LOG.info(
-				"Parental guide for %s fetched via curl_cffi", imdb_id,
-			)
+		# try GraphQL API first -- fast, no HTML parsing needed
+		try:
+			guide = _fetch_parental_guide_graphql(imdb_id)
+		except ConnectionError:
+			guide = None
+		# GraphQL succeeded
+		if guide is not None:
+			if guide:
+				_LOG.info(
+					"Parental guide for %s fetched via GraphQL API",
+					imdb_id,
+				)
+			else:
+				# empty dict means movie has no parental guide on IMDB
+				_LOG.info(
+					"No parental guide data available on IMDB for %s",
+					imdb_id,
+				)
 			return guide
-		# fall back to browser transport
+		# GraphQL request failed; fall back to browser transport
 		_LOG.info(
-			"curl_cffi failed for %s, falling back to browser transport",
+			"GraphQL API failed for %s, falling back to browser transport",
 			imdb_id,
 		)
 		if self._transport is None:

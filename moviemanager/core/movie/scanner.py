@@ -2,6 +2,7 @@
 
 # Standard Library
 import os
+import time
 
 # local repo modules
 import moviemanager.core.constants
@@ -67,6 +68,7 @@ def scan_directory(
 	"""
 	movies = []
 	dirs_processed = 0
+	scan_start = time.monotonic()
 
 	for dirpath, dirnames, filenames in os.walk(root_path):
 		dirs_processed += 1
@@ -185,6 +187,12 @@ def scan_directory(
 			if movie_callback:
 				movie_callback(movie)
 
+	# summary timing for the full directory walk
+	scan_ms = (time.monotonic() - scan_start) * 1000
+	print(
+		f"[scan] {len(movies)} movies in {dirs_processed} dirs, "
+		f"{scan_ms:.0f}ms"
+	)
 	return movies
 
 

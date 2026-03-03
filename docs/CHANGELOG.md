@@ -3,17 +3,47 @@
 ## 2026-03-03
 
 ### Additions and New Features
+- Switched parental guide fetching from HTML scraping to the IMDB GraphQL API
+  (`api.graphql.imdb.com`) via `curl_cffi`. The `__NEXT_DATA__` JSON on the
+  parental guide page no longer contains severity data (IMDB moved it to
+  lazy-loaded GraphQL). The new `_fetch_parental_guide_graphql()` function
+  calls the API directly, returning structured data without HTML parsing.
+  Movies without parental guide data now return an empty dict immediately
+  instead of falling through to the browser transport and timing out after
+  15 seconds.
 - Added `curl_cffi` as primary transport for parental guide fetches in
   `imdb_scraper.py`. Uses `impersonate='chrome'` to bypass WAF without the
   QWebEnginePage browser engine, eliminating timeout failures from
   `loadFinished never fired`. Falls back to browser transport if `curl_cffi`
   fails. Parses `contentData.categories[].severitySummary.text` JSON path
   from the `curl_cffi` response.
+- Created [docs/HOW_TO_PROPERLY_DOWNLOAD_IMDB_PARENTS_GUIDE_DATA.md](docs/HOW_TO_PROPERLY_DOWNLOAD_IMDB_PARENTS_GUIDE_DATA.md)
+  documenting lessons learned from parental guide scraping: what works
+  (`curl_cffi`, QWebEnginePage, Selenium), what does not (plain requests,
+  cookie transfer), the three `__NEXT_DATA__` JSON paths, and rate limiting.
 - Updated [docs/WAF_CHALLENGES.md](docs/WAF_CHALLENGES.md) with `curl_cffi` parental guide
   transport documentation and separated metadata/parental-guide WAF sections.
 - Updated [docs/WAF_CHALLENGES.md](docs/WAF_CHALLENGES.md) with diagnostic logging reference
   (stage table, timeout stage labels), timeout tuning guidance for parental guide fetches,
   and a note on IMDB data dumps as an alternative data source for structured data.
+
+### Fixes and Maintenance
+- Fixed segfault on application exit caused by Qt destroying QWebEngineProfile
+  before QWebEnginePage. Added `shutdown()` methods to `ImdbBrowserTransport`,
+  `MovieAPI`, and wired them into `MainWindow.closeEvent()`. The page is now
+  explicitly deleted before its profile, eliminating the "Release of profile
+  requested but WebEnginePage still not deleted" warning and the segfault.
+- Fixed `_update_toolbar_badges` bottleneck (317ms -> <10ms for 74 movies).
+  Added `check_organized(settings=None)` method to `Movie` so callers can pass
+  pre-loaded settings. The badge loop now loads settings YAML once instead of
+  per-movie, and caches the `is_organized` result to avoid a duplicate call.
+- Fixed media probe UI freeze (~5s for 74 movies). Removed `processEvents()`
+  call from `_on_probe_task_progress` and reduced table refresh frequency from
+  every 5 files to every 25 files, letting Qt repaint asynchronously.
+- Replaced verbose per-step `[SCAN-TIMER]` instrumentation with concise
+  `[scan]` and `[probe]` summary lines: scanner reports movie/dir count and
+  wall time, finalize reports its duration and total scan-to-done time, and
+  media probe reports probed/skipped counts with total and per-file averages.
 
 ### Developer Tests and Notes
 - Added diagnostic logging to `imdb_browser_transport.py` fetch pipeline: each stage

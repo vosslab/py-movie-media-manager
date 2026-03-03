@@ -35,17 +35,21 @@ QWebEngine) does not preserve the binding, so the token is rejected.
 The CDN suggestion endpoint `v2.sg.media-imdb.com/suggestion/titles/x/{query}.json`
 has no WAF protection. The app uses plain HTTP (`requests`) for search.
 
-### Parental guide (curl_cffi primary, QWebEnginePage fallback)
+### Parental guide (GraphQL API primary, QWebEnginePage fallback)
 
-Parental guide pages are fetched via `curl_cffi` with `impersonate='chrome'`
-as the primary transport. This bypasses WAF by presenting Chrome's TLS
-fingerprint, and returns the full `__NEXT_DATA__` JSON without needing a
-browser engine, thread bridging, or timeout guessing. The parental guide
-response uses a `contentData.categories[]` JSON path with `title` and
-`severitySummary.text` fields.
+Parental guide data is fetched via the IMDB GraphQL API at
+`https://api.graphql.imdb.com/` using `curl_cffi` with
+`impersonate='chrome'` for TLS fingerprinting. This is faster and more
+reliable than HTML scraping -- the `__NEXT_DATA__` JSON on the parental
+guide page no longer contains severity data (IMDB moved it to lazy-loaded
+GraphQL). The GraphQL response returns `categories[].category.text` and
+`categories[].severity.text`, or `categories: null` for movies without
+parental guide data.
 
-If `curl_cffi` fails (HTTP error, missing data), the scraper falls back to
-the QWebEnginePage browser transport described below.
+If the GraphQL request itself fails (network error, non-200 status), the
+scraper falls back to the QWebEnginePage browser transport described below.
+Movies that simply have no parental guide data return an empty dict without
+triggering the fallback.
 
 ### Metadata (QWebEnginePage transport)
 

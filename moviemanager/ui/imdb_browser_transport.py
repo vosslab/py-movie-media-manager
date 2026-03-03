@@ -95,6 +95,27 @@ class ImdbBrowserTransport(PySide6.QtCore.QObject):
 		self._page.loadFinished.connect(self._on_load_finished)
 
 	#============================================
+	def shutdown(self) -> None:
+		"""Destroy the QWebEnginePage before its profile to avoid crash.
+
+		Qt requires the page to be deleted before the profile it belongs
+		to. Without explicit ordering, Qt's parent-child destructor can
+		destroy the profile first, causing 'Release of profile requested
+		but WebEnginePage still not deleted' and a segfault.
+		"""
+		# disconnect signals to prevent callbacks during teardown
+		if self._page is not None:
+			self._page.loadFinished.disconnect(self._on_load_finished)
+			# navigate to blank to stop any in-flight Chromium activity
+			self._page.setUrl(PySide6.QtCore.QUrl("about:blank"))
+			# delete page explicitly before profile
+			self._page.deleteLater()
+			self._page = None
+		if self._profile is not None:
+			self._profile.deleteLater()
+			self._profile = None
+
+	#============================================
 	def get_profile(self) -> PySide6.QtWebEngineCore.QWebEngineProfile:
 		"""Return the persistent profile for shared use with challenge dialog.
 
