@@ -2,10 +2,25 @@
 
 ## 2026-03-03
 
+### Behavior or Interface Changes
+- Routed all downloads (artwork, trailers, subtitles) through `TaskAPI.submit_job()`
+  so each appears as an individual tracked job in the Jobs dialog
+  (`moviemanager/ui/main_window.py`).
+- Batch downloads now submit one job per content type per movie (e.g., "Artwork:
+  The Matrix", "Trailer: The Matrix") instead of one opaque background worker.
+- Single-movie trailer and subtitle downloads from the context menu are now queued
+  via TaskAPI and visible in the Jobs dialog, instead of blocking with a wait cursor.
+- Removed the separate "downloads in progress" close warning from `closeEvent`;
+  download jobs are now covered by the existing TaskAPI active-count check.
+
 ### Fixes and Maintenance
 - Added missing `_stop_requested` mock to `FakeTransport` in
   `tests/test_imdb_browser_transport.py`, fixing 2 test failures
   (`test_transport_fetch_html_timeout`, `test_transport_fetch_html_load_failure`).
+- Monkeypatched `QMessageBox.question` to return Yes in `TestMainWindowScan`
+  and `TestMainWindowLastDirectory` in `tests/test_gui_smoke.py`, preventing
+  the "quit anyway?" dialog from blocking teardown when background media probe
+  is still running.
 
 ### Additions and New Features
 - Added "Refresh Metadata" toolbar button and Movie menu item to re-fetch

@@ -75,11 +75,15 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._task_api.job_list_changed.connect(
 			self._update_jobs_count
 		)
+		# track download batch completion
+		self._task_api.task_finished.connect(
+			self._on_download_job_done
+		)
 		self.setStatusBar(self._status)
 		# track the active worker for cancellation
 		self._active_worker = None
-		# track background download worker separately
-		self._download_worker = None
+		# track background download task IDs for batch completion
+		self._download_task_ids = []
 		# track background media probe task ID
 		self._probe_task_id = None
 		# menu bar
@@ -912,6 +916,10 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		if self._active_worker:
 			self._active_worker.cancel()
 			self._active_worker = None
+		# cancel any pending download jobs
+		for tid in self._download_task_ids:
+			self._task_api.cancel(tid)
+		self._download_task_ids = []
 		self.unsetCursor()
 		self._status.hide_progress()
 		self._status.showMessage("Operation cancelled", 3000)
@@ -1236,19 +1244,25 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 
 	#============================================
 	def _download_content(self) -> None:
-		"""Download artwork, trailers, and subtitles in the background.
+		"""Download artwork, trailers, and subtitles via TaskAPI.
 
-		Replaces modal download dialog with non-blocking background
-		worker. User can continue matching and organizing while
-		downloads run. Progress shown in status bar.
+		Submits individual download jobs per content type per movie
+		so each appears in the Jobs dialog. User can continue working
+		while downloads run in the background.
 		"""
-		# prevent concurrent downloads
-		if hasattr(self, '_download_worker') and self._download_worker:
-			PySide6.QtWidgets.QMessageBox.information(
-				self, "Download In Progress",
-				"A download is already running. Please wait."
+		# prevent concurrent batch downloads
+		if self._download_task_ids:
+			still_running = any(
+				self._task_api.is_running(tid)
+				for tid in self._download_task_ids
 			)
-			return
+			if still_running:
+				PySide6.QtWidgets.QMessageBox.information(
+					self, "Download In Progress",
+					"A download batch is already running. "
+					"Check the Jobs dialog for progress."
+				)
+				return
 		# collect checked or selected movies
 		checked_movies = self._movie_panel.get_checked_movies()
 		if len(checked_movies) <= 1:
@@ -1268,123 +1282,134 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 				"Match movies to IMDB first (Step 1)."
 			)
 			return
+		# build list of individual download tasks
+		tasks = self._build_download_tasks(scraped_movies)
+		if not tasks:
+			PySide6.QtWidgets.QMessageBox.information(
+				self, "Nothing to Download",
+				"All content is already present."
+			)
+			return
 		# confirm before starting
-		count = len(scraped_movies)
+		movie_count = len(scraped_movies)
+		task_count = len(tasks)
 		reply = PySide6.QtWidgets.QMessageBox.question(
 			self, "Download Content",
-			f"Download content for {count} movie(s)?\n\n"
-			"Downloads will run in the background.",
+			f"Queue {task_count} download(s) for "
+			f"{movie_count} movie(s)?\n\n"
+			"Downloads will run in the background.\n"
+			"Check the Jobs dialog for progress.",
 			PySide6.QtWidgets.QMessageBox.StandardButton.Ok
 			| PySide6.QtWidgets.QMessageBox.StandardButton.Cancel,
 		)
 		if reply != PySide6.QtWidgets.QMessageBox.StandardButton.Ok:
 			return
-		# launch background download worker
-		self._status.show_progress(
-			0, count, "Starting downloads..."
+		# submit each task via TaskAPI
+		self._download_task_ids = []
+		for name, fn, args in tasks:
+			task_id = self._task_api.submit_job(name, fn, *args)
+			self._download_task_ids.append(task_id)
+		self._status.showMessage(
+			f"Queued {task_count} downloads -- see Jobs dialog",
+			5000,
 		)
-		worker = moviemanager.ui.workers.Worker(
-			self._run_background_downloads, scraped_movies,
-		)
-		worker.signals.progress.connect(self._on_scan_progress)
-		worker.signals.finished.connect(
-			self._on_background_download_done
-		)
-		worker.signals.error.connect(
-			self._on_background_download_error
-		)
-		self._download_worker = worker
-		self._pool.start(worker)
 
 	#============================================
-	def _run_background_downloads(self, movies: list) -> dict:
-		"""Execute downloads in a background thread.
+	def _build_download_tasks(self, movies: list) -> list:
+		"""Build a list of individual download task tuples.
 
-		Downloads artwork, trailers, and subtitles for each movie.
-		Checks for cancellation between movies.
+		Checks settings and per-movie state to determine which
+		downloads are needed.
 
 		Args:
 			movies: List of scraped Movie instances.
 
 		Returns:
-			dict with art_count, trailer_count, sub_count, errors.
+			List of (name, fn, args_tuple) tuples ready for submit_job.
 		"""
-		import moviemanager.ui.dialogs.download_dialog
-		result = moviemanager.ui.dialogs.download_dialog._run_batch_download(
-			movies, self._api, self._settings,
-			download_artwork=self._settings.download_poster,
-			download_trailers=self._settings.download_trailer,
-			download_subs=self._settings.download_subtitles,
-			worker=self._download_worker,
-		)
-		return result
+		tasks = []
+		languages = self._settings.subtitle_languages
+		for movie in movies:
+			title = movie.title or "Unknown"
+			# artwork (poster + fanart handled inside download_artwork)
+			if self._settings.download_poster and not movie.has_poster:
+				tasks.append((
+					f"Artwork: {title}",
+					self._api.download_artwork,
+					(movie,),
+				))
+			# trailer
+			if (self._settings.download_trailer
+					and not movie.has_trailer
+					and movie.trailer_url):
+				tasks.append((
+					f"Trailer: {title}",
+					self._api.download_trailer,
+					(movie,),
+				))
+			# subtitles
+			if (self._settings.download_subtitles
+					and not movie.has_subtitle
+					and movie.imdb_id):
+				tasks.append((
+					f"Subtitles: {title}",
+					self._api.download_subtitles,
+					(movie, languages),
+				))
+		return tasks
 
 	#============================================
-	def _on_background_download_done(self, result: dict) -> None:
-		"""Handle background download completion.
+	def _on_download_job_done(self, task_id: int, result) -> None:
+		"""Handle individual download job completion.
+
+		When all tracked batch download jobs are done, refresh the
+		movie panel and status counts.
 
 		Args:
-			result: Dict with art_count, trailer_count, sub_count,
-				errors list, and cancelled flag.
+			task_id: The completed task ID.
+			result: The return value of the download callable.
 		"""
-		self._download_worker = None
-		self._status.hide_progress()
-		# build summary text
-		parts = []
-		if result["art_count"]:
-			parts.append(f"{result['art_count']} artwork files")
-		if result["trailer_count"]:
-			parts.append(f"{result['trailer_count']} trailers")
-		if result["sub_count"]:
-			parts.append(f"{result['sub_count']} subtitle files")
-		if parts:
-			summary = "Downloaded: " + ", ".join(parts)
-		elif result["cancelled"]:
-			summary = "Download cancelled"
-		else:
-			summary = "All content already present"
-		if result["errors"]:
-			error_count = len(result["errors"])
-			summary += f" ({error_count} errors)"
-		self._status.showMessage(summary, 8000)
-		# refresh table data
-		self._movie_panel.refresh_data()
-		self._refresh_status_counts()
-		self._update_toolbar_badges()
-
-	#============================================
-	def _on_background_download_error(self, error_text: str) -> None:
-		"""Handle background download error."""
-		self._download_worker = None
-		self._status.hide_progress()
-		self._show_error("Download Error", error_text)
+		if not self._download_task_ids:
+			return
+		if task_id not in self._download_task_ids:
+			return
+		# check if every job in the batch has finished
+		all_done = all(
+			self._task_api.is_done(tid)
+			for tid in self._download_task_ids
+		)
+		if all_done:
+			self._download_task_ids = []
+			self._movie_panel.refresh_data()
+			self._refresh_status_counts()
+			self._update_toolbar_badges()
+			self._status.showMessage("All downloads complete", 5000)
 
 	#============================================
 	def _download_trailer(self) -> None:
-		"""Download trailer for selected movie."""
+		"""Download trailer for selected movie via TaskAPI."""
 		movie = self._movie_panel.get_selected_movie()
 		if not movie:
 			PySide6.QtWidgets.QMessageBox.information(
 				self, "No Selection", "Please select a movie first."
 			)
 			return
-		if not movie.trailer:
+		if not movie.trailer_url:
 			PySide6.QtWidgets.QMessageBox.information(
 				self, "No Trailer",
 				"No trailer URL available. Scrape the movie first."
 			)
 			return
-		self.setCursor(PySide6.QtCore.Qt.CursorShape.WaitCursor)
-		worker = moviemanager.ui.workers.Worker(
-			self._api.download_trailer, movie
+		title = movie.title or "Unknown"
+		self._task_api.submit_job(
+			f"Trailer: {title}",
+			self._api.download_trailer, movie,
 		)
-		worker.signals.finished.connect(self._on_download_done)
-		worker.signals.error.connect(self._on_download_error)
-		self._pool.start(worker)
+		self._status.showMessage("Trailer download queued", 3000)
 
 	#============================================
 	def _download_subtitles(self) -> None:
-		"""Download subtitles for selected movie."""
+		"""Download subtitles for selected movie via TaskAPI."""
 		movie = self._movie_panel.get_selected_movie()
 		if not movie:
 			PySide6.QtWidgets.QMessageBox.information(
@@ -1397,26 +1422,13 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 				"Movie needs an IMDB ID. Scrape the movie first."
 			)
 			return
-		self.setCursor(PySide6.QtCore.Qt.CursorShape.WaitCursor)
+		title = movie.title or "Unknown"
 		languages = self._settings.subtitle_languages
-		worker = moviemanager.ui.workers.Worker(
-			self._api.download_subtitles, movie, languages
+		self._task_api.submit_job(
+			f"Subtitles: {title}",
+			self._api.download_subtitles, movie, languages,
 		)
-		worker.signals.finished.connect(self._on_download_done)
-		worker.signals.error.connect(self._on_download_error)
-		self._pool.start(worker)
-
-	#============================================
-	def _on_download_done(self, result) -> None:
-		"""Handle download completion."""
-		self.unsetCursor()
-		self._status.showMessage("Download complete", 3000)
-
-	#============================================
-	def _on_download_error(self, error_text: str) -> None:
-		"""Handle download error."""
-		self.unsetCursor()
-		self._show_error("Download Error", error_text)
+		self._status.showMessage("Subtitle download queued", 3000)
 
 	#============================================
 	def _show_about(self):
@@ -1469,18 +1481,6 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 				self, "Jobs In Progress",
 				f"{self._task_api.active_count} background job(s) "
 				"still running.\nQuit anyway?",
-				PySide6.QtWidgets.QMessageBox.StandardButton.Yes
-				| PySide6.QtWidgets.QMessageBox.StandardButton.No,
-			)
-			if reply != PySide6.QtWidgets.QMessageBox.StandardButton.Yes:
-				event.ignore()
-				return
-		# warn if background downloads are still running
-		if self._download_worker:
-			reply = PySide6.QtWidgets.QMessageBox.question(
-				self, "Downloads In Progress",
-				"Background downloads are still running.\n"
-				"Quit anyway?",
 				PySide6.QtWidgets.QMessageBox.StandardButton.Yes
 				| PySide6.QtWidgets.QMessageBox.StandardButton.No,
 			)
