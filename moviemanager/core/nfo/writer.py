@@ -148,6 +148,13 @@ def write_nfo(
 			advisory.set("category", category)
 			advisory.text = severity
 
+	# 17b. parental_guide_checked (date last checked)
+	if movie.parental_guide_checked:
+		_add_text_element(
+			root, "parental_guide_checked",
+			movie.parental_guide_checked,
+		)
+
 	# 18. id (imdb_id)
 	if movie.imdb_id:
 		_add_text_element(root, "id", movie.imdb_id)

@@ -104,6 +104,8 @@ class Movie:
 	tags: list = dataclasses.field(default_factory=list)
 	# parental guide severity levels by category
 	parental_guide: dict = dataclasses.field(default_factory=dict)
+	# ISO date when parental guide was last checked (empty = never)
+	parental_guide_checked: str = ""
 	# media
 	media_source: str = ""
 	video_3d: bool = False

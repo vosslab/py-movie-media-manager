@@ -80,9 +80,10 @@ class TaskAPI(PySide6.QtCore.QObject):
 		with self._lock:
 			self._jobs[task_id] = {
 				"name": name,
-				"status": "running",
+				"status": "queued",
 				"error_text": "",
 				"submitted_at": time.time(),
+				"started_at": None,
 				"priority": _priority,
 			}
 		self.job_list_changed.emit()
@@ -95,7 +96,7 @@ class TaskAPI(PySide6.QtCore.QObject):
 		with self._lock:
 			count = sum(
 				1 for j in self._jobs.values()
-				if j["status"] == "running"
+				if j["status"] in ("queued", "running")
 			)
 		return count
 
@@ -118,7 +119,7 @@ class TaskAPI(PySide6.QtCore.QObject):
 		with self._lock:
 			done_ids = [
 				tid for tid, j in self._jobs.items()
-				if j["status"] != "running"
+				if j["status"] not in ("queued", "running")
 			]
 			for tid in done_ids:
 				del self._jobs[tid]
@@ -155,6 +156,9 @@ class TaskAPI(PySide6.QtCore.QObject):
 			lambda cur, tot, msg, tid=task_id: self._on_progress(
 				tid, cur, tot, msg
 			)
+		)
+		worker.signals.started.connect(
+			lambda tid=task_id: self._on_started(tid)
 		)
 		with self._lock:
 			self._workers[task_id] = worker
@@ -249,6 +253,21 @@ class TaskAPI(PySide6.QtCore.QObject):
 				worker.cancel()
 		self._pool.clear()
 		self._pool.waitForDone(1000)
+
+	#============================================
+	def _on_started(self, task_id: int) -> None:
+		"""Handle worker start: record start time and update status.
+
+		Args:
+			task_id: The task ID that started executing.
+		"""
+		with self._lock:
+			if task_id in self._jobs:
+				self._jobs[task_id]["started_at"] = time.time()
+				self._jobs[task_id]["status"] = "running"
+		# notify UI that job list changed (status queued -> running)
+		if task_id in self._jobs:
+			self.job_list_changed.emit()
 
 	#============================================
 	def _on_finished(self, task_id: int, result) -> None:

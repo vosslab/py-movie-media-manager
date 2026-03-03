@@ -45,11 +45,11 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 	def _setup_ui(self) -> None:
 		"""Build the dialog layout with jobs table and action buttons."""
 		layout = PySide6.QtWidgets.QVBoxLayout(self)
-		# jobs table with 4 columns: Name, Priority, Status, Time
+		# jobs table: Name, Priority, Status, Queued, Active
 		self._table = PySide6.QtWidgets.QTableWidget()
-		self._table.setColumnCount(4)
+		self._table.setColumnCount(5)
 		self._table.setHorizontalHeaderLabels(
-			["Name", "Priority", "Status", "Time"]
+			["Name", "Priority", "Status", "Queued", "Active"]
 		)
 		self._table.setSelectionBehavior(
 			PySide6.QtWidgets.QAbstractItemView
@@ -100,24 +100,42 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 			self._table.setItem(row, 1, pri_item)
 			# status column
 			status = job["status"]
-			if status == "running":
+			if status == "queued":
+				status_text = "Queued"
+			elif status == "running":
 				status_text = "Running..."
 			elif status == "done":
 				status_text = "Done"
 			else:
 				# truncate error text for table display
 				err = job.get("error_text", "")
-				short_err = err.split("\n")[-1][:60] if err else ""
+				short_err = err.split("\n")[-1][:120] if err else ""
 				status_text = f"Error: {short_err}"
 			status_item = PySide6.QtWidgets.QTableWidgetItem(
 				status_text
 			)
+			# add tooltip with full error text for error jobs
+			if status == "error" and job.get("error_text"):
+				status_item.setToolTip(job["error_text"])
 			self._table.setItem(row, 2, status_item)
-			# elapsed time column
-			elapsed = now - job["submitted_at"]
-			time_text = self._format_elapsed(elapsed)
-			time_item = PySide6.QtWidgets.QTableWidgetItem(time_text)
-			self._table.setItem(row, 3, time_item)
+			# queued time column (time since submitted)
+			queued_elapsed = now - job["submitted_at"]
+			queued_text = self._format_elapsed(queued_elapsed)
+			queued_item = PySide6.QtWidgets.QTableWidgetItem(
+				queued_text
+			)
+			self._table.setItem(row, 3, queued_item)
+			# active time column (time since worker started running)
+			started_at = job.get("started_at")
+			if started_at:
+				active_elapsed = now - started_at
+				active_text = self._format_elapsed(active_elapsed)
+			else:
+				active_text = "--"
+			active_item = PySide6.QtWidgets.QTableWidgetItem(
+				active_text
+			)
+			self._table.setItem(row, 4, active_item)
 		self._table.resizeColumnsToContents()
 		# re-stretch Name column after resize
 		self._table.horizontalHeader().setSectionResizeMode(

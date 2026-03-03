@@ -61,6 +61,8 @@ class MediaMetadata:
 	tags: list = dataclasses.field(default_factory=list)
 	# parental guide severity levels by category
 	parental_guide: dict = dataclasses.field(default_factory=dict)
+	# ISO date when parental guide was last checked (empty = never)
+	parental_guide_checked: str = ""
 	# list of CastMember
 	actors: list = dataclasses.field(default_factory=list)
 	producers: list = dataclasses.field(default_factory=list)

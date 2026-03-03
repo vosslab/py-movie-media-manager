@@ -21,6 +21,8 @@ class WorkerSignals(PySide6.QtCore.QObject):
 	progress = PySide6.QtCore.Signal(int, int, str)
 	# emitted to deliver partial results during streaming operations
 	partial_result = PySide6.QtCore.Signal(object)
+	# emitted when the worker actually starts executing (dequeued)
+	started = PySide6.QtCore.Signal()
 
 
 #============================================
@@ -63,6 +65,11 @@ class Worker(PySide6.QtCore.QRunnable):
 		"""
 		if self._cancelled:
 			return
+		# notify listeners that the worker is now actively running
+		try:
+			self.signals.started.emit()
+		except RuntimeError:
+			pass
 		try:
 			result = self.fn(*self.args, **self.kwargs)
 			if not self._cancelled:

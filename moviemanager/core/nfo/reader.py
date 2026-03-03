@@ -19,7 +19,7 @@ KNOWN_TAGS = {
 	"userrating", "director", "credits", "studio", "watched",
 	"playcount", "dateadded", "lastplayed", "trailer", "poster",
 	"set", "genre", "tag", "actor", "producer", "thumb", "fanart",
-	"parental_guide", "fileinfo",
+	"parental_guide", "parental_guide_checked", "fileinfo",
 }
 
 
@@ -205,6 +205,8 @@ def read_nfo(nfo_path: str) -> moviemanager.core.models.movie.Movie:
 					sev = advisory.text.strip() if advisory.text else ""
 					if cat and sev:
 						movie.parental_guide[cat] = sev
+		elif tag == "parental_guide_checked":
+			movie.parental_guide_checked = text
 		elif tag == "country":
 			movie.country = text
 		elif tag == "languages":

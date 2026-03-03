@@ -3,6 +3,20 @@
 ## 2026-03-03
 
 ### Additions and New Features
+- Added `parental_guide_checked` field to `Movie` model and `MediaMetadata` dataclass. Stores
+  ISO date string when parental guide was last checked, distinguishing "no data on IMDB" from
+  "fetch failed." Movies confirmed to have no parental guide data are not re-fetched until
+  90 days after the check date (`_PARENTAL_GUIDE_RECHECK_DAYS`).
+- Added `parental_guide_checked` element to NFO reader/writer for persistence across sessions.
+- Added `fetch_parental_guides()` method to `MovieAPI` for standalone parental guide fetching
+  with cache awareness, progress callbacks, and per-movie NFO updates.
+- Added "Parental Guide" toolbar button in `MainWindow` (between Refresh Metadata and Refresh
+  Stats) with `security-medium` theme icon. Launches background job to fetch parental guide
+  data from IMDB for matched movies, with summary dialog on completion showing
+  fetched/no_data/failed/skipped counts.
+- Updated `scrape_movie()` parental guide section to set `parental_guide_checked` date on
+  successful fetch or cache hit (whether guide is empty or populated), and skip fetch when
+  movie was confirmed empty within the 90-day recheck window.
 - Added job priority constants to `moviemanager/ui/task_api.py`: `PRIORITY_CRITICAL` (100),
   `PRIORITY_HIGH` (75), `PRIORITY_NORMAL` (50), `PRIORITY_LOW` (25), `PRIORITY_BACKGROUND` (0).
   `QThreadPool.start(worker, priority)` schedules higher-priority jobs first.
@@ -37,6 +51,21 @@
 - Removed `self._pool = QThreadPool()` from `MainWindow`, `MovieChooserDialog`,
   `ImageChooserDialog`, and `DownloadDialog`. Only `MovieDetailPanel` retains a local pool
   for image loading.
+- Added `started` signal to `WorkerSignals` in `moviemanager/ui/workers.py`, emitted in
+  `Worker.run()` just before the callable executes.
+- Added `started_at` and `"queued"` initial status to `TaskAPI` job metadata. Jobs now
+  transition through queued -> running -> done/error. The `_on_started()` handler sets
+  `started_at` timestamp and flips status to `"running"` when the worker begins execution.
+- Added failed parental guide tracking to `MovieAPI`: `_failed_parental_guides` list populated
+  in `scrape_movie()` on timeout, with `retry_failed_parental_guides()`,
+  `has_failed_parental_guides()`, and `clear_failed_parental_guides()` methods.
+- Added automatic deferred retry for failed parental guide fetches: `_on_batch_scrape_done()`
+  submits a `PRIORITY_LOW` retry job when failures occurred. Retry result includes
+  succeeded/still_failed counts. Parental guide timeout count shown in batch scrape summary.
+- Jobs dialog now shows 5 columns: Name, Priority, Status, Queued, Active. "Queued" shows
+  time since submission, "Active" shows time since worker started (or "--" while waiting).
+  Error text truncation increased from 60 to 120 chars. Error status cells have a tooltip
+  with the full error text.
 
 ### Behavior or Interface Changes
 - Routed all downloads (artwork, trailers, subtitles) through `TaskAPI.submit_job()`

@@ -83,6 +83,7 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._scan_task_id = None
 		self._scrape_task_id = None
 		self._refresh_task_id = None
+		self._pg_task_id = None
 		self._download_task_ids = []
 		self._probe_task_id = None
 		self._rename_task_id = None
@@ -211,6 +212,20 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		)
 		refresh_meta_btn.triggered.connect(self._refresh_metadata)
 		toolbar.addAction(refresh_meta_btn)
+		# fetch parental guide button -- standalone IMDB parental guide
+		pg_btn = PySide6.QtGui.QAction("Parental Guide", self)
+		pg_icon = PySide6.QtGui.QIcon.fromTheme(
+			"security-medium",
+			self.style().standardIcon(
+				PySide6.QtWidgets.QStyle.StandardPixmap.SP_MessageBoxWarning
+			),
+		)
+		pg_btn.setIcon(pg_icon)
+		pg_btn.setToolTip(
+			"Fetch parental guide data from IMDB for matched movies"
+		)
+		pg_btn.triggered.connect(self._fetch_parental_guides)
+		toolbar.addAction(pg_btn)
 		# refresh file stats button -- re-probe video files
 		refresh_stats_btn = PySide6.QtGui.QAction("Refresh Stats", self)
 		refresh_stats_icon = PySide6.QtGui.QIcon.fromTheme(
@@ -459,6 +474,9 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		elif task_id == self._refresh_task_id:
 			self._refresh_task_id = None
 			self._on_refresh_metadata_done(result)
+		elif task_id == self._pg_task_id:
+			self._pg_task_id = None
+			self._on_fetch_parental_guides_done(result)
 		elif task_id == self._probe_task_id:
 			self._on_probe_task_finished(task_id, result)
 		elif task_id in self._download_task_ids:
@@ -480,7 +498,7 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 	def _on_task_error(self, task_id: int, error_text: str) -> None:
 		"""Route task errors to the appropriate handler."""
 		if task_id in (self._scan_task_id, self._scrape_task_id,
-					self._refresh_task_id):
+					self._refresh_task_id, self._pg_task_id):
 			self._on_scan_error(error_text)
 		elif task_id == self._probe_task_id:
 			self._on_probe_task_error(task_id, error_text)
@@ -497,7 +515,7 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 	def _on_task_progress(self, task_id: int, cur: int, tot: int, msg: str) -> None:
 		"""Route task progress to the appropriate handler."""
 		if task_id in (self._scan_task_id, self._scrape_task_id,
-					self._refresh_task_id):
+					self._refresh_task_id, self._pg_task_id):
 			self._on_scan_progress(cur, tot, msg)
 		elif task_id == self._probe_task_id:
 			self._on_probe_task_progress(task_id, cur, tot, msg)
@@ -955,12 +973,14 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		"""Cancel the currently running background operation."""
 		# cancel scan, scrape, refresh, rename via TaskAPI
 		for tid in (self._scan_task_id, self._scrape_task_id,
-					self._refresh_task_id, self._rename_task_id):
+					self._refresh_task_id, self._pg_task_id,
+					self._rename_task_id):
 			if tid is not None:
 				self._task_api.cancel(tid)
 		self._scan_task_id = None
 		self._scrape_task_id = None
 		self._refresh_task_id = None
+		self._pg_task_id = None
 		self._rename_task_id = None
 		self._rename_mode = None
 		# cancel any pending download jobs
@@ -1113,10 +1133,13 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 					movie, imdb_id=best.imdb_id
 				)
 			scraped_count += 1
+		# check how many parental guide fetches failed during scrape
+		pg_fail_count = len(self._api._failed_parental_guides)
 		result = {
 			"scraped_count": scraped_count,
 			"skipped_low_confidence": skipped_low_confidence,
 			"no_results_list": no_results_list,
+			"parental_guide_failures": pg_fail_count,
 		}
 		return result
 
@@ -1148,6 +1171,13 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			summary_parts.append(
 				f"No results: {len(no_results_list)}"
 			)
+		# report parental guide failures
+		pg_failures = result.get("parental_guide_failures", 0)
+		if pg_failures:
+			summary_parts.append(
+				f"Parental guide timeouts: {pg_failures}"
+				" (will retry)"
+			)
 		summary_text = "\n".join(summary_parts)
 		# add detail about skipped movies
 		if skipped_low_confidence:
@@ -1159,6 +1189,13 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			self, "Batch Scrape Complete", summary_text
 		)
 		self._update_toolbar_badges()
+		# submit deferred retry job for failed parental guides
+		if self._api.has_failed_parental_guides():
+			self._task_api.submit_job(
+				"Retry parental guides",
+				self._api.retry_failed_parental_guides,
+				_priority=moviemanager.ui.task_api.PRIORITY_LOW,
+			)
 
 	#============================================
 	def _refresh_metadata(self) -> None:
@@ -1256,6 +1293,107 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			self, "Refresh Metadata Complete",
 			f"Refreshed metadata for {count}"
 			f" movie{'s' if count != 1 else ''}."
+		)
+		self._update_toolbar_badges()
+
+	#============================================
+	def _fetch_parental_guides(self) -> None:
+		"""Fetch parental guide data from IMDB for matched movies.
+
+		Collects checked scraped movies with imdb_id, or falls back
+		to all scraped movies with imdb_id. Submits a background job.
+		"""
+		# collect checked scraped movies, or fall back to all scraped
+		checked_movies = self._movie_panel.get_checked_movies()
+		candidates = [
+			m for m in checked_movies
+			if m.scraped and m.imdb_id
+		]
+		if not candidates:
+			all_movies = self._api.get_movies()
+			candidates = [
+				m for m in all_movies
+				if m.scraped and m.imdb_id
+			]
+		if not candidates:
+			PySide6.QtWidgets.QMessageBox.information(
+				self, "Fetch Parental Guide",
+				"No matched movies with IMDB IDs found."
+			)
+			return
+		# confirm with the user
+		reply = PySide6.QtWidgets.QMessageBox.question(
+			self, "Fetch Parental Guide",
+			f"Fetch parental guide data for {len(candidates)}"
+			f" movie{'s' if len(candidates) != 1 else ''}?\n"
+			f"Movies already checked within 90 days will be skipped.",
+			PySide6.QtWidgets.QMessageBox.StandardButton.Yes
+			| PySide6.QtWidgets.QMessageBox.StandardButton.No,
+		)
+		if reply != PySide6.QtWidgets.QMessageBox.StandardButton.Yes:
+			return
+		# show progress in status bar
+		self._status.show_progress(
+			0, len(candidates),
+			"Starting parental guide fetch...",
+		)
+		# run in background via TaskAPI
+		self._pg_task_id = self._task_api.submit_job(
+			"Fetch parental guides",
+			self._fetch_parental_guides_loop, candidates,
+			_priority=moviemanager.ui.task_api.PRIORITY_NORMAL,
+		)
+
+	#============================================
+	def _fetch_parental_guides_loop(self, movies: list) -> dict:
+		"""Execute parental guide fetch loop in a background thread.
+
+		Args:
+			movies: List of Movie instances with imdb_id set.
+
+		Returns:
+			Dict with fetched, no_data, failed, skipped counts.
+		"""
+		# use worker progress callback
+		def progress_callback(cur: int, tot: int, msg: str) -> None:
+			worker = self._task_api.get_worker(self._pg_task_id)
+			if worker:
+				worker.signals.progress.emit(cur, tot, msg)
+		result = self._api.fetch_parental_guides(
+			movies, progress_callback=progress_callback,
+		)
+		return result
+
+	#============================================
+	def _on_fetch_parental_guides_done(self, result: dict) -> None:
+		"""Handle parental guide fetch completion.
+
+		Refreshes the movie table and shows a summary dialog.
+
+		Args:
+			result: Dict with fetched, no_data, failed, skipped counts.
+		"""
+		self._status.hide_progress()
+		# refresh table data in-place
+		self._movie_panel.refresh_data()
+		self._refresh_status_counts()
+		# build summary message
+		fetched = result.get("fetched", 0)
+		no_data = result.get("no_data", 0)
+		failed = result.get("failed", 0)
+		skipped = result.get("skipped", 0)
+		lines = []
+		if fetched:
+			lines.append(f"Fetched: {fetched}")
+		if no_data:
+			lines.append(f"No data on IMDB: {no_data}")
+		if failed:
+			lines.append(f"Failed: {failed}")
+		if skipped:
+			lines.append(f"Skipped: {skipped}")
+		summary = "\n".join(lines) if lines else "No movies processed."
+		PySide6.QtWidgets.QMessageBox.information(
+			self, "Parental Guide Fetch Complete", summary
 		)
 		self._update_toolbar_badges()
 

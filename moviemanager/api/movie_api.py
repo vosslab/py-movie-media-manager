@@ -5,6 +5,7 @@ import os
 import re
 import time
 import random
+import datetime
 import subprocess
 import logging
 
@@ -55,6 +56,8 @@ class MovieAPI:
 		self._tmdb_lookup_scraper = None
 		self._tmdb_lookup_spec = ""
 		self._tmdb_poster_cache = {}
+		# track failed parental guide fetches for deferred retry
+		self._failed_parental_guides = []
 
 	#============================================
 	def scan_directory(
@@ -524,31 +527,53 @@ class MovieAPI:
 		if (self._imdb_scraper is not None
 				and (bypass_cache or not metadata.parental_guide)
 				and metadata.imdb_id):
-			# check parental guide cache first (skip when refreshing)
-			cached_guide = None
-			if not bypass_cache:
-				cached_guide = self._cache.get_parental_guide(
-					metadata.imdb_id
+			# skip if confirmed empty and checked within 90 days
+			skip_guide = _should_skip_parental_guide(
+				movie, metadata.parental_guide,
+			)
+			if skip_guide and not bypass_cache:
+				_LOG.debug(
+					"Skipping parental guide for %s"
+					" (checked %s)", metadata.imdb_id,
+					movie.parental_guide_checked,
 				)
-			if cached_guide is not None:
-				metadata.parental_guide = cached_guide
 			else:
-				# ensure transport is ready for parental guide page load
-				self._ensure_imdb_transport_on_scraper()
-				try:
-					guide = self._imdb_scraper.get_parental_guide(
+				# check parental guide cache first (skip when refreshing)
+				cached_guide = None
+				if not bypass_cache:
+					cached_guide = self._cache.get_parental_guide(
 						metadata.imdb_id
 					)
-					metadata.parental_guide = guide
-					# only cache non-empty parental guide results
-					if guide:
-						self._cache.put_parental_guide(
-							metadata.imdb_id, guide
+				if cached_guide is not None:
+					metadata.parental_guide = cached_guide
+					# mark checked date on cache hit
+					today = datetime.date.today().isoformat()
+					metadata.parental_guide_checked = today
+				else:
+					# ensure transport is ready for parental guide page
+					self._ensure_imdb_transport_on_scraper()
+					try:
+						guide = self._imdb_scraper.get_parental_guide(
+							metadata.imdb_id
 						)
-				except Exception as err:
-					_LOG.warning(
-						"IMDB parental guide fetch failed: %s", err
-					)
+						metadata.parental_guide = guide
+						# mark checked whether empty or populated
+						today = datetime.date.today().isoformat()
+						metadata.parental_guide_checked = today
+						# only cache non-empty parental guide results
+						if guide:
+							self._cache.put_parental_guide(
+								metadata.imdb_id, guide
+							)
+					except Exception as err:
+						_LOG.warning(
+							"IMDB parental guide fetch failed: %s",
+							err,
+						)
+						# record for deferred retry later
+						self._failed_parental_guides.append(
+							(metadata.imdb_id, movie)
+						)
 		# map MediaMetadata fields to the Movie object
 		movie.title = metadata.title or movie.title
 		movie.original_title = metadata.original_title or movie.original_title
@@ -572,6 +597,9 @@ class MovieAPI:
 		movie.release_date = metadata.release_date
 		movie.trailer_url = metadata.trailer_url
 		movie.parental_guide = metadata.parental_guide
+		# only update checked date if it was set during this scrape
+		if metadata.parental_guide_checked:
+			movie.parental_guide_checked = metadata.parental_guide_checked
 		# convert CastMember dataclasses to dicts for NFO writer
 		movie.actors = [
 			{"name": a.name, "role": a.role, "tmdb_id": a.tmdb_id}
@@ -768,6 +796,200 @@ class MovieAPI:
 			if result_path:
 				downloaded.append(result_path)
 		return downloaded
+
+
+	#============================================
+	def fetch_parental_guides(
+		self, movies: list, progress_callback=None,
+	) -> dict:
+		"""Fetch parental guide data for movies missing it.
+
+		Filters to movies with imdb_id that either have no guide data
+		and have not been checked, or were checked over 90 days ago.
+
+		Args:
+			movies: List of Movie instances to check.
+			progress_callback: Optional callable(current, total, message).
+
+		Returns:
+			Dict with fetched, no_data, failed, skipped counts.
+		"""
+		self._ensure_scraper()
+		self._ensure_imdb_transport_on_scraper()
+		# determine which scraper to use for parental guide
+		guide_scraper = self._imdb_scraper or self._scraper
+		if not isinstance(
+			guide_scraper,
+			moviemanager.scraper.imdb_scraper.ImdbScraper,
+		):
+			_LOG.warning("No IMDB scraper available for parental guide")
+			result = {
+				"fetched": 0, "no_data": 0,
+				"failed": 0, "skipped": len(movies),
+			}
+			return result
+		# filter to eligible movies
+		eligible = []
+		skipped = 0
+		for movie in movies:
+			if not movie.imdb_id:
+				skipped += 1
+				continue
+			# already has parental guide data
+			if movie.parental_guide:
+				skipped += 1
+				continue
+			# skip if checked recently (within 90 days)
+			if _should_skip_parental_guide(movie, movie.parental_guide):
+				skipped += 1
+				continue
+			eligible.append(movie)
+		fetched = 0
+		no_data = 0
+		failed = 0
+		for i, movie in enumerate(eligible):
+			if progress_callback:
+				progress_callback(
+					i, len(eligible),
+					f"Fetching parental guide: {movie.title}"
+					f" ({i + 1}/{len(eligible)})",
+				)
+			# delay between requests
+			time.sleep(1 + random.random())
+			# check cache first
+			cached_guide = self._cache.get_parental_guide(
+				movie.imdb_id
+			)
+			if cached_guide is not None:
+				movie.parental_guide = cached_guide
+				movie.parental_guide_checked = (
+					datetime.date.today().isoformat()
+				)
+				fetched += 1
+				# write updated NFO
+				if movie.nfo_path:
+					moviemanager.core.nfo.writer.write_nfo(
+						movie, movie.nfo_path
+					)
+				continue
+			try:
+				guide = guide_scraper.get_parental_guide(
+					movie.imdb_id
+				)
+				today = datetime.date.today().isoformat()
+				movie.parental_guide_checked = today
+				if guide:
+					movie.parental_guide = guide
+					self._cache.put_parental_guide(
+						movie.imdb_id, guide
+					)
+					fetched += 1
+				else:
+					# confirmed no data on IMDB
+					no_data += 1
+				# write updated NFO
+				if movie.nfo_path:
+					moviemanager.core.nfo.writer.write_nfo(
+						movie, movie.nfo_path
+					)
+			except Exception as err:
+				_LOG.warning(
+					"Parental guide fetch failed for %s: %s",
+					movie.imdb_id, err,
+				)
+				failed += 1
+		result = {
+			"fetched": fetched, "no_data": no_data,
+			"failed": failed, "skipped": skipped,
+		}
+		return result
+
+	#============================================
+	def has_failed_parental_guides(self) -> bool:
+		"""Return True if there are parental guide fetches to retry.
+
+		Returns:
+			bool: True when at least one fetch failed and is pending retry.
+		"""
+		has_failures = len(self._failed_parental_guides) > 0
+		return has_failures
+
+	#============================================
+	def clear_failed_parental_guides(self) -> None:
+		"""Clear the list of failed parental guide fetches."""
+		self._failed_parental_guides.clear()
+
+	#============================================
+	def retry_failed_parental_guides(self) -> dict:
+		"""Retry previously failed parental guide fetches.
+
+		Iterates the failed list with a delay between requests to
+		allow WAF immunity cookies to propagate. On success, updates
+		the movie object and caches the result.
+
+		Returns:
+			Dict with retried, succeeded, and still_failed counts.
+		"""
+		self._ensure_scraper()
+		self._ensure_imdb_transport_on_scraper()
+		failures = list(self._failed_parental_guides)
+		self._failed_parental_guides.clear()
+		succeeded = 0
+		still_failed = []
+		for imdb_id, movie in failures:
+			# delay between retries to avoid overloading IMDB
+			time.sleep(1 + random.random())
+			try:
+				guide = self._imdb_scraper.get_parental_guide(imdb_id)
+				movie.parental_guide = guide
+				if guide:
+					self._cache.put_parental_guide(imdb_id, guide)
+				succeeded += 1
+			except Exception as err:
+				_LOG.warning(
+					"Parental guide retry failed for %s: %s",
+					imdb_id, err,
+				)
+				still_failed.append(imdb_id)
+		result = {
+			"retried": len(failures),
+			"succeeded": succeeded,
+			"still_failed": still_failed,
+		}
+		return result
+
+
+# number of days before re-checking a movie with no parental guide
+_PARENTAL_GUIDE_RECHECK_DAYS = 90
+
+
+#============================================
+def _should_skip_parental_guide(movie, current_guide: dict) -> bool:
+	"""Return True if parental guide fetch should be skipped.
+
+	Skips when the movie has no guide data but was checked within
+	the recheck window (90 days).
+
+	Args:
+		movie: Movie instance with parental_guide_checked field.
+		current_guide: Current parental guide dict (from metadata).
+
+	Returns:
+		True if the fetch should be skipped.
+	"""
+	# if guide already has data, no need to skip
+	if current_guide:
+		return False
+	# if never checked, do not skip
+	if not movie.parental_guide_checked:
+		return False
+	# parse the checked date and compare to today
+	checked_date = datetime.date.fromisoformat(
+		movie.parental_guide_checked
+	)
+	days_since = (datetime.date.today() - checked_date).days
+	should_skip = days_since < _PARENTAL_GUIDE_RECHECK_DAYS
+	return should_skip
 
 
 #============================================
