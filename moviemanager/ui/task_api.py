@@ -292,6 +292,7 @@ class TaskAPI(PySide6.QtCore.QObject):
 			# update job metadata if this was a named job
 			if task_id in self._jobs:
 				self._jobs[task_id]["status"] = "done"
+				self._jobs[task_id]["completed_at"] = time.time()
 		self.task_finished.emit(task_id, result)
 		# emit job list change if this was a tracked job
 		if task_id in self._jobs:
@@ -322,6 +323,7 @@ class TaskAPI(PySide6.QtCore.QObject):
 				self._jobs[task_id]["status"] = "error"
 				self._jobs[task_id]["error_text"] = display_text
 				self._jobs[task_id]["error_category"] = category
+				self._jobs[task_id]["completed_at"] = time.time()
 				# append to error log file
 				job_name = self._jobs[task_id]["name"]
 				self._append_error_log(category, job_name, display_text)

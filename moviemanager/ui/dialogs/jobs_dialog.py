@@ -137,17 +137,19 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 				progress_text
 			)
 			self._table.setItem(row, 3, progress_item)
-			# queued time column (time since submitted)
-			queued_elapsed = now - job["submitted_at"]
+			# queued time column (use completion time for finished jobs)
+			end_time = job.get("completed_at", now)
+			queued_elapsed = end_time - job["submitted_at"]
 			queued_text = self._format_elapsed(queued_elapsed)
 			queued_item = PySide6.QtWidgets.QTableWidgetItem(
 				queued_text
 			)
 			self._table.setItem(row, 4, queued_item)
-			# active time column (time since worker started running)
+			# active time column (freeze at completion for finished jobs)
 			started_at = job.get("started_at")
 			if started_at:
-				active_elapsed = now - started_at
+				end_time = job.get("completed_at", now)
+				active_elapsed = end_time - started_at
 				active_text = self._format_elapsed(active_elapsed)
 			else:
 				active_text = "--"

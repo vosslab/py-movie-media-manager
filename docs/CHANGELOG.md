@@ -10,6 +10,10 @@
   WAF blocking, renderer crashes, and Qt event loop starvation.
 
 ### Fixes and Maintenance
+- Fixed job timer not stopping on completion in the jobs dialog. Added `completed_at`
+  timestamp to `task_api.py` `_on_finished()` and `_on_error()` methods. Updated
+  `jobs_dialog.py` `_refresh()` to use `completed_at` instead of `now` for elapsed
+  time calculations on finished jobs, so Queued and Active columns freeze at final values.
 - Fixed `FakeTransport` test mock in `test_imdb_browser_transport.py` to include
   `_fetch_start`, `_load_finished_fired`, and `_timeout_stage_label` attributes
   added by the diagnostic logging changes.
