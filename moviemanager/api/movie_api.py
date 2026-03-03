@@ -20,6 +20,7 @@ import moviemanager.core.movie.renamer
 import moviemanager.core.movie.scanner
 import moviemanager.core.nfo.writer
 import moviemanager.core.settings
+import moviemanager.api.download_errors
 import moviemanager.scraper.browser_cookies
 import moviemanager.scraper.imdb_scraper
 import moviemanager.scraper.tmdb_scraper
@@ -643,7 +644,10 @@ class MovieAPI:
 		if not path_template:
 			path_template = self._settings.path_template
 		if not file_template:
-			file_template = self._settings.file_template
+			# build template with media tokens from checkbox settings
+			file_template = moviemanager.core.movie.renamer.build_file_template(
+				self._settings
+			)
 		result = moviemanager.core.movie.renamer.rename_movie(
 			movie, path_template, file_template, dry_run=dry_run,
 			spaces_to_underscores=self._settings.spaces_to_underscores,
@@ -726,10 +730,17 @@ class MovieAPI:
 			movie: Movie instance with trailer_url set.
 
 		Returns:
-			str: Path to downloaded trailer file, or empty string.
+			str: Path to downloaded trailer file.
+
+		Raises:
+			DownloadError: With category describing the failure reason.
 		"""
-		if not movie.trailer_url or not movie.path:
-			return ""
+		_Cat = moviemanager.api.download_errors.DownloadCategory
+		_Err = moviemanager.api.download_errors.DownloadError
+		if not movie.trailer_url:
+			raise _Err(_Cat.no_url, "No trailer URL for this movie")
+		if not movie.path:
+			raise _Err(_Cat.no_path, "Movie has no folder path")
 		output_path = os.path.join(movie.path, "trailer.mp4")
 		# skip if trailer already exists
 		if os.path.exists(output_path):
@@ -741,7 +752,18 @@ class MovieAPI:
 			"--no-playlist",
 			movie.trailer_url,
 		]
-		subprocess.run(cmd, check=True, timeout=300)
+		try:
+			subprocess.run(
+				cmd, check=True, timeout=300,
+				capture_output=True,
+			)
+		except subprocess.TimeoutExpired:
+			raise _Err(_Cat.timeout, "yt-dlp timed out after 300s")
+		except subprocess.CalledProcessError as exc:
+			# extract last line of stderr for a concise message
+			stderr_text = (exc.stderr or b"").decode("utf-8", errors="replace")
+			last_line = stderr_text.strip().split("\n")[-1] if stderr_text.strip() else "unknown error"
+			raise _Err(_Cat.download_failed, last_line)
 		return output_path
 
 	#============================================
@@ -754,12 +776,20 @@ class MovieAPI:
 
 		Returns:
 			list: Paths of downloaded subtitle files.
+
+		Raises:
+			DownloadError: With category describing the failure reason.
 		"""
-		if not movie.imdb_id or not movie.path:
-			return []
+		_Cat = moviemanager.api.download_errors.DownloadCategory
+		_Err = moviemanager.api.download_errors.DownloadError
+		if not movie.imdb_id:
+			raise _Err(_Cat.no_imdb_id, "No IMDB ID for this movie")
+		if not movie.path:
+			raise _Err(_Cat.no_path, "Movie has no folder path")
 		api_key = self._settings.opensubtitles_api_key
 		if not api_key:
-			raise ValueError(
+			raise _Err(
+				_Cat.no_api_key,
 				"OpenSubtitles API key is not configured. "
 				"Set it in Settings > API Keys."
 			)
@@ -767,11 +797,18 @@ class MovieAPI:
 		scraper = moviemanager.scraper.subtitle_scraper.SubtitleScraper(
 			api_key
 		)
-		results = scraper.search(
-			imdb_id=movie.imdb_id, languages=languages
-		)
+		try:
+			results = scraper.search(
+				imdb_id=movie.imdb_id, languages=languages
+			)
+		except requests.exceptions.Timeout:
+			raise _Err(_Cat.timeout, "OpenSubtitles API timed out")
+		except requests.exceptions.ConnectionError as exc:
+			raise _Err(_Cat.network_error, str(exc)[:200])
+		except requests.exceptions.RequestException as exc:
+			raise _Err(_Cat.api_error, str(exc)[:200])
 		if not results:
-			return []
+			raise _Err(_Cat.no_results, "No subtitles found")
 		# group by language, take best per language (highest download count)
 		downloaded = []
 		by_lang = {}
@@ -847,13 +884,23 @@ class MovieAPI:
 		fetched = 0
 		no_data = 0
 		failed = 0
+		total = len(eligible)
 		for i, movie in enumerate(eligible):
+			# build progress message with running tally
+			stats_parts = []
+			if fetched:
+				stats_parts.append(f"{fetched} fetched")
+			if failed:
+				stats_parts.append(f"{failed} failed")
+			stats_suffix = ""
+			if stats_parts:
+				stats_suffix = " - " + ", ".join(stats_parts)
 			if progress_callback:
-				progress_callback(
-					i, len(eligible),
-					f"Fetching parental guide: {movie.title}"
-					f" ({i + 1}/{len(eligible)})",
+				progress_msg = (
+					f"Parental guide: {movie.title}"
+					f" ({i + 1}/{total}){stats_suffix}"
 				)
+				progress_callback(i, total, progress_msg)
 			# delay between requests
 			time.sleep(1 + random.random())
 			# check cache first
@@ -866,6 +913,11 @@ class MovieAPI:
 					datetime.date.today().isoformat()
 				)
 				fetched += 1
+				_LOG.info(
+					"Parental guide cached for %s (%d/%d)"
+					" - %d fetched, %d failed",
+					movie.imdb_id, i + 1, total, fetched, failed,
+				)
 				# write updated NFO
 				if movie.nfo_path:
 					moviemanager.core.nfo.writer.write_nfo(
@@ -884,20 +936,34 @@ class MovieAPI:
 						movie.imdb_id, guide
 					)
 					fetched += 1
+					_LOG.info(
+						"Parental guide fetched for %s (%d/%d)"
+						" - %d fetched, %d failed",
+						movie.imdb_id, i + 1, total,
+						fetched, failed,
+					)
 				else:
 					# confirmed no data on IMDB
 					no_data += 1
+					_LOG.info(
+						"Parental guide empty for %s (%d/%d)"
+						" - %d no_data, %d failed",
+						movie.imdb_id, i + 1, total,
+						no_data, failed,
+					)
 				# write updated NFO
 				if movie.nfo_path:
 					moviemanager.core.nfo.writer.write_nfo(
 						movie, movie.nfo_path
 					)
 			except Exception as err:
-				_LOG.warning(
-					"Parental guide fetch failed for %s: %s",
-					movie.imdb_id, err,
-				)
 				failed += 1
+				_LOG.warning(
+					"Parental guide failed for %s (%d/%d)"
+					" - %d fetched, %d failed: %s",
+					movie.imdb_id, i + 1, total,
+					fetched, failed, err,
+				)
 		result = {
 			"fetched": fetched, "no_data": no_data,
 			"failed": failed, "skipped": skipped,

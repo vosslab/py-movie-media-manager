@@ -104,39 +104,48 @@ class MovieDetailPanel(PySide6.QtWidgets.QTabWidget):
 
 	#============================================
 	def _setup_info_tab(self):
-		"""Create the info tab layout with metadata fields."""
-		layout = PySide6.QtWidgets.QFormLayout(self._info_widget)
+		"""Create the info tab with poster on top and compact info below."""
+		layout = PySide6.QtWidgets.QVBoxLayout(self._info_widget)
+		# poster image at the top
+		self._info_poster_label = moviemanager.ui.widgets.image_label.ImageLabel()
+		self._info_poster_label.setMinimumSize(200, 300)
+		self._info_poster_label.setMaximumWidth(250)
+		layout.addWidget(
+			self._info_poster_label,
+			alignment=PySide6.QtCore.Qt.AlignmentFlag.AlignHCenter,
+		)
+		# compact form with key fields below the poster
+		form = PySide6.QtWidgets.QFormLayout()
 		self._title_label = PySide6.QtWidgets.QLabel()
+		self._title_label.setWordWrap(True)
 		self._year_label = PySide6.QtWidgets.QLabel()
 		self._rating_label = PySide6.QtWidgets.QLabel()
 		self._director_label = PySide6.QtWidgets.QLabel()
+		self._director_label.setWordWrap(True)
 		self._certification_label = PySide6.QtWidgets.QLabel()
 		self._genres_label = PySide6.QtWidgets.QLabel()
-		# plot text area - allow vertical growth (#22)
+		self._genres_label.setWordWrap(True)
+		form.addRow("Title:", self._title_label)
+		form.addRow("Year:", self._year_label)
+		form.addRow("Rating:", self._rating_label)
+		form.addRow("Director:", self._director_label)
+		form.addRow("Cert:", self._certification_label)
+		form.addRow("Genres:", self._genres_label)
+		layout.addLayout(form)
+		# plot text area at the bottom, fills remaining space
 		self._plot_text = PySide6.QtWidgets.QTextEdit()
 		self._plot_text.setReadOnly(True)
-		self._plot_text.setMinimumHeight(80)
-		self._plot_text.setMaximumHeight(300)
+		self._plot_text.setMinimumHeight(60)
 		self._plot_text.setPlaceholderText("No plot available")
-		layout.addRow("Title:", self._title_label)
-		layout.addRow("Year:", self._year_label)
-		layout.addRow("Rating:", self._rating_label)
-		layout.addRow("Director:", self._director_label)
-		layout.addRow("Certification:", self._certification_label)
-		layout.addRow("Genres:", self._genres_label)
-		layout.addRow("Plot:", self._plot_text)
+		layout.addWidget(self._plot_text, stretch=1)
 		# show empty state placeholder
 		self._title_label.setText("No movie selected")
 
 	#============================================
 	def _setup_artwork_tab(self):
-		"""Create the artwork tab with poster and fanart labels."""
+		"""Create the artwork tab with fanart label."""
 		layout = PySide6.QtWidgets.QHBoxLayout(self._artwork_widget)
-		# poster
-		self._poster_label = moviemanager.ui.widgets.image_label.ImageLabel()
-		self._poster_label.setMinimumSize(200, 300)
-		layout.addWidget(self._poster_label)
-		# fanart
+		# fanart only (poster is now on the Info tab)
 		self._fanart_label = moviemanager.ui.widgets.image_label.ImageLabel()
 		self._fanart_label.setMinimumSize(300, 200)
 		layout.addWidget(self._fanart_label)
@@ -182,14 +191,15 @@ class MovieDetailPanel(PySide6.QtWidgets.QTabWidget):
 		if movie.path:
 			poster = os.path.join(movie.path, "poster.jpg")
 			fanart = os.path.join(movie.path, "fanart.jpg")
+			# poster goes on Info tab now
 			self._load_image_async(
-				poster, self._poster_label, "poster"
+				poster, self._info_poster_label, "poster"
 			)
 			self._load_image_async(
 				fanart, self._fanart_label, "fanart"
 			)
 		else:
-			self._poster_label.set_image("")
+			self._info_poster_label.set_image("")
 			self._fanart_label.set_image("")
 		# media files via model
 		self._media_model.set_files(movie.media_files)
@@ -262,6 +272,6 @@ class MovieDetailPanel(PySide6.QtWidgets.QTabWidget):
 		self._certification_label.clear()
 		self._genres_label.clear()
 		self._plot_text.clear()
-		self._poster_label.set_image("")
+		self._info_poster_label.set_image("")
 		self._fanart_label.set_image("")
 		self._media_model.set_files([])

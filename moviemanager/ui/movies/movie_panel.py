@@ -123,6 +123,30 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 		sel_unmatched_btn.setMaximumWidth(130)
 		sel_unmatched_btn.clicked.connect(self.check_unscraped)
 		sel_layout.addWidget(sel_unmatched_btn)
+		sel_unorg_btn = PySide6.QtWidgets.QPushButton(
+			"Select Unorganized"
+		)
+		sel_unorg_btn.setMaximumWidth(140)
+		sel_unorg_btn.clicked.connect(self.check_unorganized)
+		sel_layout.addWidget(sel_unorg_btn)
+		sel_no_pg_btn = PySide6.QtWidgets.QPushButton(
+			"Select No PG"
+		)
+		sel_no_pg_btn.setMaximumWidth(110)
+		sel_no_pg_btn.clicked.connect(self.check_no_parental_guide)
+		sel_layout.addWidget(sel_no_pg_btn)
+		sel_no_art_btn = PySide6.QtWidgets.QPushButton(
+			"Select No Artwork"
+		)
+		sel_no_art_btn.setMaximumWidth(130)
+		sel_no_art_btn.clicked.connect(self.check_no_artwork)
+		sel_layout.addWidget(sel_no_art_btn)
+		sel_no_subs_btn = PySide6.QtWidgets.QPushButton(
+			"Select No Subs"
+		)
+		sel_no_subs_btn.setMaximumWidth(120)
+		sel_no_subs_btn.clicked.connect(self.check_no_subtitles)
+		sel_layout.addWidget(sel_no_subs_btn)
 		sel_layout.addStretch()
 		layout.addLayout(sel_layout)
 		# splitter: table on left, detail on right
@@ -216,8 +240,8 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 			moviemanager.ui.movies.movie_detail_panel.MovieDetailPanel()
 		)
 		self._splitter.addWidget(self._detail)
-		# set splitter sizes (60% table, 40% detail)
-		self._splitter.setSizes([600, 400])
+		# set splitter sizes (75% table, 25% detail panel)
+		self._splitter.setSizes([750, 250])
 		layout.addWidget(self._splitter)
 		# connect signals
 		self._search.filter_changed.connect(self._on_filter)
@@ -293,6 +317,26 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 	def check_unscraped(self) -> None:
 		"""Check only unscraped movies."""
 		self._table_model.check_unscraped()
+
+	#============================================
+	def check_unorganized(self) -> None:
+		"""Check only unorganized movies."""
+		self._table_model.check_unorganized()
+
+	#============================================
+	def check_no_parental_guide(self) -> None:
+		"""Check only movies with no parental guide data."""
+		self._table_model.check_no_parental_guide()
+
+	#============================================
+	def check_no_artwork(self) -> None:
+		"""Check only movies with no poster artwork."""
+		self._table_model.check_no_artwork()
+
+	#============================================
+	def check_no_subtitles(self) -> None:
+		"""Check only movies with no subtitles."""
+		self._table_model.check_no_subtitles()
 
 	#============================================
 	def get_checked_movies(self) -> list:

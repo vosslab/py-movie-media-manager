@@ -1516,19 +1516,17 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 					self._api.download_artwork,
 					(movie,),
 				))
-			# trailer
+			# trailer (no trailer_url filter; DownloadError(no_url) reported)
 			if (self._settings.download_trailer
-					and not movie.has_trailer
-					and movie.trailer_url):
+					and not movie.has_trailer):
 				tasks.append((
 					f"Trailer: {title}",
 					self._api.download_trailer,
 					(movie,),
 				))
-			# subtitles
+			# subtitles (no imdb_id filter; DownloadError(no_imdb_id) reported)
 			if (self._settings.download_subtitles
-					and not movie.has_subtitle
-					and movie.imdb_id):
+					and not movie.has_subtitle):
 				tasks.append((
 					f"Subtitles: {title}",
 					self._api.download_subtitles,

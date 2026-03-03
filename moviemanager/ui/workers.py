@@ -77,12 +77,16 @@ class Worker(PySide6.QtCore.QRunnable):
 		except RuntimeError:
 			# signal receiver was deleted; silently ignore
 			pass
-		except Exception:
+		except Exception as exc:
 			if not self._cancelled:
 				# capture full traceback for debugging
 				buf = io.StringIO()
 				traceback.print_exc(file=buf)
 				error_text = buf.getvalue()
+				# prefix category for DownloadError so UI can parse it
+				if hasattr(exc, "category"):
+					cat_name = exc.category.name
+					error_text = f"CATEGORY:{cat_name}\n{error_text}"
 				try:
 					self.signals.error.emit(error_text)
 				except RuntimeError:

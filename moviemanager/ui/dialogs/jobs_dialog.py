@@ -1,6 +1,7 @@
 """Non-modal dialog showing running and completed background jobs."""
 
 # Standard Library
+import re
 import time
 
 # PIP3 modules
@@ -27,7 +28,7 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 		super().__init__(parent)
 		self._task_api = task_api
 		self.setWindowTitle("Background Jobs")
-		self.resize(480, 300)
+		self.resize(560, 300)
 		# non-modal so user can interact with main window
 		self.setModal(False)
 		self._setup_ui()
@@ -45,11 +46,11 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 	def _setup_ui(self) -> None:
 		"""Build the dialog layout with jobs table and action buttons."""
 		layout = PySide6.QtWidgets.QVBoxLayout(self)
-		# jobs table: Name, Priority, Status, Queued, Active
+		# jobs table: Name, Priority, Status, Progress, Queued, Active
 		self._table = PySide6.QtWidgets.QTableWidget()
-		self._table.setColumnCount(5)
+		self._table.setColumnCount(6)
 		self._table.setHorizontalHeaderLabels(
-			["Name", "Priority", "Status", "Queued", "Active"]
+			["Name", "Priority", "Status", "Progress", "Queued", "Active"]
 		)
 		self._table.setSelectionBehavior(
 			PySide6.QtWidgets.QAbstractItemView
@@ -69,6 +70,12 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 		# button row
 		btn_layout = PySide6.QtWidgets.QHBoxLayout()
 		btn_layout.addStretch()
+		# error summary button
+		self._summary_btn = PySide6.QtWidgets.QPushButton(
+			"Error Summary"
+		)
+		self._summary_btn.clicked.connect(self._show_error_summary)
+		btn_layout.addWidget(self._summary_btn)
 		# clear completed button
 		self._clear_btn = PySide6.QtWidgets.QPushButton(
 			"Clear Completed"
@@ -107,10 +114,16 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 			elif status == "done":
 				status_text = "Done"
 			else:
-				# truncate error text for table display
-				err = job.get("error_text", "")
-				short_err = err.split("\n")[-1][:120] if err else ""
-				status_text = f"Error: {short_err}"
+				# show category label when available, else truncated traceback
+				error_cat = job.get("error_category", "")
+				if error_cat:
+					# title-case the category name (e.g. no_url -> No Url)
+					cat_label = error_cat.replace("_", " ").title()
+					status_text = f"Error: {cat_label}"
+				else:
+					err = job.get("error_text", "")
+					short_err = err.split("\n")[-1][:120] if err else ""
+					status_text = f"Error: {short_err}"
 			status_item = PySide6.QtWidgets.QTableWidgetItem(
 				status_text
 			)
@@ -118,13 +131,19 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 			if status == "error" and job.get("error_text"):
 				status_item.setToolTip(job["error_text"])
 			self._table.setItem(row, 2, status_item)
+			# progress column (e.g. "3/42" or "3/42 (2 failed)")
+			progress_text = self._format_progress(job.get("progress"))
+			progress_item = PySide6.QtWidgets.QTableWidgetItem(
+				progress_text
+			)
+			self._table.setItem(row, 3, progress_item)
 			# queued time column (time since submitted)
 			queued_elapsed = now - job["submitted_at"]
 			queued_text = self._format_elapsed(queued_elapsed)
 			queued_item = PySide6.QtWidgets.QTableWidgetItem(
 				queued_text
 			)
-			self._table.setItem(row, 3, queued_item)
+			self._table.setItem(row, 4, queued_item)
 			# active time column (time since worker started running)
 			started_at = job.get("started_at")
 			if started_at:
@@ -135,7 +154,7 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 			active_item = PySide6.QtWidgets.QTableWidgetItem(
 				active_text
 			)
-			self._table.setItem(row, 4, active_item)
+			self._table.setItem(row, 5, active_item)
 		self._table.resizeColumnsToContents()
 		# re-stretch Name column after resize
 		self._table.horizontalHeader().setSectionResizeMode(
@@ -187,6 +206,33 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 		return text
 
 	#============================================
+	@staticmethod
+	def _format_progress(progress: tuple) -> str:
+		"""Format a progress tuple as a short display string.
+
+		Args:
+			progress: (current, total, message) tuple or None.
+
+		Returns:
+			String like "3/42", "3/42 (2 failed)", or "--".
+		"""
+		if progress is None:
+			return "--"
+		current, total, message = progress
+		if total <= 0:
+			return "--"
+		# extract failure count from message if present
+		# message format: "... - 1 fetched, 2 failed"
+		text = f"{current}/{total}"
+		# look for "N failed" in the progress message
+		fail_match = re.search(r"(\d+)\s+failed", message)
+		if fail_match:
+			fail_count = int(fail_match.group(1))
+			if fail_count > 0:
+				text += f" ({fail_count} failed)"
+		return text
+
+	#============================================
 	def showEvent(self, event) -> None:
 		"""Start the refresh timer when the dialog becomes visible."""
 		super().showEvent(event)
@@ -208,6 +254,36 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 	def _clear_completed(self) -> None:
 		"""Remove all finished jobs from the list."""
 		self._task_api.clear_completed()
+
+	#============================================
+	def _show_error_summary(self) -> None:
+		"""Show a message box with error counts grouped by category."""
+		jobs = self._task_api.all_jobs
+		# count errors by category
+		counts = {}
+		for job in jobs:
+			if job["status"] != "error":
+				continue
+			cat = job.get("error_category", "") or "uncategorized"
+			cat_label = cat.replace("_", " ").title()
+			counts[cat_label] = counts.get(cat_label, 0) + 1
+		total = sum(counts.values())
+		if total == 0:
+			PySide6.QtWidgets.QMessageBox.information(
+				self, "Error Summary", "No errors recorded."
+			)
+			return
+		# build summary text sorted by count descending
+		lines = [f"Total errors: {total}\n"]
+		sorted_cats = sorted(
+			counts.items(), key=lambda kv: kv[1], reverse=True,
+		)
+		for cat_label, count in sorted_cats:
+			lines.append(f"  {cat_label}: {count}")
+		summary = "\n".join(lines)
+		PySide6.QtWidgets.QMessageBox.information(
+			self, "Error Summary", summary,
+		)
 
 	#============================================
 	def _cancel_selected(self) -> None:

@@ -265,6 +265,62 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 		)
 
 	#============================================
+	def check_unorganized(self) -> None:
+		"""Check only rows where movie is not organized."""
+		self._checked.clear()
+		for movie in self._filtered:
+			if not movie.is_organized:
+				self._checked.add(id(movie))
+		top = self.index(0, 0)
+		bottom = self.index(self.rowCount() - 1, 0)
+		self.dataChanged.emit(top, bottom)
+		self.checked_changed.emit(
+			len(self._checked), len(self._filtered)
+		)
+
+	#============================================
+	def check_no_parental_guide(self) -> None:
+		"""Check only rows where parental guide data is empty."""
+		self._checked.clear()
+		for movie in self._filtered:
+			if not movie.parental_guide:
+				self._checked.add(id(movie))
+		top = self.index(0, 0)
+		bottom = self.index(self.rowCount() - 1, 0)
+		self.dataChanged.emit(top, bottom)
+		self.checked_changed.emit(
+			len(self._checked), len(self._filtered)
+		)
+
+	#============================================
+	def check_no_artwork(self) -> None:
+		"""Check only rows where movie has no poster."""
+		self._checked.clear()
+		for movie in self._filtered:
+			if not movie.has_poster:
+				self._checked.add(id(movie))
+		top = self.index(0, 0)
+		bottom = self.index(self.rowCount() - 1, 0)
+		self.dataChanged.emit(top, bottom)
+		self.checked_changed.emit(
+			len(self._checked), len(self._filtered)
+		)
+
+	#============================================
+	def check_no_subtitles(self) -> None:
+		"""Check only rows where movie has no subtitles."""
+		self._checked.clear()
+		for movie in self._filtered:
+			if not movie.has_subtitle:
+				self._checked.add(id(movie))
+		top = self.index(0, 0)
+		bottom = self.index(self.rowCount() - 1, 0)
+		self.dataChanged.emit(top, bottom)
+		self.checked_changed.emit(
+			len(self._checked), len(self._filtered)
+		)
+
+	#============================================
 	def get_checked_movies(self) -> list:
 		"""Return list of checked Movie objects."""
 		checked = []

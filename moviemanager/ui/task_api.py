@@ -1,7 +1,9 @@
 """Qt-integrated background task manager using QThreadPool."""
 
 # Standard Library
+import os
 import time
+import datetime
 import threading
 
 # PIP3 modules
@@ -55,6 +57,8 @@ class TaskAPI(PySide6.QtCore.QObject):
 		self._next_id: int = 0
 		# job metadata: task_id -> {name, status, error_text, submitted_at}
 		self._jobs: dict = {}
+		# latest progress per task: task_id -> (current, total, message)
+		self._progress: dict = {}
 
 	#============================================
 	def submit_job(
@@ -82,6 +86,7 @@ class TaskAPI(PySide6.QtCore.QObject):
 				"name": name,
 				"status": "queued",
 				"error_text": "",
+				"error_category": "",
 				"submitted_at": time.time(),
 				"started_at": None,
 				"priority": _priority,
@@ -103,10 +108,14 @@ class TaskAPI(PySide6.QtCore.QObject):
 	#============================================
 	@property
 	def all_jobs(self) -> list:
-		"""Return job metadata list sorted newest first."""
+		"""Return job metadata list sorted newest first.
+
+		Each dict includes a ``progress`` key with a
+		``(current, total, message)`` tuple when available, or None.
+		"""
 		with self._lock:
 			jobs = [
-				dict(j, task_id=tid)
+				dict(j, task_id=tid, progress=self._progress.get(tid))
 				for tid, j in self._jobs.items()
 			]
 		# sort by submitted_at descending (newest first)
@@ -291,20 +300,59 @@ class TaskAPI(PySide6.QtCore.QObject):
 	def _on_error(self, task_id: int, error_text: str) -> None:
 		"""Handle worker error and forward signal.
 
+		Parses CATEGORY prefix from DownloadError workers, stores it
+		in job metadata, and appends a one-line entry to the error log.
+
 		Args:
 			task_id: The task ID that failed.
 			error_text: The error traceback text.
 		"""
+		# parse optional CATEGORY:xxx prefix from worker
+		category = ""
+		display_text = error_text
+		if error_text.startswith("CATEGORY:"):
+			first_newline = error_text.index("\n")
+			category = error_text[len("CATEGORY:"):first_newline]
+			display_text = error_text[first_newline + 1:]
 		with self._lock:
 			self._results[task_id] = None
 			# update job metadata if this was a named job
 			if task_id in self._jobs:
 				self._jobs[task_id]["status"] = "error"
-				self._jobs[task_id]["error_text"] = error_text
-		self.task_error.emit(task_id, error_text)
+				self._jobs[task_id]["error_text"] = display_text
+				self._jobs[task_id]["error_category"] = category
+				# append to error log file
+				job_name = self._jobs[task_id]["name"]
+				self._append_error_log(category, job_name, display_text)
+		self.task_error.emit(task_id, display_text)
 		# emit job list change if this was a tracked job
 		if task_id in self._jobs:
 			self.job_list_changed.emit()
+
+	#============================================
+	@staticmethod
+	def _append_error_log(
+		category: str, job_name: str, error_text: str,
+	) -> None:
+		"""Append a one-line entry to the error log file.
+
+		Args:
+			category: Error category name (may be empty).
+			job_name: Human-readable job name.
+			error_text: Full error traceback text.
+		"""
+		log_path = os.path.join("/tmp", "movie_manager_errors.log")
+		timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+		# extract last non-empty line for a concise summary
+		lines = error_text.strip().split("\n")
+		last_line = lines[-1][:200] if lines else "unknown"
+		cat_label = category if category else "uncategorized"
+		entry = f"{timestamp} | {cat_label} | {job_name} | {last_line}\n"
+		try:
+			with open(log_path, "a", encoding="utf-8") as fh:
+				fh.write(entry)
+		except OSError:
+			pass
 
 	#============================================
 	def _on_progress(self, task_id: int, current: int, total: int, message: str) -> None:
@@ -316,4 +364,7 @@ class TaskAPI(PySide6.QtCore.QObject):
 			total: Total expected value.
 			message: Progress description.
 		"""
+		# store latest progress for jobs dialog display
+		with self._lock:
+			self._progress[task_id] = (current, total, message)
 		self.task_progress.emit(task_id, current, total, message)

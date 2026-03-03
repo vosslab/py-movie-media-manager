@@ -10,6 +10,7 @@ import PySide6.QtWidgets
 
 # local repo modules
 import moviemanager.core.nfo.writer
+import moviemanager.ui.movies.status_delegate
 
 
 #============================================
@@ -48,7 +49,49 @@ class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 			"background: #222; border: 1px solid #444;"
 		)
 		self._poster_label.setText("No poster")
-		top_layout.addWidget(self._poster_label)
+		# left column: poster + parental guide below it
+		left_layout = PySide6.QtWidgets.QVBoxLayout()
+		left_layout.addWidget(self._poster_label)
+		# parental guide color bar (read-only)
+		self._pg_widget = PySide6.QtWidgets.QWidget()
+		pg_layout = PySide6.QtWidgets.QHBoxLayout(self._pg_widget)
+		pg_layout.setContentsMargins(0, 4, 0, 0)
+		pg_layout.setSpacing(6)
+		# category abbreviations and full names
+		pg_categories = [
+			("S&N", "Sex & Nudity"),
+			("V&G", "Violence & Gore"),
+			("Prof", "Profanity"),
+			("A&D", "Alcohol, Drugs & Smoking"),
+			("F&I", "Frightening & Intense Scenes"),
+		]
+		# store circle labels for later coloring
+		self._pg_circles = []
+		for abbrev, full_name in pg_categories:
+			# colored circle indicator
+			circle = PySide6.QtWidgets.QLabel()
+			circle.setFixedSize(12, 12)
+			circle.setToolTip(full_name)
+			self._pg_circles.append((circle, full_name))
+			pg_layout.addWidget(circle)
+			# abbreviated label
+			lbl = PySide6.QtWidgets.QLabel(abbrev)
+			lbl.setToolTip(full_name)
+			font = lbl.font()
+			font.setPointSizeF(font.pointSizeF() * 0.85)
+			lbl.setFont(font)
+			pg_layout.addWidget(lbl)
+		pg_layout.addStretch()
+		left_layout.addWidget(self._pg_widget)
+		# date label for when PG was last checked
+		self._pg_date_label = PySide6.QtWidgets.QLabel()
+		date_font = self._pg_date_label.font()
+		date_font.setPointSizeF(date_font.pointSizeF() * 0.8)
+		self._pg_date_label.setFont(date_font)
+		self._pg_date_label.setStyleSheet("color: #888;")
+		left_layout.addWidget(self._pg_date_label)
+		left_layout.addStretch()
+		top_layout.addLayout(left_layout)
 		# scroll area for form
 		scroll = PySide6.QtWidgets.QScrollArea()
 		scroll.setWidgetResizable(True)
@@ -283,6 +326,8 @@ class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 		self._country_edit.setText(m.country)
 		self._languages_edit.setText(m.spoken_languages)
 		self._watched_check.setChecked(m.watched)
+		# populate parental guide color circles
+		self._load_parental_guide(m)
 
 	#============================================
 	def _load_poster(self, movie) -> None:
@@ -316,6 +361,36 @@ class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 			PySide6.QtCore.Qt.TransformationMode.SmoothTransformation,
 		)
 		self._poster_label.setPixmap(scaled)
+
+	#============================================
+	def _load_parental_guide(self, movie) -> None:
+		"""Set parental guide circle colors from movie data.
+
+		Args:
+			movie: Movie object with parental_guide dict.
+		"""
+		# reuse color mapping from status_delegate
+		sev_colors = moviemanager.ui.movies.status_delegate.SEVERITY_COLORS
+		no_data = moviemanager.ui.movies.status_delegate.COLOR_NO_DATA
+		pg_data = movie.parental_guide
+		for circle, full_name in self._pg_circles:
+			severity = pg_data.get(full_name, "")
+			color = sev_colors.get(severity, no_data).name()
+			# paint circle via stylesheet border-radius trick
+			circle.setStyleSheet(
+				f"background: {color}; border-radius: 6px;"
+			)
+			# update tooltip with severity info
+			if severity:
+				circle.setToolTip(f"{full_name}: {severity}")
+			else:
+				circle.setToolTip(f"{full_name}: No data")
+		# show the check date if available
+		check_date = getattr(movie, "parental_guide_checked", "")
+		if check_date:
+			self._pg_date_label.setText(f"Checked: {check_date}")
+		else:
+			self._pg_date_label.setText("")
 
 	#============================================
 	def _save(self):

@@ -685,7 +685,8 @@ class ImdbScraper(moviemanager.scraper.interfaces.MetadataProvider):
 		# rate limit before transport call
 		time.sleep(1 + random.random())
 		url = f"{_IMDB_BASE}/title/{imdb_id}/parentalguide"
-		html = self._transport.fetch_html(url)
+		# use shorter timeout; WAF failures at 30s waste wall-clock time
+		html = self._transport.fetch_html(url, timeout_sec=15)
 		guide = _parse_parental_guide_html(html)
 		return guide
 

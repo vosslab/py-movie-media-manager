@@ -3,6 +3,35 @@
 ## 2026-03-03
 
 ### Additions and New Features
+- Added parental guide color bar to the movie edit dialog below the poster. Shows 5 colored
+  circles (S&N, V&G, Prof, A&D, F&I) with severity colors reused from `status_delegate.py`,
+  tooltips with full category names, and the `parental_guide_checked` date.
+- Redesigned the right-side detail panel Info tab: poster image on top with compact metadata form
+  and scrollable plot below. Poster removed from Artwork tab (fanart only now).
+- Narrowed default detail panel splitter ratio from 60/40 to 75/25 (poster-width panel).
+- Added four new selection buttons: "Select Unorganized", "Select No PG", "Select No Artwork",
+  "Select No Subs" with corresponding `check_*` methods on `MovieTableModel` and `MoviePanel`.
+- Added [docs/TASK_API.md](TASK_API.md): developer reference for `TaskAPI`, worker system,
+  priority constants, job metadata, signals, error categorization, and error log format.
+- Added [docs/BACKGROUND_JOBS.md](BACKGROUND_JOBS.md): user-facing guide to the background jobs
+  dialog, job types and priorities, download error categories, error summary, and error log.
+- Added `moviemanager/api/download_errors.py` with `DownloadCategory` enum and `DownloadError`
+  exception for categorized download failure reporting. Categories: `no_url`, `no_api_key`,
+  `no_imdb_id`, `no_results`, `network_error`, `api_error`, `download_failed`, `timeout`, `no_path`.
+- `download_trailer()` and `download_subtitles()` now raise `DownloadError` with specific
+  categories instead of returning empty values or letting raw exceptions propagate. yt-dlp errors
+  include the last stderr line; subtitle API errors are caught and categorized.
+- Workers prefix `CATEGORY:name` in error signals for `DownloadError` exceptions so the task API
+  can parse and store the category separately from the traceback.
+- `TaskAPI` job metadata now includes `error_category` field. `_on_error()` parses the category
+  prefix and appends one-line entries to `/tmp/movie_manager_errors.log`.
+- Jobs dialog status column shows `"Error: No Url"` style category labels instead of truncated
+  tracebacks. Full traceback remains in tooltip.
+- Added "Error Summary" button to jobs dialog that shows a `QMessageBox` with error counts grouped
+  by category (e.g. "No Url: 40, Download Failed: 10, Timeout: 4").
+- Removed `trailer_url` and `imdb_id` pre-filters from `_build_download_tasks()` so movies
+  without these fields still get queued and fail with descriptive `DownloadError` messages
+  visible in the jobs dialog.
 - Added `parental_guide_checked` field to `Movie` model and `MediaMetadata` dataclass. Stores
   ISO date string when parental guide was last checked, distinguishing "no data on IMDB" from
   "fetch failed." Movies confirmed to have no parental guide data are not re-fetched until
@@ -68,6 +97,15 @@
   with the full error text.
 
 ### Behavior or Interface Changes
+- Added "Progress" column to the Jobs Dialog showing `"N/M"` or `"N/M (X failed)"` for
+  running jobs with progress callbacks. `TaskAPI` now stores per-task progress tuples and
+  exposes them via `all_jobs`.
+- Parental guide progress messages now include running success/fail tallies in both the
+  status bar and Jobs Dialog (e.g., `"Parental guide: Title (3/42) - 1 fetched, 2 failed"`).
+- Each parental guide fetch outcome (cached, fetched, empty, failed) is logged at INFO level
+  with a running tally for terminal/log visibility.
+- Reduced parental guide page timeout from 30s to 15s in `imdb_scraper.py`, halving
+  wall-clock time for WAF-blocked failures.
 - Routed all downloads (artwork, trailers, subtitles) through `TaskAPI.submit_job()`
   so each appears as an individual tracked job in the Jobs dialog
   (`moviemanager/ui/main_window.py`).
@@ -79,6 +117,9 @@
   download jobs are now covered by the existing TaskAPI active-count check.
 
 ### Fixes and Maintenance
+- Fixed rename settings (resolution, video codec, audio codec, channels checkboxes) being ignored
+  during actual renames. `MovieAPI.rename_movie()` now calls `build_file_template()` to assemble
+  the file template with media tokens, matching the settings dialog preview behavior.
 - Added missing `_stop_requested` mock to `FakeTransport` in
   `tests/test_imdb_browser_transport.py`, fixing 2 test failures
   (`test_transport_fetch_html_timeout`, `test_transport_fetch_html_load_failure`).
