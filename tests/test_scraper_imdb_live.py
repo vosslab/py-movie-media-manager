@@ -1,15 +1,14 @@
 """Live IMDB scraper tests using real network calls.
 
-These tests hit the real IMDB website and verify that the JSON
-parsing approach returns actual movie data. Marked as slow since
-they require network access.
+Search tests hit the CDN suggestion API which has no WAF protection.
+Metadata and parental guide tests are skipped because they require
+a QWebEnginePage transport with a running Qt event loop.
 
 Test movie: Clerks (1994, tt0109445)
 """
 
 # Standard Library
 import os
-import re
 import sys
 
 # PIP3 modules
@@ -61,77 +60,44 @@ def test_search_clerks_imdb_id():
 
 #============================================
 @pytest.mark.slow
-def test_get_metadata_clerks():
-	"""Fetch full metadata for Clerks (tt0109445) and verify fields."""
+def test_search_filters_non_movies():
+	"""CDN suggestion API filters out non-movie types."""
 	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
-	metadata = scraper.get_metadata(imdb_id="tt0109445")
-	# verify title
-	assert metadata.title == "Clerks", f"Title: {metadata.title}"
-	# verify year
-	assert metadata.year == "1994", f"Year: {metadata.year}"
-	# verify runtime is reasonable (92 minutes)
-	assert metadata.runtime > 80, f"Runtime too short: {metadata.runtime}"
-	assert metadata.runtime < 120, f"Runtime too long: {metadata.runtime}"
-	# verify director contains Smith
-	assert "Smith" in metadata.director, (
-		f"Director: {metadata.director}"
-	)
-	# verify actors list is non-empty
-	assert len(metadata.actors) > 0, "No actors returned"
-	# verify rating is reasonable
-	assert metadata.rating > 5.0, f"Rating too low: {metadata.rating}"
-	assert metadata.rating < 10.0, f"Rating too high: {metadata.rating}"
-	# verify votes are substantial
-	assert metadata.votes > 100000, f"Votes too low: {metadata.votes}"
-	# verify genre includes Comedy
-	assert "Comedy" in metadata.genres, f"Genres: {metadata.genres}"
-	# verify IMDB ID is preserved
-	assert metadata.imdb_id == "tt0109445"
-	# verify media source
-	assert metadata.media_source == "imdb"
-	# verify __NEXT_DATA__ supplementary fields
-	assert metadata.country, f"Country is empty: {metadata.country}"
-	# country uses text if available, otherwise id code like US
-	assert "US" in metadata.country or "United States" in metadata.country, (
-		f"Country: {metadata.country}"
-	)
-	assert "English" in metadata.spoken_languages, (
-		f"Languages: {metadata.spoken_languages}"
-	)
-	assert len(metadata.tags) > 0, "No keyword tags returned"
-	# verify poster URL has no resize params (._V1_.jpg alone is OK)
-	if metadata.poster_url:
-		# ._V1_.jpg is the full-res base URL, but ._V1_UY300_.jpg has resize
-		has_resize = re.search(r"\._V1_[^.]+\.jpg$", metadata.poster_url)
-		assert not has_resize, (
-			f"Poster URL has resize params: {metadata.poster_url}"
-		)
-	# verify at least one actor has a character role assigned
-	actors_with_roles = [a for a in metadata.actors if a.role]
-	assert len(actors_with_roles) > 0, (
-		f"No actors have roles: {[(a.name, a.role) for a in metadata.actors]}"
-	)
-	# producers may not be available on all detail pages
-	# principalCredits is not always present in __NEXT_DATA__
-	if metadata.producers:
-		# verify they are CastMember-like objects with correct department
-		assert all(p.department == "Production" for p in metadata.producers), (
-			f"Producer departments: {[(p.name, p.department) for p in metadata.producers]}"
+	results = scraper.search("Clerks")
+	# all results should have imdb_id starting with tt
+	for r in results:
+		assert r.imdb_id.startswith("tt"), (
+			f"Non-title ID in results: {r.imdb_id}"
 		)
 
 
 #============================================
 @pytest.mark.slow
-def test_get_metadata_clerks_parental_guide():
-	"""Verify Clerks parental guide has expected categories."""
+def test_search_poster_url():
+	"""Search results include poster URLs without resize parameters."""
 	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
-	metadata = scraper.get_metadata(imdb_id="tt0109445")
-	assert len(metadata.parental_guide) > 0, "Parental guide is empty"
-	# verify expected keys exist
-	expected_keys = ["Sex & Nudity", "Violence & Gore", "Profanity"]
-	for key in expected_keys:
-		assert key in metadata.parental_guide, f"Missing key: {key}"
-	# verify severity values are non-empty strings
-	for key, value in metadata.parental_guide.items():
-		assert isinstance(value, str), f"Value for {key} is not a string"
-		assert len(value) > 0, f"Value for {key} is empty"
+	results = scraper.search("Clerks", year="1994")
+	assert len(results) > 0, "Search returned no results"
+	# find result with a poster
+	results_with_poster = [r for r in results if r.poster_url]
+	if results_with_poster:
+		# poster URL should not have resize params like _UX300_
+		url = results_with_poster[0].poster_url
+		assert "_UX" not in url, f"Poster URL has resize: {url}"
+		assert "_UY" not in url, f"Poster URL has resize: {url}"
+
+
+#============================================
+@pytest.mark.slow
+def test_search_empty_query():
+	"""Empty search query returns empty results gracefully."""
+	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
+	results = scraper.search("")
+	assert results == []
+
+
+# NOTE: metadata and parental guide live tests are not included here.
+# Those endpoints require QWebEnginePage transport with a running Qt
+# event loop, which pytest cannot provide. The metadata/parental guide
+# parsing logic is thoroughly covered by mocked unit tests in
+# test_scraper_imdb.py using sample __NEXT_DATA__ fixtures.

@@ -330,6 +330,40 @@ class TestCorruptJson:
 
 
 #============================================
+class TestNonSerializableData:
+	"""Tests for handling non-JSON-serializable data."""
+
+	def test_non_serializable_does_not_crash(self, tmp_path):
+		"""Cache handles non-serializable objects without crashing."""
+		cache = moviemanager.api.api_cache.ApiCache(
+			cache_dir=str(tmp_path), ttl_seconds=3600
+		)
+		# dict containing a bound method (not JSON-serializable)
+		bad_data = {
+			"title": "Clerks",
+			"bad_field": str.upper,
+		}
+		# should not raise TypeError
+		cache.put_parental_guide("tt0109445", bad_data)
+		cached = cache.get_parental_guide("tt0109445")
+		assert cached is not None
+		assert cached["title"] == "Clerks"
+		# the non-serializable value was converted to a string
+		assert isinstance(cached["bad_field"], str)
+
+	def test_non_serializable_logs_warning(self, tmp_path, caplog):
+		"""Cache logs a warning when encountering non-serializable data."""
+		import logging
+		cache = moviemanager.api.api_cache.ApiCache(
+			cache_dir=str(tmp_path), ttl_seconds=3600
+		)
+		bad_data = {"value": lambda x: x}
+		with caplog.at_level(logging.WARNING):
+			cache.put_parental_guide("tt0000001", bad_data)
+		assert "Non-serializable object" in caplog.text
+
+
+#============================================
 class TestDirectoryCreation:
 	"""Tests for automatic directory creation."""
 

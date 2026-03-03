@@ -654,19 +654,23 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 			conf_item = PySide6.QtWidgets.QTableWidgetItem(
 				confidence_text
 			)
-			# color-code: green >= 70%, yellow 40-69%, red < 40%
+			# color-code background and use dark text for readability
+			dark_text = PySide6.QtGui.QColor(0, 0, 0)
 			if conf >= 0.7:
 				conf_item.setBackground(
 					PySide6.QtGui.QColor(200, 255, 200)
 				)
+				conf_item.setForeground(dark_text)
 			elif conf >= 0.4:
 				conf_item.setBackground(
 					PySide6.QtGui.QColor(255, 255, 200)
 				)
+				conf_item.setForeground(dark_text)
 			elif conf > 0:
 				conf_item.setBackground(
 					PySide6.QtGui.QColor(255, 200, 200)
 				)
+				conf_item.setForeground(dark_text)
 			self._results_table.setItem(row, 2, conf_item)
 		self._results_table.resizeColumnsToContents()
 		# auto-select first result to populate preview
@@ -823,7 +827,10 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 
 	#============================================
 	def _retry_after_imdb_challenge(self) -> bool:
-		"""Open challenge dialog, apply cookies, and retry scrape.
+		"""Open challenge dialog with shared transport profile and retry scrape.
+
+		Uses the transport's QWebEngineProfile so the challenge dialog
+		shares cookies and WAF immunity with the browser transport.
 
 		Returns:
 			bool: True if retry was started, False otherwise.
@@ -835,18 +842,19 @@ class MovieChooserDialog(PySide6.QtWidgets.QDialog):
 			return False
 		import moviemanager.ui.dialogs.imdb_challenge_dialog
 		url = f"https://www.imdb.com/title/{imdb_id}/"
+		# use the shared transport profile so cookies persist
+		transport = self._api.get_imdb_transport()
+		shared_profile = None
+		if transport is not None:
+			shared_profile = transport.get_profile()
 		seed_cookies = self._api.get_configured_imdb_browser_cookies()
 		dialog = moviemanager.ui.dialogs.imdb_challenge_dialog.ImdbChallengeDialog(
-			url, self, seed_cookies=seed_cookies
+			url, self, seed_cookies=seed_cookies, profile=shared_profile,
 		)
 		if dialog.exec() != PySide6.QtWidgets.QDialog.DialogCode.Accepted:
 			return False
-		cookies = dialog.get_cookies()
-		if not cookies:
-			return False
-		applied = self._api.apply_imdb_cookies(cookies)
-		if not applied:
-			return False
+		# with shared profile, cookies are already in the transport
+		# no need to manually apply cookies
 		self._ok_btn.setEnabled(False)
 		self._ok_btn.setText("Saving...")
 		self.setCursor(

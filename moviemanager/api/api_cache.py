@@ -67,6 +67,24 @@ def _serialize_value(value) -> object:
 
 
 #============================================
+#============================================
+def _json_default(obj: object) -> str:
+	"""Fallback handler for non-serializable objects in json.dump.
+
+	Args:
+		obj: Non-serializable object encountered during JSON encoding.
+
+	Returns:
+		String representation of the object.
+	"""
+	_LOG.warning(
+		"Non-serializable object in cache data: %s (type %s)",
+		obj, type(obj).__name__,
+	)
+	return str(obj)
+
+
+#============================================
 class ApiCache:
 	"""Persistent JSON-file cache for movie API metadata.
 
@@ -155,7 +173,8 @@ class ApiCache:
 		)
 		try:
 			with os.fdopen(fd, "w", encoding="utf-8") as f:
-				json.dump(data, f, indent=2, ensure_ascii=False)
+				json.dump(data, f, indent=2, ensure_ascii=False,
+					default=_json_default)
 			os.rename(tmp_path, path)
 		except OSError:
 			# clean up temp file on failure

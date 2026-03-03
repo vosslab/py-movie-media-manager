@@ -24,23 +24,31 @@ class ImdbChallengeDialog(PySide6.QtWidgets.QDialog):
 	"""
 
 	#============================================
-	def __init__(self, url: str, parent=None, seed_cookies: list = None):
+	def __init__(
+		self, url: str, parent=None,
+		seed_cookies: list = None, profile=None,
+	):
 		"""Initialize the challenge dialog.
 
 		Args:
 			url: IMDB URL to load (usually a title page).
 			parent: Parent QWidget.
 			seed_cookies: Optional list of cookie dicts to inject before loading.
+			profile: Optional QWebEngineProfile to share with browser transport.
+				When provided, cookies persist across transport and dialog sessions.
 		"""
 		super().__init__(parent)
 		self.setWindowTitle("IMDB Challenge - Complete to Continue")
 		self.resize(900, 700)
 		self._url = url
 		self._cookies = []
-		# set up the web engine profile and view
-		self._profile = PySide6.QtWebEngineCore.QWebEngineProfile(
-			"imdb_challenge", self
-		)
+		# use shared profile when provided, otherwise create isolated one
+		if profile is not None:
+			self._profile = profile
+		else:
+			self._profile = PySide6.QtWebEngineCore.QWebEngineProfile(
+				"imdb_challenge", self
+			)
 		self._page = PySide6.QtWebEngineCore.QWebEnginePage(
 			self._profile, self
 		)

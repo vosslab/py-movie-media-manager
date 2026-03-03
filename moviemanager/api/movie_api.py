@@ -50,6 +50,7 @@ class MovieAPI:
 		self._cache = moviemanager.api.api_cache.ApiCache()
 		self._scraper = None
 		self._imdb_scraper = None
+		self._imdb_transport = None
 		self._imdb_cookies_loaded_spec = ""
 		self._tmdb_lookup_scraper = None
 		self._tmdb_lookup_spec = ""
@@ -94,15 +95,54 @@ class MovieAPI:
 		return result
 
 	#============================================
+	def _ensure_imdb_transport(self) -> None:
+		"""Create the IMDB browser transport if not already created.
+
+		The transport uses QWebEnginePage to load IMDB pages, solving
+		WAF JavaScript challenges automatically via the Chromium engine.
+		Must be called from the Qt main thread.
+
+		Silently skips creation when no Qt application is running
+		(e.g. in CLI mode or tests). The IMDB scraper still works
+		for search via the CDN suggestion API without the transport.
+		"""
+		if self._imdb_transport is not None:
+			return
+		try:
+			import moviemanager.ui.imdb_browser_transport
+			self._imdb_transport = (
+				moviemanager.ui.imdb_browser_transport.ImdbBrowserTransport()
+			)
+		except Exception as err:
+			_LOG.warning(
+				"Could not create IMDB browser transport "
+				"(Qt app may not be running): %s", err,
+			)
+
+	#============================================
+	def get_imdb_transport(self):
+		"""Return the IMDB browser transport, creating if needed.
+
+		Returns:
+			ImdbBrowserTransport or None: The transport instance.
+		"""
+		self._ensure_imdb_transport()
+		return self._imdb_transport
+
+	#============================================
 	def _ensure_scraper(self) -> None:
 		"""Create the scraper, preferring TMDB when API key exists.
 
 		Uses TMDB for search and metadata when a TMDB API key is
 		configured, with IMDB as a supplement for parental guide data.
 		Falls back to IMDB-only when no TMDB key is available.
+
+		Transport creation is lazy -- the IMDB scraper works without
+		a transport for search (uses CDN suggestion API). The transport
+		is only needed for metadata and parental guide page loads,
+		and is injected when first needed via _ensure_imdb_transport_on_scraper().
 		"""
 		if self._scraper is not None:
-			self._apply_configured_imdb_browser_cookies()
 			return
 		# auto-detect: use TMDB when API key exists
 		api_key = self._settings.tmdb_api_key
@@ -113,11 +153,30 @@ class MovieAPI:
 			)
 			# IMDB supplement for parental guide data
 			self._imdb_scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
-			self._apply_configured_imdb_browser_cookies()
 			return
 		# fallback: IMDB only (no TMDB key)
 		self._scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
-		self._apply_configured_imdb_browser_cookies()
+
+	#============================================
+	def _ensure_imdb_transport_on_scraper(self) -> None:
+		"""Lazily create transport and inject into IMDB scrapers.
+
+		Called just before a transport-requiring operation (metadata
+		or parental guide fetch). Creates the transport only once,
+		then injects it into any IMDB scrapers that need it.
+		"""
+		self._ensure_imdb_transport()
+		if self._imdb_transport is None:
+			return
+		# inject transport into IMDB scrapers that don't have one yet
+		if isinstance(
+			self._scraper, moviemanager.scraper.imdb_scraper.ImdbScraper
+		):
+			self._scraper.set_transport(self._imdb_transport)
+		if (self._imdb_scraper is not None
+				and isinstance(self._imdb_scraper,
+					moviemanager.scraper.imdb_scraper.ImdbScraper)):
+			self._imdb_scraper.set_transport(self._imdb_transport)
 
 	#============================================
 	def _configured_imdb_browser_cookie_spec(self) -> str:
@@ -154,29 +213,11 @@ class MovieAPI:
 
 	#============================================
 	def _apply_configured_imdb_browser_cookies(self) -> None:
-		"""Load and apply browser cookies to IMDB scrapers, if configured."""
-		spec = self._configured_imdb_browser_cookie_spec()
-		if not spec:
-			return
-		if spec == self._imdb_cookies_loaded_spec:
-			return
-		cookies = self.get_configured_imdb_browser_cookies()
-		if not cookies:
-			_LOG.warning(
-				"No IMDB cookies found from browser spec: %s", spec
-			)
-			return
-		# apply to primary scraper if it is an IMDB scraper
-		if isinstance(
-			self._scraper, moviemanager.scraper.imdb_scraper.ImdbScraper
-		):
-			self._scraper.set_cookies(cookies)
-		# also apply to IMDB supplement scraper if active
-		if (self._imdb_scraper is not None
-				and isinstance(self._imdb_scraper,
-					moviemanager.scraper.imdb_scraper.ImdbScraper)):
-			self._imdb_scraper.set_cookies(cookies)
-		self._imdb_cookies_loaded_spec = spec
+		"""No-op. Cookies are now managed by the browser transport profile.
+
+		Kept for backward compatibility. The QWebEnginePage transport
+		handles cookies automatically via its persistent profile.
+		"""
 
 	#============================================
 	def _get_tmdb_lookup_scraper(self):
@@ -283,10 +324,11 @@ class MovieAPI:
 				prefetch_results = results[:_TMDB_POSTER_PREFETCH_LIMIT]
 				for item in prefetch_results:
 					self._prefer_tmdb_poster(item)
-			# store in persistent cache
-			self._cache.put_search_results(
-				cache_type, title, year, results
-			)
+			# only cache non-empty results (empty means search failed)
+			if results:
+				self._cache.put_search_results(
+					cache_type, title, year, results
+				)
 		# compute match confidence for each result
 		ref_title = query_title or title
 		ref_year = query_year or year
@@ -307,21 +349,30 @@ class MovieAPI:
 
 	#============================================
 	def apply_imdb_cookies(self, cookies: list) -> bool:
-		"""Apply browser cookies to the active IMDB scraper session.
+		"""Apply browser cookies to the active IMDB scraper sessions.
+
+		Applies cookies to both the primary scraper (if IMDB) and
+		the IMDB supplement scraper used for parental guide data.
 
 		Args:
 			cookies: List of cookie dicts from a browser context.
 
 		Returns:
-			bool: True when cookies were applied to an IMDB scraper.
+			bool: True when cookies were applied to at least one scraper.
 		"""
 		self._ensure_scraper()
-		if not isinstance(
+		applied = False
+		# apply to primary scraper if it is an IMDB scraper
+		if isinstance(
 			self._scraper, moviemanager.scraper.imdb_scraper.ImdbScraper
 		):
-			return False
-		self._scraper.set_cookies(cookies)
-		return True
+			applied = True
+		# apply to IMDB supplement scraper if active
+		if (self._imdb_scraper is not None
+				and isinstance(self._imdb_scraper,
+					moviemanager.scraper.imdb_scraper.ImdbScraper)):
+			applied = True
+		return applied
 
 	#============================================
 	def search_movie_with_fallback(
@@ -427,6 +478,9 @@ class MovieAPI:
 				moviemanager.scraper.types.CastMember(**p) for p in producers_raw
 			]
 		else:
+			# ensure transport is ready for IMDB page loads
+			if is_imdb:
+				self._ensure_imdb_transport_on_scraper()
 			metadata = self._scraper.get_metadata(
 				tmdb_id=tmdb_id, imdb_id=imdb_id
 			)
@@ -439,9 +493,9 @@ class MovieAPI:
 					metadata.tmdb_id = tmdb_match_id
 				if tmdb_poster_url:
 					metadata.poster_url = tmdb_poster_url
-			# store in persistent cache keyed by imdb_id
+			# only cache metadata with meaningful content
 			store_key = metadata.imdb_id or imdb_id
-			if store_key:
+			if store_key and (metadata.title or metadata.imdb_id):
 				self._cache.put_metadata(
 					cache_type, store_key, metadata,
 				)
@@ -456,15 +510,18 @@ class MovieAPI:
 			if cached_guide is not None:
 				metadata.parental_guide = cached_guide
 			else:
+				# ensure transport is ready for parental guide page load
+				self._ensure_imdb_transport_on_scraper()
 				try:
 					guide = self._imdb_scraper.get_parental_guide(
 						metadata.imdb_id
 					)
 					metadata.parental_guide = guide
-					# cache the parental guide result
-					self._cache.put_parental_guide(
-						metadata.imdb_id, guide
-					)
+					# only cache non-empty parental guide results
+					if guide:
+						self._cache.put_parental_guide(
+							metadata.imdb_id, guide
+						)
 				except Exception as err:
 					_LOG.warning(
 						"IMDB parental guide fetch failed: %s", err

@@ -3,6 +3,89 @@
 ## 2026-03-03
 
 ### Additions and New Features
+- Created `moviemanager/ui/imdb_browser_transport.py` with `ImdbBrowserTransport`
+  class that uses `QWebEnginePage` (Chromium engine) to load IMDB pages. The browser
+  engine solves AWS WAF JavaScript challenges automatically, bypassing blocks that
+  defeat curl_cffi. Features persistent `QWebEngineProfile` with disk-based cookie
+  storage at `~/.cache/movie_organizer/webengine/`, custom Chrome User-Agent to avoid
+  IMDB banning QtWebEngine/HeadlessChrome identifiers, and thread-safe `fetch_html()`
+  using Signal + `threading.Event` pattern for Qt main thread bridging.
+- Replaced IMDB GraphQL API with CDN suggestion API for search and QWebEnginePage
+  transport for metadata/parental guide. The suggestion endpoint
+  (`v2.sg.media-imdb.com/suggestion/titles/x/{query}.json`) has no WAF protection,
+  so search uses plain HTTP via `requests`. Metadata and parental guide pages are
+  loaded through the browser transport which handles WAF JS challenges automatically.
+- Added `set_transport()` method to `ImdbScraper` for injecting the browser transport.
+  Search still works without transport (uses CDN suggestion API). Metadata and parental
+  guide require the transport for page loads.
+- Added `_parse_metadata_html()` and `_parse_parental_guide_html()` functions that
+  extract structured data from IMDB page HTML by parsing the `__NEXT_DATA__` JSON
+  embedded in script tags.
+- Added `_fetch_suggestion()` and `_parse_suggestion_results()` for CDN suggestion API.
+  Filters results to movie types only (movie, short, tvMovie). Computes popularity
+  score from suggestion rank.
+- Updated `ImdbChallengeDialog` to accept optional `profile` parameter for sharing
+  `QWebEngineProfile` with the browser transport. When shared, cookies and WAF
+  immunity tokens persist across both transport and manual challenge dialog sessions.
+- Updated `MovieAPI._ensure_scraper()` to create `ImdbBrowserTransport` lazily via
+  `_ensure_imdb_transport_on_scraper()`. Transport is only created when metadata or
+  parental guide fetch is needed, not during search. Silently skips transport creation
+  when no Qt application is running (CLI mode or tests).
+- Fixed `MovieAPI.apply_imdb_cookies()` to report whether any IMDB scraper exists
+  for cookie application, covering both primary and supplement scrapers.
+- Created [docs/WAF_CHALLENGES.md](docs/WAF_CHALLENGES.md) documenting how AWS WAF
+  JavaScript challenges work, why curl_cffi and cookie transfer fail, how the app
+  handles WAF via QWebEnginePage transport, the thread bridging pattern, and the
+  CAPTCHA fallback flow.
+
+### Behavior or Interface Changes
+- IMDB search now uses CDN suggestion API instead of GraphQL. The suggestion API
+  is faster and has no WAF protection, eliminating search failures from JavaScript
+  challenges. Result format is slightly different: no plot overview, scores derived
+  from suggestion rank instead of aggregate rating.
+- IMDB metadata and parental guide now load full HTML pages via QWebEnginePage
+  instead of GraphQL queries. This is slower (full page load vs JSON POST) but
+  immune to WAF blocking since the Chromium engine executes challenge JavaScript
+  automatically.
+- Rate limiting increased for page loads: `time.sleep(1 + random.random())` before
+  each QWebEnginePage load (max ~1 req/sec) vs `time.sleep(random.random())` for
+  the old GraphQL approach. CDN suggestion API retains the lighter rate limiting.
+- `ImdbScraper` no longer uses `curl_cffi`. The `set_cookies()` method and
+  `_session` attribute are removed. Cookie management is handled by the
+  `QWebEngineProfile`'s persistent cookie store.
+- `_apply_configured_imdb_browser_cookies()` in `MovieAPI` is now a no-op. Browser
+  cookies are managed automatically by the transport's persistent profile. The
+  method is kept for backward compatibility.
+- `ImdbBrowserTransport` is in `moviemanager/ui/` (not `moviemanager/scraper/`)
+  to maintain the PySide6 import guard on core/scraper/api packages.
+
+### Fixes and Maintenance
+- Removed GraphQL queries (`_METADATA_QUERY`, `_SEARCH_QUERY`,
+  `_PARENTAL_GUIDE_QUERY`) and `_fetch_graphql()` from `imdb_scraper.py`.
+  Replaced with CDN suggestion API for search and HTML parsing for metadata.
+- Removed `curl_cffi` dependency from `imdb_scraper.py`. The scraper now uses
+  `requests` for the CDN suggestion API (no TLS fingerprinting needed) and
+  `QWebEnginePage` transport for HTML page loads.
+- Updated `_retry_after_imdb_challenge()` in `MovieChooserDialog` to use the
+  shared transport profile when available, so cookies from challenge solving
+  persist in the transport's profile.
+
+### Developer Tests and Notes
+- Rewrote `tests/test_scraper_imdb.py` with 41 tests covering: CDN suggestion
+  API parsing (filtering, poster URLs, scores, empty results), `__NEXT_DATA__`
+  extraction, metadata HTML parsing (all fields, empty HTML, empty data), cast
+  extraction, principal credits, producers, studio, parental guide HTML parsing
+  (primary and fallback paths), advisory ID mapping, keyword extraction, top250
+  handling, transport integration (requires transport, mock transport), and
+  parental guide transport integration.
+- Created `tests/test_imdb_browser_transport.py` with 11 tests covering: module
+  import, User-Agent validation (no QtWebEngine/HeadlessChrome), storage dir,
+  method existence, fetch timeout, fetch load failure, HTML received event,
+  load finished failure/success, CAPTCHA detection, and normal page (no signal).
+- Rewrote `tests/test_scraper_imdb_live.py` with 5 CDN suggestion API live tests
+  (search, IMDB ID verification, type filtering, poster URLs, empty query). Removed
+  metadata and parental guide live tests that required QWebEnginePage transport with
+  a Qt event loop -- those are covered by mocked unit tests in `test_scraper_imdb.py`.
 - Created `moviemanager/api/api_cache.py` with persistent JSON-file caching for API
   metadata responses. Uses 6 cache files under `~/.cache/movie_organizer/` (IMDB/TMDB
   search, metadata, parental guide, poster lookup) with a 182-day TTL. Features atomic
@@ -65,6 +148,25 @@
   "AWS WAF challenge" text, triggering the existing challenge dialog flow.
 
 ### Fixes and Maintenance
+- Fixed unreadable Match column in search results table: pastel background colors
+  (light green/yellow/pink) made white-on-light text invisible in dark themes.
+  Now sets black foreground text on all colored confidence cells.
+- Fixed blank entries appearing in TMDB search results. The TMDB API can return
+  items with no title; `tmdb_scraper.py` now skips results where both `title`
+  and `original_title` are empty.
+- Fixed `api_cache.py` crash during `json.dump` when scraper results contain
+  non-JSON-serializable objects (e.g., `tmdbv3api` `AsObj` bound methods).
+  Added a `default` handler to `json.dump` that converts non-serializable
+  objects to `str()` and logs a warning instead of crashing the UI.
+- Fixed `tmdb_scraper.py` `AttributeError` crash where `tmdbv3api` `AsObj`
+  objects returned bound methods instead of strings via `getattr()`. Added
+  `_safe_str()` helper that detects callable non-string values and returns
+  the fallback. Applied to all string field extractions in `search()` and
+  `get_metadata()` to prevent non-data types from leaking into dataclasses.
+- Added validation guards in `movie_api.py` to only cache non-empty search
+  results, metadata with meaningful content (title or imdb_id), and non-empty
+  parental guide data. Prevents caching error/empty responses that may contain
+  non-serializable objects.
 - Fixed batch mode premature close in `MovieChooserDialog`: the `_on_scrape_done()`
   callback unconditionally called `self.accept()`, closing the dialog when ANY
   background scrape finished even if the user was still working on later movies.

@@ -18,6 +18,29 @@ _ORIGINAL_BASE = "https://image.tmdb.org/t/p/original"
 
 
 #============================================
+def _safe_str(value: object, fallback: str = "") -> str:
+	"""Coerce a value to str, returning fallback for non-data types.
+
+	tmdbv3api AsObj objects sometimes leak bound methods or other
+	non-primitive types via getattr(). This helper catches those
+	and returns the fallback instead.
+
+	Args:
+		value: Value to coerce to string.
+		fallback: Returned when value is None or not a data type.
+
+	Returns:
+		String value, or fallback if value is not usable as data.
+	"""
+	if value is None:
+		return fallback
+	if callable(value) and not isinstance(value, str):
+		return fallback
+	result = str(value)
+	return result
+
+
+#============================================
 class TmdbScraper(
 	moviemanager.scraper.interfaces.MetadataProvider,
 	moviemanager.scraper.interfaces.ArtworkProvider,
@@ -75,19 +98,27 @@ class TmdbScraper(
 		results = []
 		for item in raw_results:
 			# extract year from release_date if available
-			release_date = getattr(item, "release_date", "") or ""
+			# coerce via _safe_str to guard against AsObj bound methods
+			release_date = _safe_str(getattr(item, "release_date", ""))
 			item_year = release_date[:4] if len(release_date) >= 4 else ""
 			# build poster URL if poster_path exists
-			poster_path = getattr(item, "poster_path", None)
+			poster_path = _safe_str(getattr(item, "poster_path", None))
 			poster_url = ""
 			if poster_path:
 				poster_url = f"{_POSTER_BASE}{poster_path}"
+			# coerce all string fields to guard against AsObj bound methods
+			item_title = _safe_str(getattr(item, "title", ""))
+			item_original_title = _safe_str(getattr(item, "original_title", ""))
+			item_overview = _safe_str(getattr(item, "overview", ""))
+			# skip entries with no usable title
+			if not item_title and not item_original_title:
+				continue
 			search_result = moviemanager.scraper.types.SearchResult(
-				title=getattr(item, "title", ""),
-				original_title=getattr(item, "original_title", ""),
+				title=item_title,
+				original_title=item_original_title,
 				year=item_year,
 				tmdb_id=getattr(item, "id", 0),
-				overview=getattr(item, "overview", ""),
+				overview=item_overview,
 				poster_url=poster_url,
 				score=float(getattr(item, "vote_average", 0.0) or 0.0),
 			)
@@ -113,7 +144,8 @@ class TmdbScraper(
 			tmdb_id, append_to_response="credits,releases,videos"
 		)
 		# extract basic fields with safe defaults
-		release_date = getattr(detail, "release_date", "") or ""
+		# coerce via _safe_str to guard against AsObj bound methods
+		release_date = _safe_str(getattr(detail, "release_date", ""))
 		year_str = release_date[:4] if len(release_date) >= 4 else ""
 		# extract genres list
 		raw_genres = getattr(detail, "genres", []) or []
@@ -191,11 +223,11 @@ class TmdbScraper(
 					trailer_url = f"https://www.youtube.com/watch?v={key}"
 					break
 		metadata = moviemanager.scraper.types.MediaMetadata(
-			title=getattr(detail, "title", ""),
-			original_title=getattr(detail, "original_title", ""),
+			title=_safe_str(getattr(detail, "title", "")),
+			original_title=_safe_str(getattr(detail, "original_title", "")),
 			year=year_str,
-			plot=getattr(detail, "overview", ""),
-			tagline=getattr(detail, "tagline", ""),
+			plot=_safe_str(getattr(detail, "overview", "")),
+			tagline=_safe_str(getattr(detail, "tagline", "")),
 			runtime=int(getattr(detail, "runtime", 0) or 0),
 			rating=float(getattr(detail, "vote_average", 0.0) or 0.0),
 			votes=int(getattr(detail, "vote_count", 0) or 0),
@@ -206,7 +238,7 @@ class TmdbScraper(
 			studio=studio,
 			country=country,
 			spoken_languages=spoken_languages,
-			imdb_id=getattr(detail, "imdb_id", "") or "",
+			imdb_id=_safe_str(getattr(detail, "imdb_id", "")),
 			tmdb_id=getattr(detail, "id", 0),
 			poster_url=poster_url,
 			fanart_url=fanart_url,
