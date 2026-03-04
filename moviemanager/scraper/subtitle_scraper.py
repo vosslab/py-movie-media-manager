@@ -109,6 +109,31 @@ class SubtitleScraper(
 		return True
 
 	#============================================
+	def logout(self) -> None:
+		"""Log out from OpenSubtitles and free server resources.
+
+		Sends a DELETE request to /logout with the JWT token.
+		Clears the cached token regardless of API response.
+		"""
+		if not self._jwt_token:
+			return
+		self._rate_limit_wait()
+		logout_headers = dict(self._headers)
+		logout_headers["Authorization"] = (
+			f"Bearer {self._jwt_token}"
+		)
+		try:
+			requests.delete(
+				f"{_API_BASE}/logout",
+				headers=logout_headers,
+				timeout=10,
+			)
+			_log.info("OpenSubtitles logout successful")
+		except requests.exceptions.RequestException as err:
+			_log.debug("OpenSubtitles logout failed: %s", err)
+		self._jwt_token = ""
+
+	#============================================
 	def search(self, imdb_id: str = "", languages: str = "en") -> list:
 		"""Search for subtitles by IMDB ID.
 

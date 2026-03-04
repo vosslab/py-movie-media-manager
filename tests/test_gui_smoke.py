@@ -412,7 +412,7 @@ class TestChooserDialogBatchMode:
 			)
 			qtbot.addWidget(dialog)
 			# verify batch mode is active
-			assert dialog._batch_mode is True
+			assert dialog._nav.batch_mode is True
 			# verify Stop Batch button exists
 			assert hasattr(dialog, "_abort_btn")
 			assert dialog._abort_btn.text() == "Stop Batch"
@@ -440,7 +440,7 @@ class TestChooserDialogBatchMode:
 			)
 			qtbot.addWidget(dialog)
 			# verify single mode
-			assert dialog._batch_mode is False
+			assert dialog._nav.batch_mode is False
 			# verify no Stop Batch button in single mode
 			assert not hasattr(dialog, "_abort_btn")
 			# verify Accept Match button text
@@ -494,15 +494,16 @@ class TestChooserDialogPrematchMode:
 		assert dialog._in_prematch_mode is True
 		# use isHidden() since dialog is not shown (isVisible requires parent)
 		assert not dialog._prematch_widget.isHidden()
-		# verify metadata fields are populated
-		assert dialog._prematch_title.text() == "The Dark Knight"
-		assert dialog._prematch_year_label.text() == "2008"
-		assert dialog._prematch_rating_label.text() == "9.0/10"
-		assert dialog._prematch_director_label.text() == "Christopher Nolan"
-		assert dialog._prematch_cert_label.text() == "PG-13"
-		assert "Action" in dialog._prematch_genres_label.text()
-		assert dialog._prematch_runtime_label.text() == "152 min"
-		assert "tt0468569" in dialog._prematch_ids_label.text()
+		# verify metadata fields are populated (via prematch widget)
+		pw = dialog._prematch_widget
+		assert pw._title_label.text() == "The Dark Knight"
+		assert pw._year_label.text() == "2008"
+		assert pw._rating_label.text() == "9.0/10"
+		assert pw._director_label.text() == "Christopher Nolan"
+		assert pw._cert_label.text() == "PG-13"
+		assert "Action" in pw._genres_label.text()
+		assert pw._runtime_label.text() == "152 min"
+		assert "tt0468569" in pw._ids_label.text()
 		# verify Keep Match button text
 		assert dialog._ok_btn.text() == "Keep Match"
 
@@ -612,7 +613,7 @@ class TestChooserDialogBatchBugFixes:
 			)
 			qtbot.addWidget(dialog)
 			# simulate pending scrape result
-			dialog._batch_results["fake/path"] = "pending"
+			dialog._nav.mark_result("fake/path", "pending")
 			# reload to trigger count update
 			dialog._load_movie(movies[0])
 			# verify pending is not counted as matched

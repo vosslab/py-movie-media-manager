@@ -41,6 +41,8 @@ class TaskAPI(PySide6.QtCore.QObject):
 	task_progress = PySide6.QtCore.Signal(int, int, int, str)
 	# emitted when any job starts, finishes, or errors
 	job_list_changed = PySide6.QtCore.Signal()
+	# emitted when pause state changes (True = paused)
+	paused_changed = PySide6.QtCore.Signal(bool)
 
 	def __init__(self, max_workers: int = 2, parent=None):
 		"""Initialize the task manager.
@@ -60,6 +62,10 @@ class TaskAPI(PySide6.QtCore.QObject):
 		self._jobs: dict = {}
 		# latest progress per task: task_id -> (current, total, message)
 		self._progress: dict = {}
+		# pause/resume state
+		self._paused: bool = False
+		# workers queued while paused: list of (worker, priority, task_id)
+		self._pending_queue: list = []
 
 	#============================================
 	def submit_job(
@@ -136,6 +142,44 @@ class TaskAPI(PySide6.QtCore.QObject):
 		self.job_list_changed.emit()
 
 	#============================================
+	def pause(self) -> None:
+		"""Pause the job queue. Running jobs continue to completion."""
+		with self._lock:
+			if self._paused:
+				return
+			self._paused = True
+		self.paused_changed.emit(True)
+
+	#============================================
+	def resume(self) -> None:
+		"""Resume the job queue and start all pending workers."""
+		with self._lock:
+			if not self._paused:
+				return
+			self._paused = False
+			# drain pending queue into the thread pool
+			pending = list(self._pending_queue)
+			self._pending_queue.clear()
+		# start workers outside the lock
+		for worker, priority, _task_id in pending:
+			self._pool.start(worker, priority)
+		self.paused_changed.emit(False)
+
+	#============================================
+	@property
+	def is_paused(self) -> bool:
+		"""Return True when the job queue is paused."""
+		return self._paused
+
+	#============================================
+	@property
+	def pending_count(self) -> int:
+		"""Return the number of workers held in the pending queue."""
+		with self._lock:
+			count = len(self._pending_queue)
+		return count
+
+	#============================================
 	def submit(
 		self, fn, *args, _priority: int = PRIORITY_NORMAL, **kwargs,
 	) -> int:
@@ -172,6 +216,12 @@ class TaskAPI(PySide6.QtCore.QObject):
 		)
 		with self._lock:
 			self._workers[task_id] = worker
+			# if paused, hold worker instead of starting it
+			if self._paused:
+				self._pending_queue.append(
+					(worker, _priority, task_id)
+				)
+				return task_id
 		self._pool.start(worker, _priority)
 		return task_id
 
@@ -261,6 +311,9 @@ class TaskAPI(PySide6.QtCore.QObject):
 		with self._lock:
 			for worker in self._workers.values():
 				worker.cancel()
+			# discard any paused workers
+			self._pending_queue.clear()
+			self._paused = False
 		self._pool.clear()
 		self._pool.waitForDone(1000)
 

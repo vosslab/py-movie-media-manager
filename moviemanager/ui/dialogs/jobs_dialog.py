@@ -69,6 +69,19 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 		layout.addWidget(self._table)
 		# button row
 		btn_layout = PySide6.QtWidgets.QHBoxLayout()
+		# cancel job button
+		self._cancel_btn = PySide6.QtWidgets.QPushButton(
+			"Cancel Job"
+		)
+		self._cancel_btn.clicked.connect(self._cancel_selected)
+		btn_layout.addWidget(self._cancel_btn)
+		# pause/resume toggle button
+		self._pause_btn = PySide6.QtWidgets.QPushButton(
+			"Pause All"
+		)
+		self._pause_btn.setCheckable(True)
+		self._pause_btn.toggled.connect(self._on_pause_toggled)
+		btn_layout.addWidget(self._pause_btn)
 		btn_layout.addStretch()
 		# error summary button
 		self._summary_btn = PySide6.QtWidgets.QPushButton(
@@ -108,7 +121,11 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 			# status column
 			status = job["status"]
 			if status == "queued":
-				status_text = "Queued"
+				# show "Paused" when the queue is paused
+				if self._task_api.is_paused:
+					status_text = "Paused"
+				else:
+					status_text = "Queued"
 			elif status == "running":
 				status_text = "Running..."
 			elif status == "done":
@@ -165,6 +182,15 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 			0,
 			PySide6.QtWidgets.QHeaderView.ResizeMode.Stretch,
 		)
+		# sync pause button state with TaskAPI
+		is_paused = self._task_api.is_paused
+		self._pause_btn.blockSignals(True)
+		self._pause_btn.setChecked(is_paused)
+		if is_paused:
+			self._pause_btn.setText("Resume All")
+		else:
+			self._pause_btn.setText("Pause All")
+		self._pause_btn.blockSignals(False)
 
 	#============================================
 	@staticmethod
@@ -291,11 +317,23 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 
 	#============================================
 	def _cancel_selected(self) -> None:
-		"""Cancel the selected running job."""
+		"""Cancel the selected running or queued job."""
 		row = self._table.currentRow()
 		jobs = self._task_api.all_jobs
 		if row < 0 or row >= len(jobs):
 			return
 		job = jobs[row]
-		if job["status"] == "running":
+		if job["status"] in ("running", "queued"):
 			self._task_api.cancel(job["task_id"])
+
+	#============================================
+	def _on_pause_toggled(self, checked: bool) -> None:
+		"""Handle pause/resume toggle from the dialog button.
+
+		Args:
+			checked: True to pause, False to resume.
+		"""
+		if checked:
+			self._task_api.pause()
+		else:
+			self._task_api.resume()

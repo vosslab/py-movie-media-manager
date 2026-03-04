@@ -57,6 +57,21 @@ class SubtitleService:
 		self._quota_exhausted = False
 
 	#============================================
+	def shutdown(self) -> None:
+		"""Log out from OpenSubtitles and release cached scraper."""
+		with self._subtitle_scraper_lock:
+			if self._subtitle_scraper is not None:
+				self._subtitle_scraper.logout()
+				self._subtitle_scraper = None
+				self._login_time = 0.0
+			if (self._external_provider is not None
+					and self._external_logged_in):
+				if hasattr(self._external_provider, "logout"):
+					self._external_provider.logout()
+				self._external_logged_in = False
+				self._login_time = 0.0
+
+	#============================================
 	def _ensure_provider_logged_in(self, provider) -> None:
 		"""Authenticate an external provider if not already done.
 
@@ -269,20 +284,56 @@ class SubtitleService:
 						"Settings > API Keys."
 					)
 				if status == 406:
-					# 406 = quota exhausted per OpenSubtitles API
-					self._quota_exhausted = True
+					# 406 has multiple meanings per API docs
 					body = ""
 					if exc.response is not None:
 						body = exc.response.text[:300]
+					if "quota" in body.lower() or "allowed" in body.lower():
+						# download quota exhausted
+						self._quota_exhausted = True
+						_LOG.warning(
+							"OpenSubtitles download quota"
+							" exhausted: %s", body,
+						)
+						raise _Err(
+							_Cat.quota_exceeded,
+							"OpenSubtitles daily download quota"
+							" exhausted (20/day for free"
+							" accounts)."
+							" Resets at midnight UTC.",
+						)
+					if "invalid token" in body.lower():
+						# expired or corrupt JWT token
+						self._subtitle_scraper = None
+						self._external_logged_in = False
+						raise _Err(
+							_Cat.auth_failed,
+							"OpenSubtitles token invalid."
+							" Will re-authenticate on"
+							" next attempt.",
+						)
+					# other 406 (invalid file_id, missing Accept)
 					_LOG.warning(
-						"OpenSubtitles download quota exhausted: %s",
-						body,
+						"OpenSubtitles 406: %s", body,
 					)
 					raise _Err(
+						_Cat.download_failed,
+						f"406: {body}" if body else str(exc)[:200],
+					)
+				if status == 410:
+					# download link expired, retry will regenerate
+					raise _Err(
+						_Cat.download_failed,
+						"OpenSubtitles download link expired."
+						" Retry the download.",
+					)
+				if status == 429:
+					# rate limit hit, stop batch for this session
+					self._quota_exhausted = True
+					raise _Err(
 						_Cat.quota_exceeded,
-						"OpenSubtitles daily download quota"
-						" exhausted (20/day for free accounts)."
-						" Resets at midnight UTC.",
+						"OpenSubtitles rate limit reached."
+						" Retry later.",
 					)
 				# include API response body for diagnostics
 				body = ""

@@ -13,6 +13,8 @@ class StatusBar(PySide6.QtWidgets.QStatusBar):
 	cancel_requested = PySide6.QtCore.Signal()
 	# emitted when the user clicks the Jobs button
 	jobs_clicked = PySide6.QtCore.Signal()
+	# emitted when the user toggles the Pause button (True = paused)
+	pause_toggled = PySide6.QtCore.Signal(bool)
 
 	def __init__(self, parent=None):
 		super().__init__(parent)
@@ -26,6 +28,16 @@ class StatusBar(PySide6.QtWidgets.QStatusBar):
 		)
 		self._jobs_btn.clicked.connect(self.jobs_clicked.emit)
 		self.addPermanentWidget(self._jobs_btn)
+		# pause/resume toggle button (permanent widget, next to Jobs)
+		self._pause_btn = PySide6.QtWidgets.QPushButton("Pause")
+		self._pause_btn.setCheckable(True)
+		self._pause_btn.setFlat(True)
+		self._pause_btn.setMaximumWidth(80)
+		self._pause_btn.setStyleSheet(
+			"QPushButton { font-size: 11px; padding: 2px 6px; }"
+		)
+		self._pause_btn.toggled.connect(self._on_pause_toggled)
+		self.addPermanentWidget(self._pause_btn)
 		# movie count label
 		self._count_label = PySide6.QtWidgets.QLabel("No movies loaded")
 		self.addPermanentWidget(self._count_label)
@@ -82,3 +94,32 @@ class StatusBar(PySide6.QtWidgets.QStatusBar):
 		self._progress.hide()
 		self._cancel_btn.hide()
 		self.clearMessage()
+
+	#============================================
+	def _on_pause_toggled(self, checked: bool) -> None:
+		"""Handle pause button toggle and update button text.
+
+		Args:
+			checked: True when the button is toggled on (paused).
+		"""
+		if checked:
+			self._pause_btn.setText("Resume")
+		else:
+			self._pause_btn.setText("Pause")
+		self.pause_toggled.emit(checked)
+
+	#============================================
+	def set_paused(self, paused: bool) -> None:
+		"""Programmatically set the pause button state.
+
+		Args:
+			paused: True to show paused state, False for normal.
+		"""
+		# block signals to avoid feedback loop
+		self._pause_btn.blockSignals(True)
+		self._pause_btn.setChecked(paused)
+		if paused:
+			self._pause_btn.setText("Resume")
+		else:
+			self._pause_btn.setText("Pause")
+		self._pause_btn.blockSignals(False)

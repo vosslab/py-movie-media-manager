@@ -2,6 +2,46 @@
 
 ## 2026-03-04
 
+### Fixes and Maintenance
+- Extracted `toolbar_builder.py` from `main_window.py`: moved the 200-line `_setup_toolbar()`
+  body into a standalone `build_toolbar(window)` function following the existing `menu_builder.py`
+  pattern. `MainWindow._setup_toolbar()` is now a 5-line stub.
+- Extracted `task_dispatcher.py` from `main_window.py`: moved the 3 task routing methods
+  (`_on_task_finished`, `_on_task_error`, `_on_task_progress`) into a `TaskDispatcher(QObject)`
+  class. `MainWindow` creates the dispatcher after controllers and connects `TaskAPI` signals to it.
+- Extracted `PrematchWidget(QFrame)` from `movie_chooser.py` into
+  `moviemanager/ui/widgets/prematch_widget.py`. Moves prematch card construction, poster download,
+  and poster cache logic out of the dialog. Emits `rematch_requested` signal for the "Find Different
+  Match" button.
+- Extracted `BatchNavigator` from `movie_chooser.py` into
+  `moviemanager/ui/dialogs/batch_navigator.py`. Pure Python class (no Qt dependency) managing batch
+  traversal state: movie list, current index, and per-movie results. `MovieChooserDialog` delegates
+  all index/state queries to it.
+- Net result: `main_window.py` reduced from 1,083 to 810 lines (-25%),
+  `movie_chooser.py` from 1,192 to 997 lines (-16%). No behavior changes.
+
+### Additions and New Features
+- Added pause/resume for the job queue. New `TaskAPI.pause()` and `resume()` methods hold
+  submitted workers in a pending queue instead of starting them, while already-running jobs
+  complete normally. Pause toggle button added to both the status bar and the Jobs dialog.
+- Added `SubtitleService.shutdown()` to log out from OpenSubtitles on application exit, freeing
+  JWT tokens and server resources per API docs.
+- Added `MovieDetailPanel.shutdown()` to cancel in-flight image workers and drain the panel's
+  private `QThreadPool` during application close.
+- Added `MoviePanel.shutdown_detail_panel()` bridge method so `MainWindow` can call through to
+  the detail panel's shutdown without reaching into internal panel structure.
+- Added "Cancel Job" button to the Jobs dialog, wired to the existing `_cancel_selected()` method
+  which now also handles jobs with "queued" status (previously only "running").
+- Added "Pause All" / "Resume All" toggle button to the Jobs dialog with state synced to `TaskAPI`.
+  Queued jobs show "Paused" status text when the queue is paused.
+
+### Behavior or Interface Changes
+- Improved `MainWindow.closeEvent()` shutdown sequence: now drains the task pool first, then the
+  detail panel image pool, then calls `MovieAPI.shutdown()` which logs out from subtitle service
+  before tearing down the IMDB browser transport.
+- Extended `MovieAPI.shutdown()` to call `SubtitleService.shutdown()` before IMDB transport
+  teardown, ensuring subtitle JWT logout happens while the network stack is still available.
+
 ### Additions and New Features
 - Split IMDB parental guide into a dedicated scraper:
   [moviemanager/scraper/imdb_parental_guide_scraper.py](moviemanager/scraper/imdb_parental_guide_scraper.py)
@@ -20,11 +60,20 @@
   IMDB selection in Settings. Now defaults to IMDB and only uses TMDB when explicitly chosen.
 - Fixed pipeline to add TMDB as a supplement for artwork when IMDB is the primary scraper and
   a TMDB API key is available. Previously IMDB-primary mode lost all TMDB artwork capability.
+- Added `logout()` method to `SubtitleScraper` (sends DELETE to `/logout` to free server
+  resources per API docs).
 - Added `Accept: */*` header to OpenSubtitles API requests as required by API docs.
 - Added `quota_exceeded` category to `DownloadCategory` enum and specific 406 handling
   in subtitle downloads. Shows a clear "daily download quota exhausted" message instead of
   a raw HTTP error when the 20/day free-account limit is hit (resets midnight UTC).
 - Improved subtitle download error messages to include the API response body for diagnostics.
+- Added comprehensive error handling for all OpenSubtitles HTTP error codes: 401 (re-auth),
+  406 (quota/invalid token/invalid file_id), 410 (expired link), 429 (rate limit).
+  Session-level quota flag prevents further API requests after 406 quota or 429 rate limit.
+- Updated [docs/OPENSUBTITLES_COM_API.md](docs/OPENSUBTITLES_COM_API.md) with full error
+  codes reference, rate limits, best practices, performance tips, and implementation notes.
+- Fixed pre-existing bandit B108 warning in `tests/test_template_engine.py` (hardcoded `/tmp`
+  replaced with `tempfile.gettempdir()`).
 - Fixed OpenSubtitles 401 on subtitle downloads. Root cause: the pipeline-injected
   `SubtitleScraper` was created with only an API key but never authenticated (login was
   skipped because `_external_provider is not None`). Added `_ensure_provider_logged_in()`

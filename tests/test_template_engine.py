@@ -1,7 +1,9 @@
 """Tests for template engine expand_template and build_file_template."""
 
 # Standard Library
+import os
 import dataclasses
+import tempfile
 
 # local repo modules
 import moviemanager.core.constants
@@ -154,7 +156,7 @@ def test_expand_template_collapses_spaces():
 def test_expand_template_with_media_tokens():
 	"""Media tokens from video file are substituted."""
 	video_mf = moviemanager.core.models.media_file.MediaFile(
-		path="/tmp/test.mkv",
+		path=os.path.join(tempfile.gettempdir(), "test.mkv"),
 		filename="test.mkv",
 		file_type=moviemanager.core.constants.MediaFileType.VIDEO,
 		video_codec="x264",

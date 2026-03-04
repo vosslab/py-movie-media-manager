@@ -102,10 +102,13 @@ class MovieAPI:
 	def shutdown(self) -> None:
 		"""Clean up resources for a clean exit.
 
-		Shuts down the IMDB browser transport so QWebEnginePage is
-		deleted before its QWebEngineProfile, preventing the segfault
-		on application exit.
+		Logs out from subtitle service first (after task pool is
+		drained), then shuts down the IMDB browser transport so
+		QWebEnginePage is deleted before its QWebEngineProfile,
+		preventing the segfault on application exit.
 		"""
+		# subtitle logout before transport teardown
+		self._subtitle_svc.shutdown()
 		if self._imdb_transport is not None:
 			self._imdb_transport.shutdown()
 			self._imdb_transport = None

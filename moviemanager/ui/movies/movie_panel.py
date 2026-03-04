@@ -261,6 +261,11 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 		)
 
 	#============================================
+	def shutdown_detail_panel(self) -> None:
+		"""Shut down the detail panel's thread pool."""
+		self._detail.shutdown()
+
+	#============================================
 	def set_sorting_enabled(self, enabled: bool) -> None:
 		"""Enable or disable interactive table sorting.
 

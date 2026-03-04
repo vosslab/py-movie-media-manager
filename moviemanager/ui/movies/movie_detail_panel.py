@@ -171,6 +171,13 @@ class MovieDetailPanel(PySide6.QtWidgets.QTabWidget):
 		layout.addWidget(self._media_view)
 
 	#============================================
+	def shutdown(self) -> None:
+		"""Cancel image workers and wait for the pool to drain."""
+		self._cancel_image_workers()
+		self._pool.clear()
+		self._pool.waitForDone(1000)
+
+	#============================================
 	def set_movie(self, movie) -> None:
 		"""Display details for the given movie."""
 		if movie is None:

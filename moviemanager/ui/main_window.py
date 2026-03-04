@@ -22,6 +22,8 @@ import moviemanager.ui.dialogs.settings_dialog
 import moviemanager.ui.dialogs.jobs_dialog
 import moviemanager.ui.menu_builder
 import moviemanager.ui.movies.movie_panel
+import moviemanager.ui.task_dispatcher
+import moviemanager.ui.toolbar_builder
 import moviemanager.ui.theme
 import moviemanager.ui.widgets.status_bar
 
@@ -67,13 +69,16 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._status = moviemanager.ui.widgets.status_bar.StatusBar()
 		self._status.cancel_requested.connect(self._cancel_operation)
 		self._status.jobs_clicked.connect(self._show_jobs_dialog)
+		# pause/resume wiring
+		self._status.pause_toggled.connect(
+			self._on_pause_toggled
+		)
+		self._task_api.paused_changed.connect(
+			self._status.set_paused
+		)
 		self._task_api.job_list_changed.connect(
 			self._update_jobs_count
 		)
-		# central task dispatcher for all TaskAPI signals
-		self._task_api.task_finished.connect(self._on_task_finished)
-		self._task_api.task_error.connect(self._on_task_error)
-		self._task_api.task_progress.connect(self._on_task_progress)
 		self.setStatusBar(self._status)
 		# create controllers
 		self._scan_ctrl = (
@@ -94,6 +99,23 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 				self._api, self._task_api,
 				self._settings, self,
 			)
+		)
+		# central task dispatcher for all TaskAPI signals
+		self._dispatcher = (
+			moviemanager.ui.task_dispatcher.TaskDispatcher(
+				self._scan_ctrl, self._match_ctrl,
+				self._rename_ctrl, self._download_ctrl,
+				self._status, parent=self,
+			)
+		)
+		self._task_api.task_finished.connect(
+			self._dispatcher.on_task_finished
+		)
+		self._task_api.task_error.connect(
+			self._dispatcher.on_task_error
+		)
+		self._task_api.task_progress.connect(
+			self._dispatcher.on_task_progress
 		)
 		# wire controller signals
 		self._wire_scan_signals()
@@ -173,207 +195,12 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 
 	#============================================
 	def _setup_toolbar(self):
-		"""Create toolbar with labeled icons in 3-step workflow order.
-
-		Layout: Open | sep | 1. Match | 2. Organize | 3. Download
-		| spacer | Settings | Quit
-		"""
-		toolbar = self.addToolBar("Main")
-		toolbar.setObjectName("MainToolBar")
-		toolbar.setMovable(False)
-		toolbar.setToolButtonStyle(
-			PySide6.QtCore.Qt.ToolButtonStyle
-			.ToolButtonTextUnderIcon
-		)
-		toolbar.setIconSize(PySide6.QtCore.QSize(32, 32))
-		# open button
-		open_btn = PySide6.QtGui.QAction("Open", self)
-		open_icon = PySide6.QtGui.QIcon.fromTheme(
-			"folder-open",
-			self.style().standardIcon(
-				PySide6.QtWidgets.QStyle
-				.StandardPixmap.SP_DirOpenIcon
-			),
-		)
-		open_btn.setIcon(open_icon)
-		open_btn.setToolTip("Open a movie directory (Ctrl+O)")
-		open_btn.triggered.connect(self._open_directory)
-		toolbar.addAction(open_btn)
-		toolbar.addSeparator()
-		# step 1: match button
-		self._match_btn = PySide6.QtGui.QAction(
-			"1. Match", self
-		)
-		match_icon = PySide6.QtGui.QIcon.fromTheme(
-			"edit-find",
-			self.style().standardIcon(
-				PySide6.QtWidgets.QStyle.StandardPixmap
-				.SP_FileDialogContentsView
-			),
-		)
-		self._match_btn.setIcon(match_icon)
-		self._match_btn.setToolTip(
-			"Match movies to IMDB/TMDB (Ctrl+Shift+S)"
-		)
-		self._match_btn.triggered.connect(self._scrape_selected)
-		toolbar.addAction(self._match_btn)
-		# step 2: organize button
-		self._organize_btn = PySide6.QtGui.QAction(
-			"2. Organize", self
-		)
-		organize_icon = PySide6.QtGui.QIcon.fromTheme(
-			"folder-new",
-			self.style().standardIcon(
-				PySide6.QtWidgets.QStyle.StandardPixmap
-				.SP_FileDialogNewFolder
-			),
-		)
-		self._organize_btn.setIcon(organize_icon)
-		self._organize_btn.setToolTip(
-			"Organize movies into folders (F2)"
-		)
-		self._organize_btn.triggered.connect(
-			self._rename_selected
-		)
-		toolbar.addAction(self._organize_btn)
-		# step 3: download button
-		self._download_btn = PySide6.QtGui.QAction(
-			"3. Download", self
-		)
-		download_icon = PySide6.QtGui.QIcon.fromTheme(
-			"go-down",
-			self.style().standardIcon(
-				PySide6.QtWidgets.QStyle
-				.StandardPixmap.SP_ArrowDown
-			),
-		)
-		self._download_btn.setIcon(download_icon)
-		self._download_btn.setToolTip(
-			"Download artwork, trailers, and subtitles"
-		)
-		self._download_btn.triggered.connect(
-			self._download_content
-		)
-		toolbar.addAction(self._download_btn)
-		toolbar.addSeparator()
-		# flexible spacer
-		spacer = PySide6.QtWidgets.QWidget()
-		spacer.setSizePolicy(
-			PySide6.QtWidgets.QSizePolicy.Policy.Expanding,
-			PySide6.QtWidgets.QSizePolicy.Policy.Preferred,
-		)
-		toolbar.addWidget(spacer)
-		toolbar.addSeparator()
-		# refresh metadata button
-		refresh_meta_btn = PySide6.QtGui.QAction(
-			"Refresh Metadata", self
-		)
-		refresh_meta_icon = PySide6.QtGui.QIcon.fromTheme(
-			"view-refresh",
-			self.style().standardIcon(
-				PySide6.QtWidgets.QStyle
-				.StandardPixmap.SP_BrowserReload
-			),
-		)
-		refresh_meta_btn.setIcon(refresh_meta_icon)
-		refresh_meta_btn.setToolTip(
-			"Re-fetch metadata for matched movies"
-			" from IMDB/TMDB"
-		)
-		refresh_meta_btn.triggered.connect(
-			self._refresh_metadata
-		)
-		toolbar.addAction(refresh_meta_btn)
-		# parental guide button
-		pg_btn = PySide6.QtGui.QAction(
-			"Parental Guide", self
-		)
-		pg_icon = PySide6.QtGui.QIcon.fromTheme(
-			"security-medium",
-			self.style().standardIcon(
-				PySide6.QtWidgets.QStyle
-				.StandardPixmap.SP_MessageBoxWarning
-			),
-		)
-		pg_btn.setIcon(pg_icon)
-		pg_btn.setToolTip(
-			"Fetch parental guide data from IMDB"
-			" for matched movies"
-		)
-		pg_btn.triggered.connect(self._fetch_parental_guides)
-		toolbar.addAction(pg_btn)
-		# refresh file stats button
-		refresh_stats_btn = PySide6.QtGui.QAction(
-			"Refresh Stats", self
-		)
-		refresh_stats_icon = PySide6.QtGui.QIcon.fromTheme(
-			"document-properties",
-			self.style().standardIcon(
-				PySide6.QtWidgets.QStyle
-				.StandardPixmap.SP_FileIcon
-			),
-		)
-		refresh_stats_btn.setIcon(refresh_stats_icon)
-		refresh_stats_btn.setToolTip(
-			"Re-probe video files for codec,"
-			" resolution, and duration"
-		)
-		refresh_stats_btn.triggered.connect(
-			self._refresh_file_stats
-		)
-		toolbar.addAction(refresh_stats_btn)
-		toolbar.addSeparator()
-		# settings button
-		settings_btn = PySide6.QtGui.QAction("Settings", self)
-		settings_icon = PySide6.QtGui.QIcon.fromTheme(
-			"preferences-system",
-			self.style().standardIcon(
-				PySide6.QtWidgets.QStyle
-				.StandardPixmap.SP_ComputerIcon
-			),
-		)
-		settings_btn.setIcon(settings_icon)
-		settings_btn.setToolTip("Open settings (Ctrl+,)")
-		settings_btn.triggered.connect(self._show_settings)
-		toolbar.addAction(settings_btn)
-		# dark mode toggle
-		self._dark_toggle = PySide6.QtGui.QAction(
-			"Dark Mode", self
-		)
-		self._dark_toggle.setCheckable(True)
-		is_dark = (
-			hasattr(self, "_settings")
-			and self._settings.theme == "dark"
-		)
-		self._dark_toggle.setChecked(is_dark)
-		dark_icon = PySide6.QtGui.QIcon.fromTheme(
-			"weather-clear-night",
-			self.style().standardIcon(
-				PySide6.QtWidgets.QStyle
-				.StandardPixmap.SP_DesktopIcon
-			),
-		)
-		self._dark_toggle.setIcon(dark_icon)
-		self._dark_toggle.setToolTip(
-			"Toggle dark/light theme"
-		)
-		self._dark_toggle.triggered.connect(
-			self._toggle_dark_mode
-		)
-		toolbar.addAction(self._dark_toggle)
-		# quit button
-		quit_btn = PySide6.QtGui.QAction("Quit", self)
-		quit_icon = PySide6.QtGui.QIcon.fromTheme(
-			"application-exit",
-			self.style().standardIcon(
-				PySide6.QtWidgets.QStyle
-				.StandardPixmap.SP_DialogCloseButton
-			),
-		)
-		quit_btn.setIcon(quit_icon)
-		quit_btn.setToolTip("Quit application (Ctrl+Q)")
-		quit_btn.triggered.connect(self.close)
-		toolbar.addAction(quit_btn)
+		"""Create toolbar with labeled icons via toolbar_builder."""
+		refs = moviemanager.ui.toolbar_builder.build_toolbar(self)
+		self._match_btn = refs["match_btn"]
+		self._organize_btn = refs["organize_btn"]
+		self._download_btn = refs["download_btn"]
+		self._dark_toggle = refs["dark_toggle"]
 
 	#============================================
 	# -- action delegates to controllers --
@@ -572,97 +399,22 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._status.showMessage("Operation cancelled", 3000)
 
 	#============================================
-	# -- task dispatcher --
-	#============================================
+	def _on_pause_toggled(self, paused: bool) -> None:
+		"""Handle pause/resume toggle from the status bar.
 
-	#============================================
-	def _on_task_finished(
-		self, task_id: int, result,
-	) -> None:
-		"""Route task completion to the appropriate handler."""
-		scan_ctrl = self._scan_ctrl
-		match_ctrl = self._match_ctrl
-		rename_ctrl = self._rename_ctrl
-		dl_ctrl = self._download_ctrl
-		if task_id == scan_ctrl.scan_task_id:
-			scan_ctrl.on_scan_done(result)
-		elif task_id == match_ctrl.scrape_task_id:
-			match_ctrl.on_batch_scrape_done(result, self)
-		elif task_id == match_ctrl.refresh_task_id:
-			match_ctrl.on_refresh_metadata_done(result, self)
-		elif task_id == match_ctrl.pg_task_id:
-			match_ctrl.on_fetch_parental_guides_done(
-				result, self
-			)
-		elif task_id == scan_ctrl.probe_task_id:
-			scan_ctrl.on_probe_task_finished(task_id, result)
-		elif task_id in dl_ctrl.download_task_ids:
-			dl_ctrl.on_download_job_done(task_id, result)
-		elif task_id == scan_ctrl.badge_task_id:
-			scan_ctrl.on_badge_task_finished(task_id, result)
-		elif task_id == rename_ctrl.rename_task_id:
-			mode = rename_ctrl.rename_mode
-			if mode == "single_preview":
-				rename_ctrl.on_rename_preview_done(
-					result, self
-				)
-			elif mode == "single_exec":
-				rename_ctrl.on_rename_exec_done(result)
-			elif mode == "batch_preview":
-				rename_ctrl.on_batch_rename_preview_done(
-					result, self
-				)
-			elif mode == "batch_exec":
-				rename_ctrl.on_batch_rename_exec_done(
-					result, self
-				)
-
-	#============================================
-	def _on_task_error(
-		self, task_id: int, error_text: str,
-	) -> None:
-		"""Route task errors to the appropriate handler."""
-		scan_ctrl = self._scan_ctrl
-		match_ctrl = self._match_ctrl
-		rename_ctrl = self._rename_ctrl
-		if task_id in (
-			scan_ctrl.scan_task_id,
-			match_ctrl.scrape_task_id,
-			match_ctrl.refresh_task_id,
-			match_ctrl.pg_task_id,
-		):
-			scan_ctrl.on_scan_error(error_text)
-		elif task_id == scan_ctrl.probe_task_id:
-			scan_ctrl.on_probe_task_error(
-				task_id, error_text
-			)
-		elif task_id == rename_ctrl.rename_task_id:
-			mode = rename_ctrl.rename_mode
-			if mode in ("single_preview", "batch_preview"):
-				rename_ctrl.on_rename_preview_error(
-					error_text
-				)
-			else:
-				rename_ctrl.on_rename_exec_error(error_text)
-
-	#============================================
-	def _on_task_progress(
-		self, task_id: int, cur: int, tot: int, msg: str,
-	) -> None:
-		"""Route task progress to the appropriate handler."""
-		scan_ctrl = self._scan_ctrl
-		match_ctrl = self._match_ctrl
-		if task_id in (
-			scan_ctrl.scan_task_id,
-			match_ctrl.scrape_task_id,
-			match_ctrl.refresh_task_id,
-			match_ctrl.pg_task_id,
-		):
-			self._status.show_progress(cur, tot, msg)
-		elif task_id == scan_ctrl.probe_task_id:
-			scan_ctrl.on_probe_task_progress(
-				task_id, cur, tot, msg
-			)
+		Args:
+			paused: True to pause, False to resume.
+		"""
+		if paused:
+			self._task_api.pause()
+			self._status.showMessage("Job queue paused", 3000)
+		else:
+			self._task_api.resume()
+			pending = self._task_api.pending_count
+			msg = "Job queue resumed"
+			if pending > 0:
+				msg += f" ({pending} pending jobs started)"
+			self._status.showMessage(msg, 3000)
 
 	#============================================
 	# -- UI update slots (connected to controller signals) --
@@ -1037,7 +789,9 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		settings.setValue("geometry", self.saveGeometry())
 		settings.setValue("windowState", self.saveState())
 		self._movie_panel.save_table_state(settings)
+		# shutdown order: drain task pool, then image pool, then API
 		self._task_api.shutdown()
+		self._movie_panel.shutdown_detail_panel()
 		self._api.shutdown()
 		super().closeEvent(event)
 
