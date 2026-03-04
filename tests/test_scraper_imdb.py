@@ -17,6 +17,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # local repo modules
+import moviemanager.scraper.imdb_parental_guide_scraper
 import moviemanager.scraper.imdb_scraper
 import moviemanager.scraper.types
 
@@ -633,7 +634,7 @@ def test_extract_studio_empty():
 def test_parse_parental_guide_html():
 	"""Parental guide categories are extracted from HTML page."""
 	html = _make_title_html(SAMPLE_NEXT_DATA_PARENTAL_GUIDE)
-	result = moviemanager.scraper.imdb_scraper._parse_parental_guide_html(html)
+	result = moviemanager.scraper.imdb_parental_guide_scraper._parse_parental_guide_html(html)
 	assert "Sex & Nudity" in result
 	assert result["Sex & Nudity"] == "Moderate"
 	assert "Profanity" in result
@@ -645,7 +646,7 @@ def test_parse_parental_guide_html():
 def test_parse_parental_guide_html_empty():
 	"""Empty HTML returns empty parental guide."""
 	html = "<html><body>No data</body></html>"
-	result = moviemanager.scraper.imdb_scraper._parse_parental_guide_html(html)
+	result = moviemanager.scraper.imdb_parental_guide_scraper._parse_parental_guide_html(html)
 	assert result == {}
 
 
@@ -655,7 +656,7 @@ def test_parse_parental_guide_fallback_above_fold():
 	# use the title page format which has guide in aboveTheFoldData
 	html = _make_title_html(SAMPLE_NEXT_DATA_TITLE)
 	# the parental guide parser should find data in fallback path
-	result = moviemanager.scraper.imdb_scraper._parse_parental_guide_html(html)
+	result = moviemanager.scraper.imdb_parental_guide_scraper._parse_parental_guide_html(html)
 	# should find data from the aboveTheFoldData fallback
 	assert len(result) == 5
 	assert result["Profanity"] == "Severe"
@@ -664,13 +665,13 @@ def test_parse_parental_guide_fallback_above_fold():
 #============================================
 def test_advisory_id_to_name():
 	"""Advisory IDs map to display names correctly."""
-	assert moviemanager.scraper.imdb_scraper._advisory_id_to_name(
+	assert moviemanager.scraper.imdb_parental_guide_scraper._advisory_id_to_name(
 		"advisory-nudity"
 	) == "Sex & Nudity"
-	assert moviemanager.scraper.imdb_scraper._advisory_id_to_name(
+	assert moviemanager.scraper.imdb_parental_guide_scraper._advisory_id_to_name(
 		"advisory-violence"
 	) == "Violence & Gore"
-	assert moviemanager.scraper.imdb_scraper._advisory_id_to_name(
+	assert moviemanager.scraper.imdb_parental_guide_scraper._advisory_id_to_name(
 		"unknown-id"
 	) == ""
 
@@ -771,9 +772,9 @@ def test_get_parental_guide_graphql_success():
 		"Alcohol, Drugs & Smoking": "Moderate",
 		"Frightening & Intense Scenes": "Mild",
 	}
-	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
+	scraper = moviemanager.scraper.imdb_parental_guide_scraper.ImdbParentalGuideScraper()
 	with unittest.mock.patch(
-		"moviemanager.scraper.imdb_scraper._fetch_parental_guide_graphql",
+		"moviemanager.scraper.imdb_parental_guide_scraper._fetch_parental_guide_graphql",
 		return_value=graphql_result,
 	):
 		guide = scraper.get_parental_guide("tt0109445")
@@ -785,10 +786,10 @@ def test_get_parental_guide_graphql_success():
 #============================================
 def test_get_parental_guide_graphql_no_data():
 	"""get_parental_guide returns empty dict when movie has no guide data."""
-	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
+	scraper = moviemanager.scraper.imdb_parental_guide_scraper.ImdbParentalGuideScraper()
 	# GraphQL returns empty dict for movies without parental guide data
 	with unittest.mock.patch(
-		"moviemanager.scraper.imdb_scraper._fetch_parental_guide_graphql",
+		"moviemanager.scraper.imdb_parental_guide_scraper._fetch_parental_guide_graphql",
 		return_value={},
 	):
 		guide = scraper.get_parental_guide("tt0119937")
@@ -801,11 +802,11 @@ def test_get_parental_guide_graphql_failure_fallback():
 	html = _make_title_html(SAMPLE_NEXT_DATA_PARENTAL_GUIDE)
 	mock_transport = unittest.mock.Mock()
 	mock_transport.fetch_html.return_value = html
-	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
+	scraper = moviemanager.scraper.imdb_parental_guide_scraper.ImdbParentalGuideScraper()
 	scraper.set_transport(mock_transport)
 	# GraphQL raises ConnectionError so browser transport is used
 	with unittest.mock.patch(
-		"moviemanager.scraper.imdb_scraper._fetch_parental_guide_graphql",
+		"moviemanager.scraper.imdb_parental_guide_scraper._fetch_parental_guide_graphql",
 		side_effect=ConnectionError("HTTP 503"),
 	):
 		guide = scraper.get_parental_guide("tt0109445")
@@ -820,7 +821,7 @@ def test_get_parental_guide_graphql_failure_fallback():
 #============================================
 def test_get_parental_guide_empty_id():
 	"""get_parental_guide returns empty dict when no imdb_id is given."""
-	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
+	scraper = moviemanager.scraper.imdb_parental_guide_scraper.ImdbParentalGuideScraper()
 	guide = scraper.get_parental_guide("")
 	assert guide == {}
 
@@ -828,10 +829,10 @@ def test_get_parental_guide_empty_id():
 #============================================
 def test_get_parental_guide_no_transport():
 	"""get_parental_guide returns empty dict when GraphQL fails and no transport set."""
-	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
+	scraper = moviemanager.scraper.imdb_parental_guide_scraper.ImdbParentalGuideScraper()
 	# GraphQL raises ConnectionError and no transport is configured
 	with unittest.mock.patch(
-		"moviemanager.scraper.imdb_scraper._fetch_parental_guide_graphql",
+		"moviemanager.scraper.imdb_parental_guide_scraper._fetch_parental_guide_graphql",
 		side_effect=ConnectionError("HTTP 503"),
 	):
 		guide = scraper.get_parental_guide("tt0109445")

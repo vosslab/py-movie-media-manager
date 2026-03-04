@@ -1,4 +1,4 @@
-"""Directory scanner for discovering movie files and metadata."""
+"""Directory scanner service for discovering movie files and metadata."""
 
 # Standard Library
 import os
@@ -6,6 +6,8 @@ import time
 
 # local repo modules
 import moviemanager.core.constants
+import moviemanager.core.file.collector
+import moviemanager.core.file.walker
 import moviemanager.core.models.media_file
 import moviemanager.core.models.movie
 import moviemanager.core.nfo.reader
@@ -16,9 +18,7 @@ import moviemanager.core.utils
 def detect_artwork_files(dir_path: str, filenames: list = None) -> dict:
 	"""Scan a directory for artwork files matching known artwork filenames.
 
-	Checks for each artwork type defined in ARTWORK_FILENAMES and returns
-	a mapping of artwork type to the first matching file path found.
-	When filenames is provided, uses set membership instead of stat calls.
+	Delegates to moviemanager.core.file.collector.collect_artwork_files().
 
 	Args:
 		dir_path: Path to the directory to scan for artwork.
@@ -27,24 +27,9 @@ def detect_artwork_files(dir_path: str, filenames: list = None) -> dict:
 	Returns:
 		Dict mapping artwork type string to the full file path found.
 	"""
-	# build a lowercase set for fast membership checks
-	if filenames is not None:
-		filename_set = set(f.lower() for f in filenames)
-	else:
-		filename_set = None
-	artwork = {}
-	for art_type, art_names in moviemanager.core.constants.ARTWORK_FILENAMES.items():
-		for fname in art_names:
-			if filename_set is not None:
-				# check set membership instead of stat() call
-				if fname.lower() in filename_set:
-					artwork[art_type] = os.path.join(dir_path, fname)
-					break
-			else:
-				full_path = os.path.join(dir_path, fname)
-				if os.path.isfile(full_path):
-					artwork[art_type] = full_path
-					break
+	artwork = moviemanager.core.file.collector.collect_artwork_files(
+		dir_path, filenames=filenames,
+	)
 	return artwork
 
 
@@ -71,36 +56,15 @@ def scan_directory(
 	nfo_total_ms = 0.0
 	scan_start = time.monotonic()
 
-	for dirpath, dirnames, filenames in os.walk(root_path):
+	for dir_entry in moviemanager.core.file.walker.walk_movie_directories(
+		root_path, progress_callback=progress_callback,
+	):
 		dirs_processed += 1
-		if progress_callback:
-			# report progress with directory count
-			rel_path = os.path.relpath(dirpath, root_path)
-			progress_callback(
-				dirs_processed,
-				f"Scanning: {rel_path}"
-			)
-		# skip hidden directories and directories in SKIP_DIRS
-		# modify dirnames in-place to prevent os.walk from descending
-		dirnames[:] = [
-			d for d in dirnames
-			if not d.startswith(".")
-			and d not in moviemanager.core.constants.SKIP_DIRS
-		]
+		dirpath = dir_entry.path
+		filenames = dir_entry.filenames
+		video_files = dir_entry.video_files
+		nfo_files_in_dir = dir_entry.nfo_files
 
-		# find video files in this directory, skipping trailer files
-		# the app saves trailers as "trailer.mp4", so match that exact stem
-		video_files = [
-			f for f in filenames
-			if moviemanager.core.utils.is_video_file(f)
-			and os.path.splitext(f)[0].lower() != "trailer"
-		]
-		if not video_files:
-			continue
-
-		# determine if this is a multi-movie directory
-		# multi-movie: multiple video files without per-video NFO files
-		nfo_files_in_dir = [f for f in filenames if f.lower().endswith(".nfo")]
 		# build a set of NFO basenames for matching
 		nfo_basenames = set()
 		for nfo_f in nfo_files_in_dir:
@@ -118,7 +82,9 @@ def scan_directory(
 		is_multi = len(video_files) > 1
 
 		# detect artwork files using os.walk filenames to avoid stat calls
-		artwork = detect_artwork_files(dirpath, filenames=filenames)
+		artwork = moviemanager.core.file.collector.collect_artwork_files(
+			dirpath, filenames=filenames,
+		)
 
 		# build lowercase set once per directory for poster/trailer cache
 		filename_lower_set = set(f.lower() for f in filenames)

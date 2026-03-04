@@ -1,7 +1,6 @@
 """Utility functions for filename parsing and validation."""
 
 # Standard Library
-import os
 import re
 import datetime
 
@@ -10,6 +9,7 @@ import unidecode
 
 # local repo modules
 import moviemanager.core.constants
+import moviemanager.core.file.classifier
 
 # cached lowercase stopwords set for fast lookup
 STOPWORDS_LOWER = frozenset(
@@ -21,15 +21,15 @@ STOPWORDS_LOWER = frozenset(
 def is_video_file(path: str) -> bool:
 	"""Check if a file path has a recognized video extension.
 
+	Delegates to moviemanager.core.file.classifier.is_video_file().
+
 	Args:
 		path: file path or filename to check.
 
 	Returns:
 		True if the extension is a known video format.
 	"""
-	# extract the file extension and compare lowercase
-	_, ext = os.path.splitext(path)
-	result = ext.lower() in moviemanager.core.constants.VIDEO_EXTENSIONS
+	result = moviemanager.core.file.classifier.is_video_file(path)
 	return result
 
 

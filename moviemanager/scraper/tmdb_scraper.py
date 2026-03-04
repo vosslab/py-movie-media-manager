@@ -51,6 +51,16 @@ class TmdbScraper(
 	tmdbv3api library for API access.
 	"""
 
+	# capabilities advertised by this scraper
+	capabilities = {
+		moviemanager.scraper.interfaces.ProviderCapability.SEARCH,
+		moviemanager.scraper.interfaces.ProviderCapability.METADATA,
+		moviemanager.scraper.interfaces.ProviderCapability.ARTWORK,
+	}
+
+	# settings keys required to instantiate this scraper
+	requires_keys = ["tmdb_api_key"]
+
 	#============================================
 	def __init__(self, api_key: str, language: str = "en"):
 		"""Initialize the TMDB scraper with an API key.
@@ -138,6 +148,15 @@ class TmdbScraper(
 		Returns:
 			MediaMetadata: Complete movie metadata.
 		"""
+		# resolve tmdb_id from imdb_id when tmdb_id is missing
+		if not tmdb_id and imdb_id:
+			tmdb_id, _ = self.find_by_imdb_id(imdb_id)
+		if not tmdb_id:
+			# cannot fetch details without a valid tmdb_id
+			empty = moviemanager.scraper.types.MediaMetadata(
+				imdb_id=imdb_id,
+			)
+			return empty
 		# rate-limit courtesy pause
 		time.sleep(random.random())
 		detail = self._tmdb_movie.details(

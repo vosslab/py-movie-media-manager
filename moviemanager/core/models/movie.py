@@ -6,6 +6,7 @@ import dataclasses
 
 # local repo modules
 import moviemanager.core.constants
+import moviemanager.core.file.classifier
 import moviemanager.core.models.media_file
 import moviemanager.core.models.movie_set
 
@@ -188,11 +189,9 @@ class Movie:
 		"""
 		if not self.path or not os.path.isdir(self.path):
 			return False
-		subtitle_exts = moviemanager.core.constants.SUBTITLE_EXTENSIONS
 		for entry in os.listdir(self.path):
 			# check file extension against known subtitle extensions
-			ext = os.path.splitext(entry)[1].lower()
-			if ext in subtitle_exts:
+			if moviemanager.core.file.classifier.is_subtitle_file(entry):
 				return True
 		return False
 
@@ -212,12 +211,9 @@ class Movie:
 			return self._has_trailer_cache
 		if not self.path or not os.path.isdir(self.path):
 			return False
-		video_exts = moviemanager.core.constants.VIDEO_EXTENSIONS
 		for entry in os.listdir(self.path):
-			name_lower = entry.lower()
-			ext = os.path.splitext(entry)[1].lower()
 			# match files with 'trailer' in the name and a video extension
-			if "trailer" in name_lower and ext in video_exts:
+			if moviemanager.core.file.classifier.is_trailer_file(entry):
 				return True
 		return False
 
@@ -266,13 +262,13 @@ class Movie:
 			return False
 		if not self.title:
 			return False
-		# lazy import to avoid circular dependency (renamer imports movie)
-		import moviemanager.core.movie.renamer
+		# lazy import to avoid circular dependency (template_engine imports movie)
+		import moviemanager.core.movie.template_engine
 		if settings is None:
 			import moviemanager.core.settings
 			settings = moviemanager.core.settings.load_settings()
 		# expand the template to get the expected folder name
-		expected = moviemanager.core.movie.renamer.expand_template(
+		expected = moviemanager.core.movie.template_engine.expand_template(
 			settings.path_template, self,
 			spaces_to_underscores=settings.spaces_to_underscores,
 		)

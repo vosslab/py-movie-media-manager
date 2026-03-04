@@ -169,7 +169,7 @@ class TestScrapeMovies:
 		movies = api.scan_directory(root)
 		# find the Dark Knight movie
 		dk = [m for m in movies if "Dark Knight" in m.title][0]
-		# mock the scraper methods
+		# mock the scraper methods and transport creation
 		with unittest.mock.patch.object(
 			moviemanager.scraper.imdb_scraper.ImdbScraper,
 			"search", side_effect=_mock_search,
@@ -178,6 +178,9 @@ class TestScrapeMovies:
 			"get_metadata", side_effect=_mock_get_metadata,
 		), unittest.mock.patch(
 			"moviemanager.scraper.imdb_scraper.time.sleep",
+		), unittest.mock.patch.object(
+			moviemanager.api.movie_api.MovieAPI,
+			"_ensure_imdb_transport",
 		):
 			api.scrape_movie(dk, imdb_id="tt0468569")
 		# verify metadata was applied
@@ -199,7 +202,7 @@ class TestScrapeMovies:
 		movies = api.scan_directory(root)
 		# find the Godfather movie
 		gf = [m for m in movies if "Godfather" in m.title][0]
-		# mock the scraper methods
+		# mock the scraper methods and transport creation
 		with unittest.mock.patch.object(
 			moviemanager.scraper.imdb_scraper.ImdbScraper,
 			"search", side_effect=_mock_search,
@@ -208,6 +211,9 @@ class TestScrapeMovies:
 			"get_metadata", side_effect=_mock_get_metadata,
 		), unittest.mock.patch(
 			"moviemanager.scraper.imdb_scraper.time.sleep",
+		), unittest.mock.patch.object(
+			moviemanager.api.movie_api.MovieAPI,
+			"_ensure_imdb_transport",
 		):
 			api.scrape_movie(gf, imdb_id="tt0068646")
 		# verify metadata
@@ -240,6 +246,9 @@ class TestRenameAfterScrape:
 			"get_metadata", side_effect=_mock_get_metadata,
 		), unittest.mock.patch(
 			"moviemanager.scraper.imdb_scraper.time.sleep",
+		), unittest.mock.patch.object(
+			moviemanager.api.movie_api.MovieAPI,
+			"_ensure_imdb_transport",
 		):
 			for m in movies:
 				imdb_id = "tt0468569" if "Dark Knight" in m.title else "tt0068646"
@@ -282,6 +291,9 @@ class TestFullPipeline:
 			"get_metadata", side_effect=_mock_get_metadata,
 		), unittest.mock.patch(
 			"moviemanager.scraper.imdb_scraper.time.sleep",
+		), unittest.mock.patch.object(
+			moviemanager.api.movie_api.MovieAPI,
+			"_ensure_imdb_transport",
 		):
 			for m in movies:
 				imdb_id = "tt0468569" if "Dark Knight" in m.title else "tt0068646"

@@ -8,6 +8,9 @@ import logging
 # PIP3 modules
 import requests
 
+# local repo modules
+import moviemanager.scraper.interfaces
+
 
 # OpenSubtitles REST API base URL
 _API_BASE = "https://api.opensubtitles.com/api/v1"
@@ -17,8 +20,18 @@ _log = logging.getLogger(__name__)
 
 
 #============================================
-class SubtitleScraper:
+class SubtitleScraper(
+	moviemanager.scraper.interfaces.SubtitleProvider,
+):
 	"""Client for searching and downloading subtitles via OpenSubtitles API."""
+
+	# capabilities advertised by this scraper
+	capabilities = {
+		moviemanager.scraper.interfaces.ProviderCapability.SUBTITLES,
+	}
+
+	# settings keys required to instantiate this scraper
+	requires_keys = ["opensubtitles_api_key"]
 
 	#============================================
 	def __init__(self, api_key: str):
@@ -29,6 +42,7 @@ class SubtitleScraper:
 		"""
 		self._api_key = api_key
 		self._headers = {
+			"Accept": "*/*",
 			"Api-Key": api_key,
 			"Content-Type": "application/json",
 			"User-Agent": "MovieMediaManager v1.0",
@@ -138,6 +152,44 @@ class SubtitleScraper:
 		return results
 
 	#============================================
+	def search_subtitles(
+		self, imdb_id: str, languages: list,
+	) -> list:
+		"""Search for subtitles by IMDB ID (SubtitleProvider ABC).
+
+		Wraps search() converting the languages list to a
+		comma-separated string.
+
+		Args:
+			imdb_id: IMDB identifier string (tt format).
+			languages: List of language codes.
+
+		Returns:
+			list: List of subtitle result dicts.
+		"""
+		lang_str = ",".join(languages) if languages else "en"
+		results = self.search(imdb_id=imdb_id, languages=lang_str)
+		return results
+
+	#============================================
+	def download_subtitle(
+		self, file_id: int, output_path: str,
+	) -> str:
+		"""Download a subtitle file by file ID (SubtitleProvider ABC).
+
+		Wraps download() to match the ABC signature.
+
+		Args:
+			file_id: Subtitle file ID from search results.
+			output_path: Destination file path.
+
+		Returns:
+			str: Path to the downloaded subtitle file.
+		"""
+		result = self.download(file_id, output_path)
+		return result
+
+	#============================================
 	def download(self, file_id: int, output_path: str) -> str:
 		"""Download a subtitle file by file ID.
 
@@ -163,7 +215,12 @@ class SubtitleScraper:
 			json={"file_id": file_id},
 			timeout=30,
 		)
-		response.raise_for_status()
+		if response.status_code != 200:
+			_log.warning(
+				"OpenSubtitles download request failed: %s %s",
+				response.status_code, response.text[:300],
+			)
+			response.raise_for_status()
 		download_data = response.json()
 		download_link = download_data.get("link", "")
 		if not download_link:

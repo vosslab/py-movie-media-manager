@@ -35,6 +35,14 @@ class FanartScraper(moviemanager.scraper.interfaces.ArtworkProvider):
 	via direct HTTP requests.
 	"""
 
+	# capabilities advertised by this scraper
+	capabilities = {
+		moviemanager.scraper.interfaces.ProviderCapability.ARTWORK,
+	}
+
+	# settings keys required to instantiate this scraper
+	requires_keys = ["fanart_api_key"]
+
 	#============================================
 	def __init__(self, api_key: str):
 		"""Initialize the Fanart.tv scraper with an API key.

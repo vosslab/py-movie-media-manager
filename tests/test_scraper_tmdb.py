@@ -257,6 +257,54 @@ def test_sleep_between_calls(mock_movie_cls, mock_tmdb_cls):
 @unittest.mock.patch("tmdbv3api.TMDb")
 @unittest.mock.patch("tmdbv3api.Movie")
 @unittest.mock.patch("tmdbv3api.Find")
+def test_get_metadata_resolves_tmdb_id_from_imdb_id(
+	mock_find_cls, mock_movie_cls, mock_tmdb_cls,
+):
+	"""Verify get_metadata resolves tmdb_id via find_by_imdb_id when missing."""
+	# set up find_by_imdb_id to return a tmdb_id
+	fake_match = types.SimpleNamespace(id=155, poster_path="/dk.jpg")
+	fake_find_result = types.SimpleNamespace(movie_results=[fake_match])
+	mock_find_instance = mock_find_cls.return_value
+	mock_find_instance.find_by_imdb_id.return_value = fake_find_result
+	# set up details to return metadata
+	fake_detail = _make_detail_result()
+	mock_movie_instance = mock_movie_cls.return_value
+	mock_movie_instance.details.return_value = fake_detail
+	scraper = moviemanager.scraper.tmdb_scraper.TmdbScraper(api_key="fake")
+	scraper._tmdb_movie = mock_movie_instance
+	scraper._tmdb_find = mock_find_instance
+	with unittest.mock.patch("time.sleep"):
+		# call with tmdb_id=0 and only imdb_id
+		meta = scraper.get_metadata(tmdb_id=0, imdb_id="tt0468569")
+	# should have resolved tmdb_id via find_by_imdb_id
+	mock_find_instance.find_by_imdb_id.assert_called_once_with("tt0468569")
+	# then called details with the resolved tmdb_id
+	mock_movie_instance.details.assert_called_once_with(
+		155, append_to_response="credits,releases,videos"
+	)
+	assert meta.title == "Test Movie"
+
+
+#============================================
+@unittest.mock.patch("tmdbv3api.TMDb")
+@unittest.mock.patch("tmdbv3api.Movie")
+@unittest.mock.patch("tmdbv3api.Find")
+def test_get_metadata_returns_empty_when_no_ids(
+	mock_find_cls, mock_movie_cls, mock_tmdb_cls,
+):
+	"""Verify get_metadata returns empty metadata when no IDs provided."""
+	scraper = moviemanager.scraper.tmdb_scraper.TmdbScraper(api_key="fake")
+	with unittest.mock.patch("time.sleep"):
+		meta = scraper.get_metadata(tmdb_id=0, imdb_id="")
+	assert isinstance(meta, moviemanager.scraper.types.MediaMetadata)
+	assert meta.title == ""
+	assert meta.tmdb_id == 0
+
+
+#============================================
+@unittest.mock.patch("tmdbv3api.TMDb")
+@unittest.mock.patch("tmdbv3api.Movie")
+@unittest.mock.patch("tmdbv3api.Find")
 def test_find_by_imdb_id_returns_tmdb_id_and_poster(
 	mock_find_cls, mock_movie_cls, mock_tmdb_cls
 ):

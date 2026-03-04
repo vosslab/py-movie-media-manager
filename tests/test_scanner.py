@@ -1,7 +1,7 @@
 """Tests for the movie directory scanner."""
 
 # local repo modules
-import moviemanager.core.movie.scanner
+import moviemanager.core.movie.scan_service
 import moviemanager.core.models.movie
 import moviemanager.core.nfo.writer
 
@@ -24,7 +24,7 @@ def test_scan_single_movie(tmp_path):
 	movie_dir.mkdir()
 	_touch(str(movie_dir / "The.Matrix.1999.BluRay.mkv"))
 
-	results = moviemanager.core.movie.scanner.scan_directory(str(tmp_path))
+	results = moviemanager.core.movie.scan_service.scan_directory(str(tmp_path))
 
 	assert len(results) == 1
 	movie = results[0]
@@ -52,7 +52,7 @@ def test_scan_with_nfo(tmp_path):
 	)
 	moviemanager.core.nfo.writer.write_nfo(test_movie, nfo_path)
 
-	results = moviemanager.core.movie.scanner.scan_directory(str(tmp_path))
+	results = moviemanager.core.movie.scan_service.scan_directory(str(tmp_path))
 
 	assert len(results) == 1
 	movie = results[0]
@@ -70,7 +70,7 @@ def test_scan_multi_movie_dir(tmp_path):
 	_touch(str(movie_dir / "MovieA.2001.mkv"))
 	_touch(str(movie_dir / "MovieB.2002.mkv"))
 
-	results = moviemanager.core.movie.scanner.scan_directory(str(tmp_path))
+	results = moviemanager.core.movie.scan_service.scan_directory(str(tmp_path))
 
 	assert len(results) == 2
 	for movie in results:
@@ -84,7 +84,7 @@ def test_scan_skips_hidden_dirs(tmp_path):
 	hidden_dir.mkdir()
 	_touch(str(hidden_dir / "secret.mkv"))
 
-	results = moviemanager.core.movie.scanner.scan_directory(str(tmp_path))
+	results = moviemanager.core.movie.scan_service.scan_directory(str(tmp_path))
 
 	assert len(results) == 0
 
@@ -96,7 +96,7 @@ def test_scan_skips_recycle_bin(tmp_path):
 	recycle_dir.mkdir()
 	_touch(str(recycle_dir / "deleted.mkv"))
 
-	results = moviemanager.core.movie.scanner.scan_directory(str(tmp_path))
+	results = moviemanager.core.movie.scan_service.scan_directory(str(tmp_path))
 
 	assert len(results) == 0
 
@@ -114,7 +114,7 @@ def test_scan_nested_dirs(tmp_path):
 	nested_dir.mkdir(parents=True)
 	_touch(str(nested_dir / "Sub.Movie.2021.mkv"))
 
-	results = moviemanager.core.movie.scanner.scan_directory(str(tmp_path))
+	results = moviemanager.core.movie.scan_service.scan_directory(str(tmp_path))
 
 	assert len(results) == 2
 	titles = {m.title for m in results}
@@ -125,7 +125,7 @@ def test_scan_nested_dirs(tmp_path):
 #============================================
 def test_scan_empty_dir(tmp_path):
 	"""Empty directory returns an empty list."""
-	results = moviemanager.core.movie.scanner.scan_directory(str(tmp_path))
+	results = moviemanager.core.movie.scan_service.scan_directory(str(tmp_path))
 
 	assert results == []
 
@@ -136,7 +136,7 @@ def test_detect_artwork(tmp_path):
 	_touch(str(tmp_path / "poster.jpg"))
 	_touch(str(tmp_path / "fanart.jpg"))
 
-	artwork = moviemanager.core.movie.scanner.detect_artwork_files(
+	artwork = moviemanager.core.movie.scan_service.detect_artwork_files(
 		str(tmp_path)
 	)
 

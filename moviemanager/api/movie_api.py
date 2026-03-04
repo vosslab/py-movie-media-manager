@@ -1,47 +1,42 @@
 """Facade providing all movie operations for CLI and GUI."""
 
 # Standard Library
-import os
-import re
-import time
-import random
-import datetime
-import threading
-import subprocess
 import logging
-
-# PIP3 modules
-import requests
 
 # local repo modules
 import moviemanager.api.api_cache
+import moviemanager.api.artwork_service
 import moviemanager.api.match_confidence
+import moviemanager.api.scan_service
+import moviemanager.api.scrape_service
+import moviemanager.api.search_service
+import moviemanager.api.subtitle_service
+import moviemanager.api.trailer_service
 import moviemanager.core.movie.movie_list
-import moviemanager.core.movie.renamer
-import moviemanager.core.movie.scanner
-import moviemanager.core.nfo.writer
+import moviemanager.core.movie.rename_service
+import moviemanager.core.movie.template_engine
 import moviemanager.core.settings
-import moviemanager.api.download_errors
 import moviemanager.scraper.browser_cookies
-import moviemanager.scraper.imdb_scraper
-import moviemanager.scraper.subtitle_scraper
-import moviemanager.scraper.tmdb_scraper
+import moviemanager.scraper.interfaces
+import moviemanager.scraper.registry
 
 
 # module logger
 _LOG = logging.getLogger(__name__)
-_TMDB_POSTER_PREFETCH_LIMIT = 3
 
 
 #============================================
 class MovieAPI:
 	"""Facade providing all movie operations for CLI and GUI.
 
-	Wraps scanning, scraping, and renaming behind a single interface.
-	Maintains an in-memory MovieList for the current session.
+	Thin composition root that delegates to focused service classes.
+	Maintains scraper lifecycle and IMDB transport management.
 	"""
 
-	def __init__(self, settings: moviemanager.core.settings.Settings = None):
+	def __init__(
+		self,
+		settings: moviemanager.core.settings.Settings = None,
+	):
 		"""Initialize the MovieAPI.
 
 		Args:
@@ -50,20 +45,58 @@ class MovieAPI:
 		if settings is None:
 			settings = moviemanager.core.settings.Settings()
 		self._settings = settings
-		self._movie_list = moviemanager.core.movie.movie_list.MovieList()
+		self._movie_list = (
+			moviemanager.core.movie.movie_list.MovieList()
+		)
 		self._cache = moviemanager.api.api_cache.ApiCache()
+		self._registry = (
+			moviemanager.scraper.registry.build_default_registry()
+		)
+		# scraper lifecycle (stays in MovieAPI)
 		self._scraper = None
 		self._imdb_scraper = None
 		self._imdb_transport = None
 		self._imdb_cookies_loaded_spec = ""
-		self._tmdb_lookup_scraper = None
-		self._tmdb_lookup_spec = ""
-		self._tmdb_poster_cache = {}
-		# cached subtitle scraper with JWT token (valid 24h)
-		self._subtitle_scraper = None
-		self._subtitle_scraper_lock = threading.Lock()
-		# track failed parental guide fetches for deferred retry
-		self._failed_parental_guides = []
+		# create service instances
+		self._scan_svc = moviemanager.api.scan_service.ScanService(
+			self._movie_list,
+		)
+		self._search_svc = (
+			moviemanager.api.search_service.SearchService(
+				self._settings, self._cache,
+			)
+		)
+		self._scrape_svc = (
+			moviemanager.api.scrape_service.ScrapeService(
+				self._settings, self._cache,
+				search_service=self._search_svc,
+			)
+		)
+		# look up download providers from the registry pipeline
+		_Cap = moviemanager.scraper.interfaces.ProviderCapability
+		_pipeline = self._registry.create_pipeline(self._settings)
+		_trailer_prov = _pipeline.get_for_capability(_Cap.TRAILER)
+		_subtitle_prov = _pipeline.get_for_capability(_Cap.SUBTITLES)
+		self._trailer_svc = (
+			moviemanager.api.trailer_service.TrailerService(
+				provider=_trailer_prov,
+			)
+		)
+		self._artwork_svc = (
+			moviemanager.api.artwork_service.ArtworkService(
+				self._settings,
+			)
+		)
+		self._subtitle_svc = (
+			moviemanager.api.subtitle_service.SubtitleService(
+				self._settings,
+				provider=_subtitle_prov,
+			)
+		)
+
+	#============================================
+	# -- scraper and transport lifecycle (stays in MovieAPI) --
+	#============================================
 
 	#============================================
 	def shutdown(self) -> None:
@@ -76,48 +109,6 @@ class MovieAPI:
 		if self._imdb_transport is not None:
 			self._imdb_transport.shutdown()
 			self._imdb_transport = None
-
-	#============================================
-	def scan_directory(
-		self, root_path: str, progress_callback=None, movie_callback=None,
-	) -> list:
-		"""Scan a directory for movie files and add them to the library.
-
-		Args:
-			root_path: Root directory path to scan.
-			progress_callback: Optional callable(current, message) for progress.
-			movie_callback: Optional callable(movie) for incremental delivery.
-
-		Returns:
-			List of Movie instances discovered during the scan.
-		"""
-		movies = moviemanager.core.movie.scanner.scan_directory(
-			root_path, progress_callback=progress_callback,
-			movie_callback=movie_callback,
-		)
-		for movie in movies:
-			self._movie_list.add(movie)
-		return movies
-
-	#============================================
-	def get_movies(self) -> list:
-		"""Return all movies in the library.
-
-		Returns:
-			List of all Movie instances.
-		"""
-		result = self._movie_list.get_all()
-		return result
-
-	#============================================
-	def get_unscraped(self) -> list:
-		"""Return movies that have not been scraped.
-
-		Returns:
-			List of unscraped Movie instances.
-		"""
-		result = self._movie_list.get_unscraped()
-		return result
 
 	#============================================
 	def _ensure_imdb_transport(self) -> None:
@@ -136,7 +127,8 @@ class MovieAPI:
 		try:
 			import moviemanager.ui.imdb_browser_transport
 			self._imdb_transport = (
-				moviemanager.ui.imdb_browser_transport.ImdbBrowserTransport()
+				moviemanager.ui.imdb_browser_transport
+				.ImdbBrowserTransport()
 			)
 		except Exception as err:
 			_LOG.warning(
@@ -158,29 +150,38 @@ class MovieAPI:
 	def _ensure_scraper(self) -> None:
 		"""Create the scraper, preferring TMDB when API key exists.
 
-		Uses TMDB for search and metadata when a TMDB API key is
+		Uses the scraper registry to discover and create providers.
+		TMDB is used for search and metadata when a TMDB API key is
 		configured, with IMDB as a supplement for parental guide data.
 		Falls back to IMDB-only when no TMDB key is available.
 
 		Transport creation is lazy -- the IMDB scraper works without
 		a transport for search (uses CDN suggestion API). The transport
 		is only needed for metadata and parental guide page loads,
-		and is injected when first needed via _ensure_imdb_transport_on_scraper().
+		and is injected when first needed via
+		_ensure_imdb_transport_on_scraper().
 		"""
 		if self._scraper is not None:
 			return
-		# auto-detect: use TMDB when API key exists
-		api_key = self._settings.tmdb_api_key
-		if api_key:
-			self._scraper = moviemanager.scraper.tmdb_scraper.TmdbScraper(
-				api_key=api_key,
-				language=self._settings.scrape_language,
-			)
-			# IMDB supplement for parental guide data
-			self._imdb_scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
+		# use registry pipeline to select providers
+		pipeline = self._registry.create_pipeline(self._settings)
+		if pipeline.primary is not None:
+			self._scraper = pipeline.primary
+			# check for parental guide supplement provider
+			if pipeline.supplements:
+				for supp in pipeline.supplements:
+					if isinstance(
+						supp,
+						moviemanager.scraper.interfaces
+						.ParentalGuideProvider,
+					):
+						self._imdb_scraper = supp
+						break
 			return
-		# fallback: IMDB only (no TMDB key)
-		self._scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
+		# fallback: IMDB only (no TMDB key) -- create directly
+		self._scraper = self._registry.create_provider(
+			"imdb", self._settings
+		)
 
 	#============================================
 	def _ensure_imdb_transport_on_scraper(self) -> None:
@@ -193,22 +194,22 @@ class MovieAPI:
 		self._ensure_imdb_transport()
 		if self._imdb_transport is None:
 			return
-		# inject transport into IMDB scrapers that don't have one yet
-		if isinstance(
-			self._scraper, moviemanager.scraper.imdb_scraper.ImdbScraper
-		):
+		# inject transport into scrapers that support it
+		if hasattr(self._scraper, "set_transport"):
 			self._scraper.set_transport(self._imdb_transport)
 		if (self._imdb_scraper is not None
-				and isinstance(self._imdb_scraper,
-					moviemanager.scraper.imdb_scraper.ImdbScraper)):
-			self._imdb_scraper.set_transport(self._imdb_transport)
+				and hasattr(self._imdb_scraper, "set_transport")):
+			self._imdb_scraper.set_transport(
+				self._imdb_transport
+			)
 
 	#============================================
 	def _configured_imdb_browser_cookie_spec(self) -> str:
 		"""Return cookie loader spec from structured settings."""
 		if self._settings.imdb_browser_cookies_enabled:
 			browser = (
-				self._settings.imdb_browser_cookies_browser.strip().lower()
+				self._settings
+				.imdb_browser_cookies_browser.strip().lower()
 			)
 			if not browser:
 				browser = "firefox"
@@ -226,87 +227,125 @@ class MovieAPI:
 		if not spec:
 			return []
 		try:
-			return moviemanager.scraper.browser_cookies.load_imdb_cookies_from_browser(
-				spec
+			cookies = (
+				moviemanager.scraper.browser_cookies
+				.load_imdb_cookies_from_browser(spec)
 			)
+			return cookies
 		except Exception as error:
 			_LOG.warning(
-				"Failed to load IMDB browser cookies from '%s': %s",
+				"Failed to load IMDB browser cookies "
+				"from '%s': %s",
 				spec, error,
 			)
 			return []
 
 	#============================================
 	def _apply_configured_imdb_browser_cookies(self) -> None:
-		"""No-op. Cookies are now managed by the browser transport profile.
+		"""No-op. Cookies are now managed by the browser transport.
 
 		Kept for backward compatibility. The QWebEnginePage transport
 		handles cookies automatically via its persistent profile.
 		"""
 
 	#============================================
-	def _get_tmdb_lookup_scraper(self):
-		"""Return a TMDB scraper for poster lookup, or None if disabled."""
-		api_key = self._settings.tmdb_api_key.strip()
-		if not api_key:
-			return None
-		spec = f"{api_key}|{self._settings.scrape_language}"
-		if (
-			self._tmdb_lookup_scraper is not None
-			and self._tmdb_lookup_spec == spec
-		):
-			return self._tmdb_lookup_scraper
-		self._tmdb_lookup_scraper = moviemanager.scraper.tmdb_scraper.TmdbScraper(
-			api_key=api_key,
-			language=self._settings.scrape_language,
-		)
-		self._tmdb_lookup_spec = spec
-		self._tmdb_poster_cache = {}
-		return self._tmdb_lookup_scraper
+	def apply_imdb_cookies(self, cookies: list) -> bool:
+		"""Apply browser cookies to the active IMDB scraper sessions.
+
+		Applies cookies to both the primary scraper (if IMDB) and
+		the IMDB supplement scraper used for parental guide data.
+
+		Args:
+			cookies: List of cookie dicts from a browser context.
+
+		Returns:
+			bool: True when cookies were applied to at least one scraper.
+		"""
+		self._ensure_scraper()
+		applied = False
+		# apply to primary scraper if it supports transport
+		if hasattr(self._scraper, "set_transport"):
+			applied = True
+		# apply to supplement scraper if active and supports transport
+		if (self._imdb_scraper is not None
+				and hasattr(self._imdb_scraper, "set_transport")):
+			applied = True
+		return applied
 
 	#============================================
-	def _lookup_tmdb_poster_for_imdb_id(self, imdb_id: str) -> tuple:
-		"""Resolve TMDB id/poster URL for an IMDB id with persistent caching."""
-		if not imdb_id:
-			return (0, "")
-		# check in-memory cache first, then persistent cache
-		if imdb_id in self._tmdb_poster_cache:
-			return self._tmdb_poster_cache[imdb_id]
-		cached = self._cache.get_poster_lookup(imdb_id)
-		if cached is not None:
-			self._tmdb_poster_cache[imdb_id] = cached
-			return cached
-		lookup_scraper = self._get_tmdb_lookup_scraper()
-		if lookup_scraper is None:
-			self._tmdb_poster_cache[imdb_id] = (0, "")
-			return (0, "")
-		try:
-			tmdb_id, poster_url = lookup_scraper.find_by_imdb_id(imdb_id)
-		except Exception as error:
-			_LOG.warning(
-				"TMDB poster lookup failed for %s: %s",
-				imdb_id, error,
-			)
-			tmdb_id = 0
-			poster_url = ""
-		result = (tmdb_id, poster_url)
-		self._tmdb_poster_cache[imdb_id] = result
-		# persist to disk cache
-		self._cache.put_poster_lookup(imdb_id, tmdb_id, poster_url)
+	# -- delegating public methods --
+	#============================================
+
+	#============================================
+	def scan_directory(
+		self, root_path: str, progress_callback=None,
+		movie_callback=None,
+	) -> list:
+		"""Scan a directory for movie files and add them to the library.
+
+		Args:
+			root_path: Root directory path to scan.
+			progress_callback: Optional callable(current, message).
+			movie_callback: Optional callable(movie) for delivery.
+
+		Returns:
+			List of Movie instances discovered during the scan.
+		"""
+		result = self._scan_svc.scan_directory(
+			root_path, progress_callback=progress_callback,
+			movie_callback=movie_callback,
+		)
 		return result
 
 	#============================================
-	def _prefer_tmdb_poster(self, result) -> None:
-		"""Mutate a SearchResult in-place to prefer TMDB poster URL."""
-		if not result or not result.imdb_id:
-			return
-		tmdb_id, poster_url = self._lookup_tmdb_poster_for_imdb_id(
-			result.imdb_id
-		)
-		if tmdb_id and not result.tmdb_id:
-			result.tmdb_id = tmdb_id
-		if poster_url:
-			result.poster_url = poster_url
+	def get_movies(self) -> list:
+		"""Return all movies in the library.
+
+		Returns:
+			List of all Movie instances.
+		"""
+		result = self._scan_svc.get_movies()
+		return result
+
+	#============================================
+	def get_unscraped(self) -> list:
+		"""Return movies that have not been scraped.
+
+		Returns:
+			List of unscraped Movie instances.
+		"""
+		result = self._scan_svc.get_unscraped()
+		return result
+
+	#============================================
+	def get_movie_count(self) -> int:
+		"""Return the total number of movies in the library.
+
+		Returns:
+			Integer count of movies.
+		"""
+		result = self._scan_svc.get_movie_count()
+		return result
+
+	#============================================
+	def get_scraped_count(self) -> int:
+		"""Return the number of scraped movies.
+
+		Returns:
+			Integer count of scraped movies.
+		"""
+		result = self._scan_svc.get_scraped_count()
+		return result
+
+	#============================================
+	def get_unscraped_count(self) -> int:
+		"""Return the number of unscraped movies.
+
+		Returns:
+			Integer count of unscraped movies.
+		"""
+		result = self._scan_svc.get_unscraped_count()
+		return result
 
 	#============================================
 	def search_movie(
@@ -324,84 +363,18 @@ class MovieAPI:
 			year: Optional release year to narrow results.
 			query_title: Original title for scoring (defaults to title).
 			query_year: Original year for scoring (defaults to year).
-			query_runtime: Runtime in minutes from local movie (0 if unknown).
+			query_runtime: Runtime in minutes (0 if unknown).
 
 		Returns:
 			List of SearchResult instances sorted by match confidence.
 		"""
 		self._ensure_scraper()
-		# determine cache type based on active scraper
-		is_imdb = isinstance(
-			self._scraper, moviemanager.scraper.imdb_scraper.ImdbScraper
+		result = self._search_svc.search_movie(
+			self._scraper, title, year,
+			query_title=query_title, query_year=query_year,
+			query_runtime=query_runtime,
 		)
-		cache_type = "imdb_search" if is_imdb else "tmdb_search"
-		# check persistent cache before network call
-		cached_dicts = self._cache.get_search_results(
-			cache_type, title, year
-		)
-		if cached_dicts is not None:
-			# reconstruct SearchResult dataclasses from cached dicts
-			results = [
-				moviemanager.scraper.types.SearchResult(**d)
-				for d in cached_dicts
-			]
-		else:
-			results = self._scraper.search(title, year)
-			if is_imdb:
-				prefetch_results = results[:_TMDB_POSTER_PREFETCH_LIMIT]
-				for item in prefetch_results:
-					self._prefer_tmdb_poster(item)
-			# only cache non-empty results (empty means search failed)
-			if results:
-				self._cache.put_search_results(
-					cache_type, title, year, results
-				)
-		# compute match confidence for each result
-		ref_title = query_title or title
-		ref_year = query_year or year
-		for r in results:
-			r.match_confidence = (
-				moviemanager.api.match_confidence.compute_match_confidence(
-					ref_title, ref_year,
-					r.title, r.year,
-					result_original_title=r.original_title,
-					result_score=r.score,
-					query_runtime=query_runtime,
-					result_runtime=r.runtime,
-				)
-			)
-		# sort by confidence descending (best match first)
-		results.sort(
-			key=lambda r: r.match_confidence, reverse=True
-		)
-		return results
-
-	#============================================
-	def apply_imdb_cookies(self, cookies: list) -> bool:
-		"""Apply browser cookies to the active IMDB scraper sessions.
-
-		Applies cookies to both the primary scraper (if IMDB) and
-		the IMDB supplement scraper used for parental guide data.
-
-		Args:
-			cookies: List of cookie dicts from a browser context.
-
-		Returns:
-			bool: True when cookies were applied to at least one scraper.
-		"""
-		self._ensure_scraper()
-		applied = False
-		# apply to primary scraper if it is an IMDB scraper
-		if isinstance(
-			self._scraper, moviemanager.scraper.imdb_scraper.ImdbScraper
-		):
-			applied = True
-		# apply to IMDB supplement scraper if active
-		if (self._imdb_scraper is not None
-				and isinstance(self._imdb_scraper,
-					moviemanager.scraper.imdb_scraper.ImdbScraper)):
-			applied = True
-		return applied
+		return result
 
 	#============================================
 	def search_movie_with_fallback(
@@ -418,44 +391,17 @@ class MovieAPI:
 		Args:
 			title: Movie title to search for.
 			year: Optional release year to narrow results.
-			query_runtime: Runtime in minutes from local movie (0 if unknown).
+			query_runtime: Runtime in minutes (0 if unknown).
 
 		Returns:
 			tuple: (results list, strategy description string).
 		"""
-		# strategy 1: title + year
-		if year:
-			results = self.search_movie(
-				title, year, query_runtime=query_runtime
-			)
-			if results:
-				strategy = f"title + year: {title} ({year})"
-				return (results, strategy)
-			# strategy 2: title only (drop year)
-			results = self.search_movie(
-				title, query_runtime=query_runtime
-			)
-			if results:
-				strategy = f"title only: {title}"
-				return (results, strategy)
-		else:
-			results = self.search_movie(
-				title, query_runtime=query_runtime
-			)
-			if results:
-				strategy = f"title: {title}"
-				return (results, strategy)
-		# strategy 3: simplified title
-		simplified = _simplify_title(title)
-		if simplified != title.lower().strip():
-			results = self.search_movie(
-				simplified, query_runtime=query_runtime
-			)
-			if results:
-				strategy = f"simplified: {simplified}"
-				return (results, strategy)
-		# nothing found
-		return ([], "no results")
+		self._ensure_scraper()
+		result = self._search_svc.search_movie_with_fallback(
+			self._scraper, title, year,
+			query_runtime=query_runtime,
+		)
+		return result
 
 	#============================================
 	@staticmethod
@@ -476,14 +422,20 @@ class MovieAPI:
 		Returns:
 			float: Confidence score from 0.0 to 1.0.
 		"""
-		score = moviemanager.api.match_confidence.compute_match_confidence(
-			query_title, query_year,
-			result_title, result_year,
+		score = (
+			moviemanager.api.match_confidence
+			.compute_match_confidence(
+				query_title, query_year,
+				result_title, result_year,
+			)
 		)
 		return score
 
 	#============================================
-	def scrape_movie(self, movie, tmdb_id: int = 0, imdb_id: str = "", bypass_cache: bool = False) -> None:
+	def scrape_movie(
+		self, movie, tmdb_id: int = 0, imdb_id: str = "",
+		bypass_cache: bool = False,
+	) -> None:
 		"""Fetch and apply metadata to a movie from the active scraper.
 
 		Maps MediaMetadata fields onto the Movie object, marks it
@@ -496,147 +448,13 @@ class MovieAPI:
 			bypass_cache: Skip cache lookup and force fresh fetch.
 		"""
 		self._ensure_scraper()
-		is_imdb = isinstance(
-			self._scraper, moviemanager.scraper.imdb_scraper.ImdbScraper
+		self._scrape_svc.scrape_movie(
+			movie, self._scraper,
+			imdb_scraper=self._imdb_scraper,
+			ensure_transport_fn=self._ensure_imdb_transport_on_scraper,
+			tmdb_id=tmdb_id, imdb_id=imdb_id,
+			bypass_cache=bypass_cache,
 		)
-		cache_type = "imdb_metadata" if is_imdb else "tmdb_metadata"
-		# use imdb_id as the key for both scrapers (TMDB returns imdb_id)
-		cache_key = imdb_id
-		# check persistent cache before network call (skip when refreshing)
-		cached_dict = None
-		if not bypass_cache and cache_key:
-			cached_dict = self._cache.get_metadata(
-				cache_type, cache_key
-			)
-		if cached_dict is not None:
-			# reconstruct CastMember lists from nested dicts
-			actors_raw = cached_dict.pop("actors", [])
-			producers_raw = cached_dict.pop("producers", [])
-			metadata = moviemanager.scraper.types.MediaMetadata(**cached_dict)
-			metadata.actors = [
-				moviemanager.scraper.types.CastMember(**a) for a in actors_raw
-			]
-			metadata.producers = [
-				moviemanager.scraper.types.CastMember(**p) for p in producers_raw
-			]
-		else:
-			# ensure transport is ready for IMDB page loads
-			if is_imdb:
-				self._ensure_imdb_transport_on_scraper()
-			metadata = self._scraper.get_metadata(
-				tmdb_id=tmdb_id, imdb_id=imdb_id
-			)
-			if is_imdb:
-				lookup_id = metadata.imdb_id or imdb_id
-				tmdb_match_id, tmdb_poster_url = (
-					self._lookup_tmdb_poster_for_imdb_id(lookup_id)
-				)
-				if tmdb_match_id and not metadata.tmdb_id:
-					metadata.tmdb_id = tmdb_match_id
-				if tmdb_poster_url:
-					metadata.poster_url = tmdb_poster_url
-			# only cache metadata with meaningful content
-			store_key = metadata.imdb_id or imdb_id
-			if store_key and (metadata.title or metadata.imdb_id):
-				self._cache.put_metadata(
-					cache_type, store_key, metadata,
-				)
-		# supplement parental guide from IMDB when using TMDB
-		if (self._imdb_scraper is not None
-				and (bypass_cache or not metadata.parental_guide)
-				and metadata.imdb_id):
-			# skip if confirmed empty and checked within 90 days
-			skip_guide = _should_skip_parental_guide(
-				movie, metadata.parental_guide,
-			)
-			if skip_guide and not bypass_cache:
-				_LOG.debug(
-					"Skipping parental guide for %s"
-					" (checked %s)", metadata.imdb_id,
-					movie.parental_guide_checked,
-				)
-			else:
-				# check parental guide cache first (skip when refreshing)
-				cached_guide = None
-				if not bypass_cache:
-					cached_guide = self._cache.get_parental_guide(
-						metadata.imdb_id
-					)
-				if cached_guide is not None:
-					metadata.parental_guide = cached_guide
-					# mark checked date on cache hit
-					today = datetime.date.today().isoformat()
-					metadata.parental_guide_checked = today
-				else:
-					# ensure transport is ready for parental guide page
-					self._ensure_imdb_transport_on_scraper()
-					try:
-						guide = self._imdb_scraper.get_parental_guide(
-							metadata.imdb_id
-						)
-						metadata.parental_guide = guide
-						# mark checked whether empty or populated
-						today = datetime.date.today().isoformat()
-						metadata.parental_guide_checked = today
-						# only cache non-empty parental guide results
-						if guide:
-							self._cache.put_parental_guide(
-								metadata.imdb_id, guide
-							)
-					except Exception as err:
-						_LOG.warning(
-							"IMDB parental guide fetch failed: %s",
-							err,
-						)
-						# record for deferred retry later
-						self._failed_parental_guides.append(
-							(metadata.imdb_id, movie)
-						)
-		# map MediaMetadata fields to the Movie object
-		movie.title = metadata.title or movie.title
-		movie.original_title = metadata.original_title or movie.original_title
-		movie.year = metadata.year or movie.year
-		movie.plot = metadata.plot
-		movie.tagline = metadata.tagline
-		movie.runtime = metadata.runtime
-		movie.rating = metadata.rating
-		movie.votes = metadata.votes
-		movie.genres = metadata.genres
-		movie.director = metadata.director
-		movie.writer = metadata.writer
-		movie.studio = metadata.studio
-		movie.country = metadata.country
-		movie.spoken_languages = metadata.spoken_languages
-		movie.imdb_id = metadata.imdb_id
-		movie.tmdb_id = metadata.tmdb_id
-		movie.poster_url = metadata.poster_url
-		movie.fanart_url = metadata.fanart_url
-		movie.certification = metadata.certification
-		movie.release_date = metadata.release_date
-		movie.trailer_url = metadata.trailer_url
-		movie.parental_guide = metadata.parental_guide
-		# only update checked date if it was set during this scrape
-		if metadata.parental_guide_checked:
-			movie.parental_guide_checked = metadata.parental_guide_checked
-		# convert CastMember dataclasses to dicts for NFO writer
-		movie.actors = [
-			{"name": a.name, "role": a.role, "tmdb_id": a.tmdb_id}
-			for a in metadata.actors
-		]
-		movie.scraped = True
-		# build NFO path from first video file basename
-		nfo_path = ""
-		video_file = movie.video_file
-		if video_file:
-			base, _ = os.path.splitext(video_file.filename)
-			nfo_path = os.path.join(movie.path, base + ".nfo")
-		else:
-			# fallback: use movie title
-			safe_title = movie.title or "movie"
-			nfo_path = os.path.join(movie.path, safe_title + ".nfo")
-		# write the NFO file
-		moviemanager.core.nfo.writer.write_nfo(movie, nfo_path)
-		movie.nfo_path = nfo_path
 
 	#============================================
 	def rename_movie(
@@ -662,12 +480,15 @@ class MovieAPI:
 			path_template = self._settings.path_template
 		if not file_template:
 			# build template with media tokens from checkbox settings
-			file_template = moviemanager.core.movie.renamer.build_file_template(
-				self._settings
+			file_template = (
+				moviemanager.core.movie.template_engine
+				.build_file_template(self._settings)
 			)
-		result = moviemanager.core.movie.renamer.rename_movie(
+		result = moviemanager.core.movie.rename_service.rename_movie(
 			movie, path_template, file_template, dry_run=dry_run,
-			spaces_to_underscores=self._settings.spaces_to_underscores,
+			spaces_to_underscores=(
+				self._settings.spaces_to_underscores
+			),
 		)
 		return result
 
@@ -684,59 +505,7 @@ class MovieAPI:
 		Returns:
 			list: Paths of downloaded artwork files.
 		"""
-		downloaded = []
-		if not movie.path:
-			return downloaded
-		# download poster
-		if self._settings.download_poster and movie.poster_url:
-			poster_path = os.path.join(movie.path, "poster.jpg")
-			if not os.path.exists(poster_path):
-				time.sleep(random.random())
-				response = requests.get(movie.poster_url, timeout=30)
-				response.raise_for_status()
-				with open(poster_path, "wb") as f:
-					f.write(response.content)
-				downloaded.append(poster_path)
-		# download fanart
-		if self._settings.download_fanart and movie.fanart_url:
-			fanart_path = os.path.join(movie.path, "fanart.jpg")
-			if not os.path.exists(fanart_path):
-				time.sleep(random.random())
-				response = requests.get(movie.fanart_url, timeout=30)
-				response.raise_for_status()
-				with open(fanart_path, "wb") as f:
-					f.write(response.content)
-				downloaded.append(fanart_path)
-		return downloaded
-
-	#============================================
-	def get_movie_count(self) -> int:
-		"""Return the total number of movies in the library.
-
-		Returns:
-			Integer count of movies.
-		"""
-		result = self._movie_list.count()
-		return result
-
-	#============================================
-	def get_scraped_count(self) -> int:
-		"""Return the number of scraped movies.
-
-		Returns:
-			Integer count of scraped movies.
-		"""
-		result = len(self._movie_list.get_scraped())
-		return result
-
-	#============================================
-	def get_unscraped_count(self) -> int:
-		"""Return the number of unscraped movies.
-
-		Returns:
-			Integer count of unscraped movies.
-		"""
-		result = len(self._movie_list.get_unscraped())
+		result = self._artwork_svc.download_artwork(movie)
 		return result
 
 	#============================================
@@ -752,93 +521,13 @@ class MovieAPI:
 		Raises:
 			DownloadError: With category describing the failure reason.
 		"""
-		_Cat = moviemanager.api.download_errors.DownloadCategory
-		_Err = moviemanager.api.download_errors.DownloadError
-		if not movie.trailer_url:
-			raise _Err(_Cat.no_url, "No trailer URL for this movie")
-		if not movie.path:
-			raise _Err(_Cat.no_path, "Movie has no folder path")
-		output_path = os.path.join(movie.path, "trailer.mp4")
-		# skip if trailer already exists
-		if os.path.exists(output_path):
-			return output_path
-		cmd = [
-			"yt-dlp",
-			"-o", output_path,
-			"--format", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4",
-			"--no-playlist",
-			movie.trailer_url,
-		]
-		try:
-			subprocess.run(
-				cmd, check=True, timeout=300,
-				capture_output=True,
-			)
-		except subprocess.TimeoutExpired:
-			raise _Err(_Cat.timeout, "yt-dlp timed out after 300s")
-		except subprocess.CalledProcessError as exc:
-			# extract last line of stderr for a concise message
-			stderr_text = (exc.stderr or b"").decode("utf-8", errors="replace")
-			last_line = stderr_text.strip().split("\n")[-1] if stderr_text.strip() else "unknown error"
-			raise _Err(_Cat.download_failed, last_line)
-		return output_path
+		result = self._trailer_svc.download_trailer(movie)
+		return result
 
 	#============================================
-	def _get_subtitle_scraper(self):
-		"""Return a cached, authenticated SubtitleScraper.
-
-		Thread-safe: uses a lock so only the first thread logs in,
-		and all others wait and reuse the cached instance. JWT token
-		is valid 24 hours per API docs.
-
-		Returns:
-			Authenticated SubtitleScraper instance.
-
-		Raises:
-			DownloadError: If credentials are missing or login fails.
-		"""
-		_Cat = moviemanager.api.download_errors.DownloadCategory
-		_Err = moviemanager.api.download_errors.DownloadError
-		# fast path: already cached (no lock needed for read)
-		if self._subtitle_scraper is not None:
-			return self._subtitle_scraper
-		# serialize login so only one thread authenticates
-		with self._subtitle_scraper_lock:
-			# re-check after acquiring lock (another thread may have logged in)
-			if self._subtitle_scraper is not None:
-				return self._subtitle_scraper
-			# validate credentials
-			api_key = self._settings.opensubtitles_api_key
-			if not api_key:
-				raise _Err(
-					_Cat.no_api_key,
-					"OpenSubtitles API key is not configured. "
-					"Set it in Settings > API Keys."
-				)
-			osub_user = self._settings.opensubtitles_username
-			osub_pass = self._settings.opensubtitles_password
-			if not osub_user or not osub_pass:
-				raise _Err(
-					_Cat.auth_failed,
-					"OpenSubtitles username/password required for downloads. "
-					"Set them in Settings > API Keys."
-				)
-			scraper = moviemanager.scraper.subtitle_scraper.SubtitleScraper(
-				api_key
-			)
-			login_ok = scraper.login(osub_user, osub_pass)
-			if not login_ok:
-				raise _Err(
-					_Cat.auth_failed,
-					"OpenSubtitles login failed. "
-					"Check username/password in Settings > API Keys."
-				)
-			# cache for reuse across all subtitle download threads
-			self._subtitle_scraper = scraper
-			return scraper
-
-	#============================================
-	def download_subtitles(self, movie, languages: str = "en") -> list:
+	def download_subtitles(
+		self, movie, languages: str = "en",
+	) -> list:
 		"""Download subtitles for a movie from OpenSubtitles.
 
 		Args:
@@ -851,66 +540,10 @@ class MovieAPI:
 		Raises:
 			DownloadError: With category describing the failure reason.
 		"""
-		_Cat = moviemanager.api.download_errors.DownloadCategory
-		_Err = moviemanager.api.download_errors.DownloadError
-		if not movie.imdb_id:
-			raise _Err(_Cat.no_imdb_id, "No IMDB ID for this movie")
-		if not movie.path:
-			raise _Err(_Cat.no_path, "Movie has no folder path")
-		scraper = self._get_subtitle_scraper()
-		try:
-			results = scraper.search(
-				imdb_id=movie.imdb_id, languages=languages
-			)
-		except requests.exceptions.Timeout:
-			raise _Err(_Cat.timeout, "OpenSubtitles API timed out")
-		except requests.exceptions.ConnectionError as exc:
-			raise _Err(_Cat.network_error, str(exc)[:200])
-		except requests.exceptions.RequestException as exc:
-			raise _Err(_Cat.api_error, str(exc)[:200])
-		if not results:
-			raise _Err(_Cat.no_results, "No subtitles found")
-		# group by language, take best per language (highest download count)
-		downloaded = []
-		by_lang = {}
-		for r in results:
-			lang = r.get("language", "en")
-			if lang not in by_lang:
-				by_lang[lang] = r
-			elif r.get("download_count", 0) > by_lang[lang].get("download_count", 0):
-				by_lang[lang] = r
-		for lang, best in by_lang.items():
-			file_id = best.get("file_id", 0)
-			if not file_id:
-				continue
-			# name subtitle file with language code
-			srt_filename = f"subtitles.{lang}.srt"
-			srt_path = os.path.join(movie.path, srt_filename)
-			# skip if already exists
-			if os.path.exists(srt_path):
-				downloaded.append(srt_path)
-				continue
-			try:
-				result_path = scraper.download(file_id, srt_path)
-			except requests.exceptions.HTTPError as exc:
-				status = getattr(exc.response, "status_code", None)
-				if status == 401:
-					raise _Err(
-						_Cat.auth_failed,
-						"OpenSubtitles download auth failed (401). "
-						"Check username/password in Settings > API Keys."
-					)
-				raise _Err(_Cat.download_failed, str(exc)[:200])
-			except requests.exceptions.Timeout:
-				raise _Err(_Cat.timeout, "OpenSubtitles download timed out")
-			except requests.exceptions.ConnectionError as exc:
-				raise _Err(_Cat.network_error, str(exc)[:200])
-			except requests.exceptions.RequestException as exc:
-				raise _Err(_Cat.download_failed, str(exc)[:200])
-			if result_path:
-				downloaded.append(result_path)
-		return downloaded
-
+		result = self._subtitle_svc.download_subtitles(
+			movie, languages
+		)
+		return result
 
 	#============================================
 	def fetch_parental_guides(
@@ -929,122 +562,14 @@ class MovieAPI:
 			Dict with fetched, no_data, failed, skipped counts.
 		"""
 		self._ensure_scraper()
-		self._ensure_imdb_transport_on_scraper()
-		# determine which scraper to use for parental guide
-		guide_scraper = self._imdb_scraper or self._scraper
-		if not isinstance(
-			guide_scraper,
-			moviemanager.scraper.imdb_scraper.ImdbScraper,
-		):
-			_LOG.warning("No IMDB scraper available for parental guide")
-			result = {
-				"fetched": 0, "no_data": 0,
-				"failed": 0, "skipped": len(movies),
-			}
-			return result
-		# filter to eligible movies
-		eligible = []
-		skipped = 0
-		for movie in movies:
-			if not movie.imdb_id:
-				skipped += 1
-				continue
-			# already has parental guide data
-			if movie.parental_guide:
-				skipped += 1
-				continue
-			# skip if checked recently (within 90 days)
-			if _should_skip_parental_guide(movie, movie.parental_guide):
-				skipped += 1
-				continue
-			eligible.append(movie)
-		fetched = 0
-		no_data = 0
-		failed = 0
-		total = len(eligible)
-		for i, movie in enumerate(eligible):
-			# build progress message with running tally
-			stats_parts = []
-			if fetched:
-				stats_parts.append(f"{fetched} fetched")
-			if failed:
-				stats_parts.append(f"{failed} failed")
-			stats_suffix = ""
-			if stats_parts:
-				stats_suffix = " - " + ", ".join(stats_parts)
-			if progress_callback:
-				progress_msg = (
-					f"Parental guide: {movie.title}"
-					f" ({i + 1}/{total}){stats_suffix}"
-				)
-				progress_callback(i, total, progress_msg)
-			# delay between requests
-			time.sleep(1 + random.random())
-			# check cache first
-			cached_guide = self._cache.get_parental_guide(
-				movie.imdb_id
-			)
-			if cached_guide is not None:
-				movie.parental_guide = cached_guide
-				movie.parental_guide_checked = (
-					datetime.date.today().isoformat()
-				)
-				fetched += 1
-				_LOG.info(
-					"Parental guide cached for %s (%d/%d)"
-					" - %d fetched, %d failed",
-					movie.imdb_id, i + 1, total, fetched, failed,
-				)
-				# write updated NFO
-				if movie.nfo_path:
-					moviemanager.core.nfo.writer.write_nfo(
-						movie, movie.nfo_path
-					)
-				continue
-			try:
-				guide = guide_scraper.get_parental_guide(
-					movie.imdb_id
-				)
-				today = datetime.date.today().isoformat()
-				movie.parental_guide_checked = today
-				if guide:
-					movie.parental_guide = guide
-					self._cache.put_parental_guide(
-						movie.imdb_id, guide
-					)
-					fetched += 1
-					_LOG.info(
-						"Parental guide fetched for %s (%d/%d)"
-						" - %d fetched, %d failed",
-						movie.imdb_id, i + 1, total,
-						fetched, failed,
-					)
-				else:
-					# confirmed no data on IMDB
-					no_data += 1
-					_LOG.info(
-						"Parental guide empty for %s (%d/%d)"
-						" - %d no_data, %d failed",
-						movie.imdb_id, i + 1, total,
-						no_data, failed,
-					)
-				# write updated NFO
-				if movie.nfo_path:
-					moviemanager.core.nfo.writer.write_nfo(
-						movie, movie.nfo_path
-					)
-			except Exception as err:
-				failed += 1
-				_LOG.warning(
-					"Parental guide failed for %s (%d/%d)"
-					" - %d fetched, %d failed: %s",
-					movie.imdb_id, i + 1, total,
-					fetched, failed, err,
-				)
-		result = {
-			"fetched": fetched, "no_data": no_data,
-			"failed": failed, "skipped": skipped,
-		}
+		result = self._scrape_svc.fetch_parental_guides(
+			movies, self._scraper,
+			imdb_scraper=self._imdb_scraper,
+			ensure_transport_fn=(
+				self._ensure_imdb_transport_on_scraper
+			),
+			progress_callback=progress_callback,
+		)
 		return result
 
 	#============================================
@@ -1052,15 +577,15 @@ class MovieAPI:
 		"""Return True if there are parental guide fetches to retry.
 
 		Returns:
-			bool: True when at least one fetch failed and is pending retry.
+			bool: True when at least one fetch failed.
 		"""
-		has_failures = len(self._failed_parental_guides) > 0
-		return has_failures
+		result = self._scrape_svc.has_failed_parental_guides()
+		return result
 
 	#============================================
 	def clear_failed_parental_guides(self) -> None:
 		"""Clear the list of failed parental guide fetches."""
-		self._failed_parental_guides.clear()
+		self._scrape_svc.clear_failed_parental_guides()
 
 	#============================================
 	def retry_failed_parental_guides(self) -> dict:
@@ -1074,89 +599,22 @@ class MovieAPI:
 			Dict with retried, succeeded, and still_failed counts.
 		"""
 		self._ensure_scraper()
-		self._ensure_imdb_transport_on_scraper()
-		failures = list(self._failed_parental_guides)
-		self._failed_parental_guides.clear()
-		succeeded = 0
-		still_failed = []
-		for imdb_id, movie in failures:
-			# delay between retries to avoid overloading IMDB
-			time.sleep(1 + random.random())
-			try:
-				guide = self._imdb_scraper.get_parental_guide(imdb_id)
-				movie.parental_guide = guide
-				if guide:
-					self._cache.put_parental_guide(imdb_id, guide)
-				succeeded += 1
-			except Exception as err:
-				_LOG.warning(
-					"Parental guide retry failed for %s: %s",
-					imdb_id, err,
-				)
-				still_failed.append(imdb_id)
-		result = {
-			"retried": len(failures),
-			"succeeded": succeeded,
-			"still_failed": still_failed,
-		}
+		result = self._scrape_svc.retry_failed_parental_guides(
+			self._imdb_scraper,
+			ensure_transport_fn=(
+				self._ensure_imdb_transport_on_scraper
+			),
+		)
 		return result
 
+	#============================================
+	# -- backward compatibility: _failed_parental_guides access --
+	#============================================
 
-# number of days before re-checking a movie with no parental guide
-_PARENTAL_GUIDE_RECHECK_DAYS = 90
+	@property
+	def _failed_parental_guides(self) -> list:
+		"""Provide backward-compatible access to scrape service failures.
 
-
-#============================================
-def _should_skip_parental_guide(movie, current_guide: dict) -> bool:
-	"""Return True if parental guide fetch should be skipped.
-
-	Skips when the movie has no guide data but was checked within
-	the recheck window (90 days).
-
-	Args:
-		movie: Movie instance with parental_guide_checked field.
-		current_guide: Current parental guide dict (from metadata).
-
-	Returns:
-		True if the fetch should be skipped.
-	"""
-	# if guide already has data, no need to skip
-	if current_guide:
-		return False
-	# if never checked, do not skip
-	if not movie.parental_guide_checked:
-		return False
-	# parse the checked date and compare to today
-	checked_date = datetime.date.fromisoformat(
-		movie.parental_guide_checked
-	)
-	days_since = (datetime.date.today() - checked_date).days
-	should_skip = days_since < _PARENTAL_GUIDE_RECHECK_DAYS
-	return should_skip
-
-
-#============================================
-def _simplify_title(title: str) -> str:
-	"""Simplify a movie title for broader search matching.
-
-	Removes parenthetical text, leading articles, and extra whitespace.
-
-	Args:
-		title: Original movie title.
-
-	Returns:
-		str: Simplified title string.
-	"""
-	# remove parenthetical text like "(Extended Cut)" or "(2020)"
-	simplified = re.sub(r"\s*\(.*?\)", "", title)
-	# strip leading articles
-	simplified = re.sub(r"^(The|A|An)\s+", "", simplified, flags=re.IGNORECASE)
-	# collapse whitespace and strip
-	simplified = re.sub(r"\s+", " ", simplified).strip()
-	return simplified
-
-
-# simple assertion for _simplify_title
-assert _simplify_title("The Matrix (1999)") == "Matrix"
-assert _simplify_title("A Beautiful Mind") == "Beautiful Mind"
-assert _simplify_title("Clerks") == "Clerks"
+		main_window.py accesses this attribute directly for counting.
+		"""
+		return self._scrape_svc._failed_parental_guides

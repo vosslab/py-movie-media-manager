@@ -7,7 +7,8 @@ import os
 import moviemanager.core.constants
 import moviemanager.core.models.media_file
 import moviemanager.core.models.movie
-import moviemanager.core.movie.renamer
+import moviemanager.core.movie.rename_service
+import moviemanager.core.movie.template_engine
 import moviemanager.core.utils
 
 
@@ -74,7 +75,7 @@ def test_expand_template_basic():
 		title="Inception",
 		year="2010",
 	)
-	result = moviemanager.core.movie.renamer.expand_template(
+	result = moviemanager.core.movie.template_engine.expand_template(
 		"{title} ({year})", movie
 	)
 	assert result == "Inception (2010)"
@@ -87,7 +88,7 @@ def test_expand_template_missing_year():
 		title="Inception",
 		year="",
 	)
-	result = moviemanager.core.movie.renamer.expand_template(
+	result = moviemanager.core.movie.template_engine.expand_template(
 		"{title} ({year})", movie
 	)
 	assert result == "Inception"
@@ -101,7 +102,7 @@ def test_expand_template_first_letter():
 		year="2010",
 	)
 	# note: clean_filename strips slashes, so use a dash separator
-	result = moviemanager.core.movie.renamer.expand_template(
+	result = moviemanager.core.movie.template_engine.expand_template(
 		"{first_letter} - {title}", movie
 	)
 	assert result == "I - Inception"
@@ -114,7 +115,7 @@ def test_expand_template_special_chars():
 		title='Mission: Impossible / Rogue Nation',
 		year="2015",
 	)
-	result = moviemanager.core.movie.renamer.expand_template(
+	result = moviemanager.core.movie.template_engine.expand_template(
 		"{title} ({year})", movie
 	)
 	# colons and slashes should be removed by clean_filename
@@ -128,7 +129,7 @@ def test_expand_template_special_chars():
 def test_rename_dry_run(tmp_path):
 	"""Dry run returns rename pairs without moving files."""
 	movie = _make_movie(tmp_path)
-	pairs = moviemanager.core.movie.renamer.rename_movie(
+	pairs = moviemanager.core.movie.rename_service.rename_movie(
 		movie,
 		path_template="{title} ({year})",
 		file_template="{title} ({year})",
@@ -149,7 +150,7 @@ def test_rename_live(tmp_path):
 	original_video = movie.media_files[0].path
 	original_nfo = movie.nfo_path
 
-	pairs = moviemanager.core.movie.renamer.rename_movie(
+	pairs = moviemanager.core.movie.rename_service.rename_movie(
 		movie,
 		path_template="{title} ({year})",
 		file_template="{title} ({year})",
@@ -174,7 +175,7 @@ def test_rename_with_artwork(tmp_path):
 	artwork_names = ["poster.jpg", "fanart.jpg"]
 	movie = _make_movie(tmp_path, artwork=artwork_names)
 
-	pairs = moviemanager.core.movie.renamer.rename_movie(
+	pairs = moviemanager.core.movie.rename_service.rename_movie(
 		movie,
 		path_template="{title} ({year})",
 		file_template="{title} ({year})",
@@ -259,7 +260,7 @@ def test_expand_template_shell_safe():
 		title="Ocean's Eleven",
 		year="2001",
 	)
-	result = moviemanager.core.movie.renamer.expand_template(
+	result = moviemanager.core.movie.template_engine.expand_template(
 		"{title}-{year}", movie, spaces_to_underscores=True,
 	)
 	# no apostrophes or spaces in result
