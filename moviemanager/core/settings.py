@@ -65,6 +65,9 @@ class Settings:
 
 	# OpenSubtitles API key (stored in user .config)
 	opensubtitles_api_key: str = ""
+	# OpenSubtitles user credentials for JWT auth (required for downloads)
+	opensubtitles_username: str = ""
+	opensubtitles_password: str = ""
 
 	# table column visibility (checkbox col 0 is always visible)
 	visible_columns: list = dataclasses.field(

@@ -14,6 +14,7 @@ class DownloadCategory(enum.Enum):
 	no_results = "No Results"
 	network_error = "Network Error"
 	api_error = "Api Error"
+	auth_failed = "Auth Failed"
 	download_failed = "Download Failed"
 	timeout = "Timeout"
 	no_path = "No Path"

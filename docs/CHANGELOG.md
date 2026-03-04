@@ -3,6 +3,19 @@
 ## 2026-03-03
 
 ### Additions and New Features
+- Added OpenSubtitles user authentication (JWT login) for subtitle downloads.
+  The REST API requires a logged-in user token for `/download` requests;
+  without it, downloads are limited to 5 per IP per 24 hours. Added
+  `opensubtitles_username` and `opensubtitles_password` fields to settings,
+  username/password inputs in the Settings dialog API Keys tab, a `login()`
+  method on `SubtitleScraper`, and `auth_failed` category in `DownloadCategory`.
+  Login is called automatically before subtitle search/download when credentials
+  are configured.
+- Created [docs/INSTALL.md](docs/INSTALL.md) with setup steps, dependencies, and verify command.
+- Created [docs/USAGE.md](docs/USAGE.md) with CLI subcommand reference, GUI launch instructions,
+  and common workflow examples.
+- Rewrote [README.md](../README.md) with project overview, quick start, curated documentation
+  links, testing command, and maintainer contact.
 - Added `_has_poster_cache` and `_has_trailer_cache` fields to `Movie` dataclass.
   Scanner sets these during `os.walk()` using the filenames list, so `has_poster`
   and `has_trailer` properties skip filesystem re-stat when cached.

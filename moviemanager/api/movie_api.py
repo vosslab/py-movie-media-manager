@@ -809,6 +809,17 @@ class MovieAPI:
 		scraper = moviemanager.scraper.subtitle_scraper.SubtitleScraper(
 			api_key
 		)
+		# attempt JWT login for authenticated downloads
+		osub_user = self._settings.opensubtitles_username
+		osub_pass = self._settings.opensubtitles_password
+		if osub_user and osub_pass:
+			login_ok = scraper.login(osub_user, osub_pass)
+			if not login_ok:
+				raise _Err(
+					_Cat.auth_failed,
+					"OpenSubtitles login failed. "
+					"Check username/password in Settings > API Keys."
+				)
 		try:
 			results = scraper.search(
 				imdb_id=movie.imdb_id, languages=languages

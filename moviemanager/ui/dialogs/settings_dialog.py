@@ -98,6 +98,21 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		)
 		osub_row.addWidget(osub_get_btn)
 		api_layout.addRow("OpenSubtitles API Key:", osub_row)
+		# OpenSubtitles username
+		self._osub_user_edit = PySide6.QtWidgets.QLineEdit()
+		self._osub_user_edit.setPlaceholderText("username")
+		api_layout.addRow(
+			"OpenSubtitles Username:", self._osub_user_edit
+		)
+		# OpenSubtitles password
+		self._osub_pass_edit = PySide6.QtWidgets.QLineEdit()
+		self._osub_pass_edit.setEchoMode(
+			PySide6.QtWidgets.QLineEdit.EchoMode.Password
+		)
+		self._osub_pass_edit.setPlaceholderText("password")
+		api_layout.addRow(
+			"OpenSubtitles Password:", self._osub_pass_edit
+		)
 		# theme combobox
 		self._theme_combo = PySide6.QtWidgets.QComboBox()
 		self._theme_combo.addItem("System", "system")
@@ -333,6 +348,8 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 			self._imdb_browser_combo.setCurrentIndex(browser_index)
 		self._fanart_key_edit.setText(s.fanart_api_key)
 		self._osub_key_edit.setText(s.opensubtitles_api_key)
+		self._osub_user_edit.setText(s.opensubtitles_username)
+		self._osub_pass_edit.setText(s.opensubtitles_password)
 		# theme combo
 		theme_index = self._theme_combo.findData(s.theme)
 		if theme_index >= 0:
@@ -381,6 +398,8 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		s.imdb_browser_cookies_browser = selected_browser
 		s.fanart_api_key = self._fanart_key_edit.text()
 		s.opensubtitles_api_key = self._osub_key_edit.text()
+		s.opensubtitles_username = self._osub_user_edit.text()
+		s.opensubtitles_password = self._osub_pass_edit.text()
 		s.theme = self._theme_combo.currentData()
 		s.scrape_language = self._language_edit.text()
 		s.scrape_country = self._country_edit.text()

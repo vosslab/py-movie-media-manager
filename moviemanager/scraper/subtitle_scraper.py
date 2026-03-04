@@ -3,6 +3,7 @@
 # Standard Library
 import time
 import random
+import logging
 
 # PIP3 modules
 import requests
@@ -10,6 +11,9 @@ import requests
 
 # OpenSubtitles REST API base URL
 _API_BASE = "https://api.opensubtitles.com/api/v1"
+
+# module logger
+_log = logging.getLogger(__name__)
 
 
 #============================================
@@ -29,6 +33,49 @@ class SubtitleScraper:
 			"Content-Type": "application/json",
 			"User-Agent": "MovieMediaManager v1.0",
 		}
+		# JWT token from login(), added to download requests
+		self._jwt_token = ""
+
+	#============================================
+	def login(self, username: str, password: str) -> bool:
+		"""Authenticate with OpenSubtitles and store JWT token.
+
+		The JWT is valid for 24 hours per API docs. It is required
+		for download requests (otherwise limited to 5/day per IP).
+
+		Args:
+			username: OpenSubtitles account username.
+			password: OpenSubtitles account password.
+
+		Returns:
+			True if login succeeded, False otherwise.
+		"""
+		# rate-limit courtesy pause
+		time.sleep(random.random())
+		payload = {
+			"username": username,
+			"password": password,
+		}
+		response = requests.post(
+			f"{_API_BASE}/login",
+			headers=self._headers,
+			json=payload,
+			timeout=30,
+		)
+		if response.status_code != 200:
+			_log.warning(
+				"OpenSubtitles login failed: %s %s",
+				response.status_code, response.text[:200]
+			)
+			return False
+		data = response.json()
+		token = data.get("token", "")
+		if not token:
+			_log.warning("OpenSubtitles login response missing token")
+			return False
+		self._jwt_token = token
+		_log.info("OpenSubtitles login successful")
+		return True
 
 	#============================================
 	def search(self, imdb_id: str = "", languages: str = "en") -> list:
@@ -77,6 +124,8 @@ class SubtitleScraper:
 	def download(self, file_id: int, output_path: str) -> str:
 		"""Download a subtitle file by file ID.
 
+		Sends JWT Authorization header if login() was called.
+
 		Args:
 			file_id: OpenSubtitles file ID from search results.
 			output_path: Path to save the subtitle file.
@@ -86,10 +135,14 @@ class SubtitleScraper:
 		"""
 		# rate-limit courtesy pause
 		time.sleep(random.random())
+		# build headers with JWT auth if available
+		download_headers = dict(self._headers)
+		if self._jwt_token:
+			download_headers["Authorization"] = f"Bearer {self._jwt_token}"
 		# request download link
 		response = requests.post(
 			f"{_API_BASE}/download",
-			headers=self._headers,
+			headers=download_headers,
 			json={"file_id": file_id},
 			timeout=30,
 		)
