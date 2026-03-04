@@ -6,6 +6,7 @@ import re
 import time
 import random
 import datetime
+import threading
 import subprocess
 import logging
 
@@ -60,6 +61,7 @@ class MovieAPI:
 		self._tmdb_poster_cache = {}
 		# cached subtitle scraper with JWT token (valid 24h)
 		self._subtitle_scraper = None
+		self._subtitle_scraper_lock = threading.Lock()
 		# track failed parental guide fetches for deferred retry
 		self._failed_parental_guides = []
 
@@ -785,47 +787,55 @@ class MovieAPI:
 	def _get_subtitle_scraper(self):
 		"""Return a cached, authenticated SubtitleScraper.
 
-		Creates and logs in a new scraper on first call, then reuses
-		the same instance (JWT token is valid 24 hours). Raises
-		DownloadError if credentials are missing or login fails.
+		Thread-safe: uses a lock so only the first thread logs in,
+		and all others wait and reuse the cached instance. JWT token
+		is valid 24 hours per API docs.
 
 		Returns:
 			Authenticated SubtitleScraper instance.
+
+		Raises:
+			DownloadError: If credentials are missing or login fails.
 		"""
 		_Cat = moviemanager.api.download_errors.DownloadCategory
 		_Err = moviemanager.api.download_errors.DownloadError
-		# return cached scraper if already logged in
+		# fast path: already cached (no lock needed for read)
 		if self._subtitle_scraper is not None:
 			return self._subtitle_scraper
-		# validate credentials
-		api_key = self._settings.opensubtitles_api_key
-		if not api_key:
-			raise _Err(
-				_Cat.no_api_key,
-				"OpenSubtitles API key is not configured. "
-				"Set it in Settings > API Keys."
+		# serialize login so only one thread authenticates
+		with self._subtitle_scraper_lock:
+			# re-check after acquiring lock (another thread may have logged in)
+			if self._subtitle_scraper is not None:
+				return self._subtitle_scraper
+			# validate credentials
+			api_key = self._settings.opensubtitles_api_key
+			if not api_key:
+				raise _Err(
+					_Cat.no_api_key,
+					"OpenSubtitles API key is not configured. "
+					"Set it in Settings > API Keys."
+				)
+			osub_user = self._settings.opensubtitles_username
+			osub_pass = self._settings.opensubtitles_password
+			if not osub_user or not osub_pass:
+				raise _Err(
+					_Cat.auth_failed,
+					"OpenSubtitles username/password required for downloads. "
+					"Set them in Settings > API Keys."
+				)
+			scraper = moviemanager.scraper.subtitle_scraper.SubtitleScraper(
+				api_key
 			)
-		osub_user = self._settings.opensubtitles_username
-		osub_pass = self._settings.opensubtitles_password
-		if not osub_user or not osub_pass:
-			raise _Err(
-				_Cat.auth_failed,
-				"OpenSubtitles username/password required for downloads. "
-				"Set them in Settings > API Keys."
-			)
-		scraper = moviemanager.scraper.subtitle_scraper.SubtitleScraper(
-			api_key
-		)
-		login_ok = scraper.login(osub_user, osub_pass)
-		if not login_ok:
-			raise _Err(
-				_Cat.auth_failed,
-				"OpenSubtitles login failed. "
-				"Check username/password in Settings > API Keys."
-			)
-		# cache for reuse across multiple subtitle downloads
-		self._subtitle_scraper = scraper
-		return scraper
+			login_ok = scraper.login(osub_user, osub_pass)
+			if not login_ok:
+				raise _Err(
+					_Cat.auth_failed,
+					"OpenSubtitles login failed. "
+					"Check username/password in Settings > API Keys."
+				)
+			# cache for reuse across all subtitle download threads
+			self._subtitle_scraper = scraper
+			return scraper
 
 	#============================================
 	def download_subtitles(self, movie, languages: str = "en") -> list:

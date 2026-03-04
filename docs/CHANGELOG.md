@@ -13,6 +13,10 @@
   Previously each `download_subtitles()` call created a new scraper and called
   `login()`, triggering the 1 req/sec rate limit. Now the authenticated scraper
   is cached on the `MovieAPI` instance (JWT valid 24h) and reused across jobs.
+- Added `threading.Lock` to `_get_subtitle_scraper()` using double-checked
+  locking pattern. When multiple subtitle jobs run concurrently, only the first
+  thread performs login; the rest wait on the lock and reuse the cached scraper.
+  Previously concurrent threads all raced to login simultaneously, causing 429s.
 - Enforced minimum 1-second gap (plus jitter) between all OpenSubtitles API
   requests in `SubtitleScraper`. Replaced `time.sleep(random.random())` with a
   timestamp-based rate limiter that tracks elapsed time since last request.
