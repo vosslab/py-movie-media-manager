@@ -35,6 +35,23 @@ class SubtitleScraper:
 		}
 		# JWT token from login(), added to download requests
 		self._jwt_token = ""
+		# timestamp of last API request for rate-limit enforcement
+		self._last_request_time = 0.0
+
+	#============================================
+	def _rate_limit_wait(self) -> None:
+		"""Enforce minimum 1-second gap between API requests.
+
+		OpenSubtitles rate-limits to 1 req/sec per IP for most
+		endpoints. Adds a small random jitter on top.
+		"""
+		now = time.time()
+		elapsed = now - self._last_request_time
+		# wait at least 1 second plus small jitter
+		min_gap = 1.0 + random.random() * 0.5
+		if elapsed < min_gap:
+			time.sleep(min_gap - elapsed)
+		self._last_request_time = time.time()
 
 	#============================================
 	def login(self, username: str, password: str) -> bool:
@@ -50,8 +67,8 @@ class SubtitleScraper:
 		Returns:
 			True if login succeeded, False otherwise.
 		"""
-		# rate-limit courtesy pause
-		time.sleep(random.random())
+		# enforce 1 req/sec rate limit
+		self._rate_limit_wait()
 		payload = {
 			"username": username,
 			"password": password,
@@ -89,8 +106,8 @@ class SubtitleScraper:
 			list: List of subtitle result dicts with keys:
 				file_id, language, release, download_count.
 		"""
-		# rate-limit courtesy pause
-		time.sleep(random.random())
+		# enforce 1 req/sec rate limit
+		self._rate_limit_wait()
 		params = {
 			"imdb_id": imdb_id,
 			"languages": languages,
@@ -133,8 +150,8 @@ class SubtitleScraper:
 		Returns:
 			str: Path to the downloaded subtitle file.
 		"""
-		# rate-limit courtesy pause
-		time.sleep(random.random())
+		# enforce 1 req/sec rate limit
+		self._rate_limit_wait()
 		# build headers with JWT auth if available
 		download_headers = dict(self._headers)
 		if self._jwt_token:

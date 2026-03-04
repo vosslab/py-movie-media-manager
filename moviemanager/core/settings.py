@@ -35,7 +35,6 @@ class Settings:
 
 	# renamer templates
 	path_template: str = "{title}-{year}"
-	file_template: str = "{title}-{year}"
 	# replace spaces with underscores in filenames for shell safety
 	spaces_to_underscores: bool = True
 	# separator between appended media tokens (hyphen, dot, or underscore)

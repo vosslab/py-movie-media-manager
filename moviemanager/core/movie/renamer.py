@@ -100,19 +100,21 @@ def expand_template(
 def build_file_template(
 	settings: "moviemanager.core.settings.Settings",
 ) -> str:
-	"""Assemble a file template from base template plus enabled media tokens.
+	"""Assemble a file template from hardcoded title-year base plus media tokens.
 
-	Reads the base file_template from settings and appends media tokens
-	(resolution, vcodec, acodec, channels) if their corresponding
-	checkboxes are enabled. Tokens are joined with the configured separator.
+	Uses {title} and {year} joined by the configured separator as the base,
+	then appends media tokens (resolution, vcodec, acodec, channels) if their
+	corresponding checkboxes are enabled.
 
 	Args:
-		settings: Settings dataclass with template and checkbox fields.
+		settings: Settings dataclass with separator and checkbox fields.
 
 	Returns:
 		Assembled template string, e.g. "{title}-{year}-{resolution}-{vcodec}".
 	"""
-	template = settings.file_template
+	sep = settings.media_separator
+	# hardcoded base: title and year joined by separator
+	template = "{title}" + sep + "{year}"
 	sep = settings.media_separator
 	# append each enabled media token
 	token_list = []

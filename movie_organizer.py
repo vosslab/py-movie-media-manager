@@ -309,10 +309,9 @@ def cmd_rename(args: argparse.Namespace) -> None:
 		args: Parsed command-line arguments.
 	"""
 	settings = moviemanager.core.settings.load_settings(args.config_file)
-	# override template from CLI if provided
+	# override path template from CLI if provided
 	if args.template:
 		settings.path_template = args.template
-		settings.file_template = args.template
 	api = moviemanager.api.movie_api.MovieAPI(settings)
 	movies = api.scan_directory(args.directory)
 	console = rich.console.Console()

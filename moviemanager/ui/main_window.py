@@ -1598,6 +1598,10 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 				"Match movies to IMDB first (Step 1)."
 			)
 			return
+		# check subtitle credentials before queuing batch
+		if self._settings.download_subtitles:
+			if not self._check_subtitle_credentials():
+				return
 		# build list of individual download tasks
 		tasks = self._build_download_tasks(scraped_movies)
 		if not tasks:
@@ -1726,6 +1730,35 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._status.showMessage("Trailer download queued", 3000)
 
 	#============================================
+	def _check_subtitle_credentials(self) -> bool:
+		"""Check OpenSubtitles API key and login credentials.
+
+		Shows a warning dialog and offers to open Settings if anything
+		is missing. Returns True if all credentials are configured.
+		"""
+		missing = []
+		if not self._settings.opensubtitles_api_key:
+			missing.append("API key")
+		if not self._settings.opensubtitles_username:
+			missing.append("username")
+		if not self._settings.opensubtitles_password:
+			missing.append("password")
+		if not missing:
+			return True
+		# build a readable list of what is missing
+		label = ", ".join(missing)
+		result = PySide6.QtWidgets.QMessageBox.warning(
+			self, "OpenSubtitles Credentials Missing",
+			f"Subtitle downloads require OpenSubtitles {label}.\n\n"
+			"Open Settings to configure them?",
+			PySide6.QtWidgets.QMessageBox.StandardButton.Yes
+			| PySide6.QtWidgets.QMessageBox.StandardButton.No,
+		)
+		if result == PySide6.QtWidgets.QMessageBox.StandardButton.Yes:
+			self._show_settings()
+		return False
+
+	#============================================
 	def _download_subtitles(self) -> None:
 		"""Download subtitles for selected movie via TaskAPI."""
 		movie = self._movie_panel.get_selected_movie()
@@ -1739,6 +1772,9 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 				self, "No IMDB ID",
 				"Movie needs an IMDB ID. Scrape the movie first."
 			)
+			return
+		# check credentials before queuing
+		if not self._check_subtitle_credentials():
 			return
 		title = movie.title or "Unknown"
 		languages = self._settings.subtitle_languages

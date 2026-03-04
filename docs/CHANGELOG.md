@@ -3,6 +3,54 @@
 ## 2026-03-03
 
 ### Additions and New Features
+- Created [docs/OPENSUBTITLES_COM_API.md](docs/OPENSUBTITLES_COM_API.md) with OpenSubtitles.com
+  REST API reference covering authentication (API key + JWT), download limits,
+  required headers, example curl requests, subtitle encoding/formats, and
+  debugging tips.
+
+### Fixes and Maintenance
+- Fixed OpenSubtitles 429 rate-limit errors during batch subtitle downloads.
+  Previously each `download_subtitles()` call created a new scraper and called
+  `login()`, triggering the 1 req/sec rate limit. Now the authenticated scraper
+  is cached on the `MovieAPI` instance (JWT valid 24h) and reused across jobs.
+- Enforced minimum 1-second gap (plus jitter) between all OpenSubtitles API
+  requests in `SubtitleScraper`. Replaced `time.sleep(random.random())` with a
+  timestamp-based rate limiter that tracks elapsed time since last request.
+
+### Removals and Deprecations
+- Removed the free-form "File Template" text field from Settings > Renamer tab.
+  File templates are now hardcoded as `{title}{sep}{year}` plus any enabled media
+  tokens, all joined by the configured separator. This prevents users from
+  introducing shell-unsafe literal characters (spaces, parens) that conflict with
+  shell-safe mode. The `file_template` field was also removed from the Settings
+  dataclass and YAML persistence. The `--template` CLI flag now only sets the
+  path template.
+
+### Behavior or Interface Changes
+- Added pre-flight credential check before subtitle downloads. Both single-movie
+  and batch download paths now check for API key, username, and password before
+  queuing jobs. If anything is missing, a warning dialog tells the user what is
+  needed and offers to open Settings.
+
+### Fixes and Maintenance
+- Enforced credential requirement for subtitle downloads. The OpenSubtitles
+  `/download` endpoint requires JWT auth; previously missing credentials caused
+  silent 401 errors. Now raises a clear `auth_failed` error early if username or
+  password is not configured.
+- Wrapped `scraper.download()` call with exception handling matching the existing
+  `scraper.search()` pattern (401 -> auth_failed, timeout, connection error,
+  generic request error). Previously raw `HTTPError` tracebacks propagated
+  uncategorized.
+- Fixed `UnboundLocalError` in `download_subtitles()` caused by inline
+  `import moviemanager.scraper.subtitle_scraper` inside the method. Python
+  treated `moviemanager` as local to the entire function, breaking earlier
+  references on lines 795-796. Moved the import to top-level with the other
+  `moviemanager.scraper.*` imports.
+- Improved error display in jobs dialog for uncategorized errors (e.g.
+  tracebacks). Now finds the last non-empty line instead of blindly taking
+  the final line, which could be empty.
+
+### Additions and New Features
 - Added OpenSubtitles user authentication (JWT login) for subtitle downloads.
   The REST API requires a logged-in user token for `/download` requests;
   without it, downloads are limited to 5 per IP per 24 hours. Added

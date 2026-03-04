@@ -162,26 +162,6 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		)
 		path_help.setWordWrap(True)
 		rename_layout.addRow("", path_help)
-		self._file_template_edit = PySide6.QtWidgets.QLineEdit()
-		rename_layout.addRow(
-			"File Template:", self._file_template_edit
-		)
-		# help text for file template variables (#12)
-		file_help = PySide6.QtWidgets.QLabel(
-			"Variables: {title}, {year}, {rating}, "
-			"{certification}, {genre}"
-		)
-		# use palette-aware styling instead of hardcoded colors (#23)
-		file_help_font = file_help.font()
-		file_help_font.setPointSizeF(
-			file_help_font.pointSizeF() * 0.85
-		)
-		file_help.setFont(file_help_font)
-		file_help.setForegroundRole(
-			PySide6.QtGui.QPalette.ColorRole.PlaceholderText
-		)
-		file_help.setWordWrap(True)
-		rename_layout.addRow("", file_help)
 		# separator combo for media tokens
 		self._separator_combo = PySide6.QtWidgets.QComboBox()
 		self._separator_combo.addItem("Hyphen (-)", "-")
@@ -224,9 +204,6 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		rename_layout.addRow("Preview:", self._rename_preview)
 		# connect signals to update preview on changes
 		self._path_template_edit.textChanged.connect(
-			self._update_rename_preview
-		)
-		self._file_template_edit.textChanged.connect(
 			self._update_rename_preview
 		)
 		self._spaces_check.stateChanged.connect(
@@ -358,7 +335,6 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		self._country_edit.setText(s.scrape_country)
 		self._cert_country_edit.setText(s.certification_country)
 		self._path_template_edit.setText(s.path_template)
-		self._file_template_edit.setText(s.file_template)
 		self._spaces_check.setChecked(s.spaces_to_underscores)
 		# separator combo
 		sep_index = self._separator_combo.findData(s.media_separator)
@@ -405,7 +381,6 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		s.scrape_country = self._country_edit.text()
 		s.certification_country = self._cert_country_edit.text()
 		s.path_template = self._path_template_edit.text()
-		s.file_template = self._file_template_edit.text()
 		s.spaces_to_underscores = self._spaces_check.isChecked()
 		s.media_separator = self._separator_combo.currentData()
 		s.rename_resolution = self._res_check.isChecked()
@@ -429,8 +404,7 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 	def _update_rename_preview(self) -> None:
 		"""Update the live preview label with example folder and file name."""
 		path_tmpl = self._path_template_edit.text()
-		file_tmpl = self._file_template_edit.text()
-		if not path_tmpl and not file_tmpl:
+		if not path_tmpl:
 			self._rename_preview.setText("")
 			return
 
@@ -453,9 +427,9 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 			"{channels}": "5.1",
 		}
 
-		# build the file portion with appended media tokens
+		# build the file portion from hardcoded title-year base
 		sep = self._separator_combo.currentData() or "-"
-		file_part = file_tmpl
+		file_part = "{title}" + sep + "{year}"
 		token_list = []
 		if self._res_check.isChecked():
 			token_list.append("{resolution}")

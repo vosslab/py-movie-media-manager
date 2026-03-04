@@ -23,6 +23,7 @@ import moviemanager.core.settings
 import moviemanager.api.download_errors
 import moviemanager.scraper.browser_cookies
 import moviemanager.scraper.imdb_scraper
+import moviemanager.scraper.subtitle_scraper
 import moviemanager.scraper.tmdb_scraper
 
 
@@ -57,6 +58,8 @@ class MovieAPI:
 		self._tmdb_lookup_scraper = None
 		self._tmdb_lookup_spec = ""
 		self._tmdb_poster_cache = {}
+		# cached subtitle scraper with JWT token (valid 24h)
+		self._subtitle_scraper = None
 		# track failed parental guide fetches for deferred retry
 		self._failed_parental_guides = []
 
@@ -779,6 +782,52 @@ class MovieAPI:
 		return output_path
 
 	#============================================
+	def _get_subtitle_scraper(self):
+		"""Return a cached, authenticated SubtitleScraper.
+
+		Creates and logs in a new scraper on first call, then reuses
+		the same instance (JWT token is valid 24 hours). Raises
+		DownloadError if credentials are missing or login fails.
+
+		Returns:
+			Authenticated SubtitleScraper instance.
+		"""
+		_Cat = moviemanager.api.download_errors.DownloadCategory
+		_Err = moviemanager.api.download_errors.DownloadError
+		# return cached scraper if already logged in
+		if self._subtitle_scraper is not None:
+			return self._subtitle_scraper
+		# validate credentials
+		api_key = self._settings.opensubtitles_api_key
+		if not api_key:
+			raise _Err(
+				_Cat.no_api_key,
+				"OpenSubtitles API key is not configured. "
+				"Set it in Settings > API Keys."
+			)
+		osub_user = self._settings.opensubtitles_username
+		osub_pass = self._settings.opensubtitles_password
+		if not osub_user or not osub_pass:
+			raise _Err(
+				_Cat.auth_failed,
+				"OpenSubtitles username/password required for downloads. "
+				"Set them in Settings > API Keys."
+			)
+		scraper = moviemanager.scraper.subtitle_scraper.SubtitleScraper(
+			api_key
+		)
+		login_ok = scraper.login(osub_user, osub_pass)
+		if not login_ok:
+			raise _Err(
+				_Cat.auth_failed,
+				"OpenSubtitles login failed. "
+				"Check username/password in Settings > API Keys."
+			)
+		# cache for reuse across multiple subtitle downloads
+		self._subtitle_scraper = scraper
+		return scraper
+
+	#============================================
 	def download_subtitles(self, movie, languages: str = "en") -> list:
 		"""Download subtitles for a movie from OpenSubtitles.
 
@@ -798,28 +847,7 @@ class MovieAPI:
 			raise _Err(_Cat.no_imdb_id, "No IMDB ID for this movie")
 		if not movie.path:
 			raise _Err(_Cat.no_path, "Movie has no folder path")
-		api_key = self._settings.opensubtitles_api_key
-		if not api_key:
-			raise _Err(
-				_Cat.no_api_key,
-				"OpenSubtitles API key is not configured. "
-				"Set it in Settings > API Keys."
-			)
-		import moviemanager.scraper.subtitle_scraper
-		scraper = moviemanager.scraper.subtitle_scraper.SubtitleScraper(
-			api_key
-		)
-		# attempt JWT login for authenticated downloads
-		osub_user = self._settings.opensubtitles_username
-		osub_pass = self._settings.opensubtitles_password
-		if osub_user and osub_pass:
-			login_ok = scraper.login(osub_user, osub_pass)
-			if not login_ok:
-				raise _Err(
-					_Cat.auth_failed,
-					"OpenSubtitles login failed. "
-					"Check username/password in Settings > API Keys."
-				)
+		scraper = self._get_subtitle_scraper()
 		try:
 			results = scraper.search(
 				imdb_id=movie.imdb_id, languages=languages
@@ -852,7 +880,23 @@ class MovieAPI:
 			if os.path.exists(srt_path):
 				downloaded.append(srt_path)
 				continue
-			result_path = scraper.download(file_id, srt_path)
+			try:
+				result_path = scraper.download(file_id, srt_path)
+			except requests.exceptions.HTTPError as exc:
+				status = getattr(exc.response, "status_code", None)
+				if status == 401:
+					raise _Err(
+						_Cat.auth_failed,
+						"OpenSubtitles download auth failed (401). "
+						"Check username/password in Settings > API Keys."
+					)
+				raise _Err(_Cat.download_failed, str(exc)[:200])
+			except requests.exceptions.Timeout:
+				raise _Err(_Cat.timeout, "OpenSubtitles download timed out")
+			except requests.exceptions.ConnectionError as exc:
+				raise _Err(_Cat.network_error, str(exc)[:200])
+			except requests.exceptions.RequestException as exc:
+				raise _Err(_Cat.download_failed, str(exc)[:200])
 			if result_path:
 				downloaded.append(result_path)
 		return downloaded

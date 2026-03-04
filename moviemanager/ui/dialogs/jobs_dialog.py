@@ -122,7 +122,9 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 					status_text = f"Error: {cat_label}"
 				else:
 					err = job.get("error_text", "")
-					short_err = err.split("\n")[-1][:120] if err else ""
+					# find last non-empty line for the actual exception message
+					err_lines = [l.strip() for l in err.split("\n") if l.strip()]
+					short_err = err_lines[-1][:120] if err_lines else "unknown"
 					status_text = f"Error: {short_err}"
 			status_item = PySide6.QtWidgets.QTableWidgetItem(
 				status_text
