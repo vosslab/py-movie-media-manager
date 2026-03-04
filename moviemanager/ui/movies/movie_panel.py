@@ -266,6 +266,15 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 		self._detail.shutdown()
 
 	#============================================
+	def set_settings(self, settings) -> None:
+		"""Pass settings to the table model for artwork checks.
+
+		Args:
+			settings: Application settings object.
+		"""
+		self._table_model.set_settings(settings)
+
+	#============================================
 	def set_sorting_enabled(self, enabled: bool) -> None:
 		"""Enable or disable interactive table sorting.
 

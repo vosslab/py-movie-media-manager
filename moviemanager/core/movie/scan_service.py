@@ -157,8 +157,8 @@ def scan_directory(
 			if "thumb" in artwork:
 				movie.thumb_url = artwork["thumb"]
 
-			# cache poster/trailer detection from filenames (no stat)
-			movie._has_poster_cache = "poster.jpg" in filename_lower_set
+			# cache artwork types detected from collector (reuses artwork dict)
+			movie._artwork_types_cache = set(artwork.keys())
 			movie._has_trailer_cache = any(
 				"trailer" in f and os.path.splitext(f)[1].lower() in video_exts
 				for f in filename_lower_set

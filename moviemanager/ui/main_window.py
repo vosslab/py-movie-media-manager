@@ -44,6 +44,7 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._movie_panel = (
 			moviemanager.ui.movies.movie_panel.MoviePanel()
 		)
+		self._movie_panel.set_settings(settings)
 		self.setCentralWidget(self._movie_panel)
 		# connect movie panel signals
 		self._movie_panel.open_folder_requested.connect(
@@ -319,6 +320,8 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			self._rename_ctrl.set_api(self._api)
 			self._download_ctrl.set_api(self._api)
 			self._download_ctrl.set_settings(self._settings)
+			# update movie panel with new settings for artwork checks
+			self._movie_panel.set_settings(self._settings)
 
 	#============================================
 	def _show_about(self):

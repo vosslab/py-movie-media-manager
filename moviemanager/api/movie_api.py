@@ -55,6 +55,7 @@ class MovieAPI:
 		# scraper lifecycle (stays in MovieAPI)
 		self._scraper = None
 		self._imdb_scraper = None
+		self._artwork_providers = []
 		self._imdb_transport = None
 		self._imdb_cookies_loaded_spec = ""
 		# create service instances
@@ -170,6 +171,8 @@ class MovieAPI:
 		pipeline = self._registry.create_pipeline(self._settings)
 		if pipeline.primary is not None:
 			self._scraper = pipeline.primary
+			# store artwork providers from the pipeline
+			self._artwork_providers = pipeline.get_artwork_providers()
 			# check for parental guide supplement provider
 			if pipeline.supplements:
 				for supp in pipeline.supplements:
@@ -457,6 +460,7 @@ class MovieAPI:
 			ensure_transport_fn=self._ensure_imdb_transport_on_scraper,
 			tmdb_id=tmdb_id, imdb_id=imdb_id,
 			bypass_cache=bypass_cache,
+			artwork_providers=self._artwork_providers,
 		)
 
 	#============================================

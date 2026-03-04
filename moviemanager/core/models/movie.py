@@ -7,6 +7,7 @@ import dataclasses
 # local repo modules
 import moviemanager.core.constants
 import moviemanager.core.file.classifier
+import moviemanager.core.file.collector
 import moviemanager.core.models.media_file
 import moviemanager.core.models.movie_set
 
@@ -139,8 +140,8 @@ class Movie:
 	movie_set: moviemanager.core.models.movie_set.MovieSet | None = None
 	# preserve unknown NFO elements for round-trip
 	unknown_elements: list = dataclasses.field(default_factory=list)
-	# cached poster/trailer detection from scanner (avoids re-stat)
-	_has_poster_cache: bool | None = dataclasses.field(
+	# cached artwork types and trailer detection from scanner (avoids re-stat)
+	_artwork_types_cache: set | None = dataclasses.field(
 		default=None, repr=False)
 	_has_trailer_cache: bool | None = dataclasses.field(
 		default=None, repr=False)
@@ -280,17 +281,54 @@ class Movie:
 	#============================================
 	@property
 	def has_poster(self) -> bool:
-		"""Return whether poster.jpg exists in the movie directory.
+		"""Return whether poster artwork exists in the movie directory.
 
 		Uses cached result from scanner when available.
 
 		Returns:
-			True if poster.jpg is found on disk.
+			True if poster artwork is found on disk.
 		"""
-		# use cached result from scanner when available
-		if self._has_poster_cache is not None:
-			return self._has_poster_cache
+		if self._artwork_types_cache is not None:
+			return "poster" in self._artwork_types_cache
 		if not self.path:
 			return False
 		poster_path = os.path.join(self.path, "poster.jpg")
 		return os.path.isfile(poster_path)
+
+	#============================================
+	@property
+	def has_fanart(self) -> bool:
+		"""Return whether fanart artwork exists in the movie directory.
+
+		Uses cached result from scanner when available.
+
+		Returns:
+			True if fanart artwork is found on disk.
+		"""
+		if self._artwork_types_cache is not None:
+			return "fanart" in self._artwork_types_cache
+		if not self.path:
+			return False
+		fanart_path = os.path.join(self.path, "fanart.jpg")
+		return os.path.isfile(fanart_path)
+
+	#============================================
+	@property
+	def artwork_types_on_disk(self) -> set:
+		"""Return set of artwork type names found on disk.
+
+		Uses cached result from scanner when available,
+		falls back to collector scan.
+
+		Returns:
+			Set of artwork type strings present on disk.
+		"""
+		if self._artwork_types_cache is not None:
+			return set(self._artwork_types_cache)
+		if not self.path or not os.path.isdir(self.path):
+			return set()
+		# fallback: check disk using collector
+		artwork = moviemanager.core.file.collector.collect_artwork_files(
+			self.path,
+		)
+		return set(artwork.keys())

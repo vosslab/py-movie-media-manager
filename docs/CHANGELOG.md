@@ -2,6 +2,27 @@
 
 ## 2026-03-04
 
+### Additions and New Features
+- Wired ARTWORK providers into the scraper pipeline. `FanartScraper` is now added as a supplement
+  in `create_pipeline()` when a `fanart_api_key` is configured. Added `get_artwork_providers()`
+  to `ProviderPipeline` for targeted artwork provider access.
+- Added artwork supplement step to `ScrapeService.scrape_movie()`: after metadata fetch, calls
+  `get_artwork()` on each artwork provider and fills in missing URL fields (poster, fanart,
+  banner, clearart, logo, discart, thumb) without overwriting existing URLs.
+- Added `_apply_metadata_to_movie()` fields for banner, clearart, logo, and discart URLs so
+  metadata from TMDB or other providers propagates to the Movie object.
+- Replaced `_has_poster_cache` with `_artwork_types_cache` (set of artwork type strings) on the
+  Movie model. Added `has_fanart` and `artwork_types_on_disk` properties for checking any artwork
+  type presence.
+- Rewrote `ArtworkService.download_artwork()` to iterate over all enabled artwork types (poster,
+  fanart, banner, clearart, logo, discart) using a download map, instead of only poster and fanart.
+- Fixed `DownloadController._build_download_tasks()` artwork gating: now checks all enabled artwork
+  types via `artwork_types_on_disk` instead of only `has_poster`.
+- Updated `MovieTableModel.check_no_artwork()` to check all enabled artwork types, not just poster.
+- Three-color artwork status dot in the GUI: green (all enabled types present), yellow (some
+  present), red (none present). Added tooltip breakdown listing each enabled artwork type and
+  its presence. Settings-aware via `MovieTableModel.set_settings()`.
+
 ### Fixes and Maintenance
 - Extracted `toolbar_builder.py` from `main_window.py`: moved the 200-line `_setup_toolbar()`
   body into a standalone `build_toolbar(window)` function following the existing `menu_builder.py`

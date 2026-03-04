@@ -35,6 +35,35 @@ DURATION_COLUMN = 4
 
 
 #============================================
+def _get_enabled_artwork_types(settings) -> set:
+	"""Return set of artwork type names enabled in settings.
+
+	Args:
+		settings: Application settings object, or None.
+
+	Returns:
+		Set of artwork type strings that are enabled for download.
+	"""
+	if settings is None:
+		# default: just poster and fanart
+		return {"poster", "fanart"}
+	enabled = set()
+	if settings.download_poster:
+		enabled.add("poster")
+	if settings.download_fanart:
+		enabled.add("fanart")
+	if getattr(settings, "download_banner", False):
+		enabled.add("banner")
+	if getattr(settings, "download_clearart", False):
+		enabled.add("clearart")
+	if getattr(settings, "download_logo", False):
+		enabled.add("logo")
+	if getattr(settings, "download_discart", False):
+		enabled.add("discart")
+	return enabled
+
+
+#============================================
 def _get_duration_minutes(movie) -> int:
 	"""Return the movie duration in minutes.
 
@@ -75,6 +104,17 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 		# sort state
 		self._sort_column = None
 		self._sort_order = PySide6.QtCore.Qt.SortOrder.AscendingOrder
+		# settings reference for artwork completeness checks
+		self._settings = None
+
+	#============================================
+	def set_settings(self, settings) -> None:
+		"""Set the application settings for artwork completeness checks.
+
+		Args:
+			settings: Application settings object.
+		"""
+		self._settings = settings
 
 	#============================================
 	def set_movies(self, movies: list) -> None:
@@ -294,10 +334,16 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 
 	#============================================
 	def check_no_artwork(self) -> None:
-		"""Check only rows where movie has no poster."""
+		"""Check rows where any enabled artwork type is missing."""
 		self._checked.clear()
+		enabled = _get_enabled_artwork_types(self._settings)
 		for movie in self._filtered:
-			if not movie.has_poster:
+			if not enabled:
+				# nothing enabled, skip all
+				continue
+			on_disk = movie.artwork_types_on_disk
+			# check if any enabled type is missing
+			if not enabled.issubset(on_disk):
 				self._checked.add(id(movie))
 		top = self.index(0, 0)
 		bottom = self.index(self.rowCount() - 1, 0)
@@ -410,7 +456,32 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 					return PySide6.QtCore.Qt.CheckState.Checked
 				return PySide6.QtCore.Qt.CheckState.Unchecked
 			return None
-		# status indicator columns (cols 4-8)
+		# artwork column (col 7): three-state completeness
+		if col == 7 and self._settings is not None:
+			if role == PySide6.QtCore.Qt.ItemDataRole.DisplayRole:
+				return ""
+			if role == PySide6.QtCore.Qt.ItemDataRole.UserRole:
+				enabled = _get_enabled_artwork_types(self._settings)
+				if not enabled:
+					return True
+				on_disk = movie.artwork_types_on_disk
+				present = enabled & on_disk
+				if present == enabled:
+					return "complete"
+				if present:
+					return "partial"
+				return False
+			if role == PySide6.QtCore.Qt.ItemDataRole.ToolTipRole:
+				enabled = _get_enabled_artwork_types(self._settings)
+				on_disk = movie.artwork_types_on_disk
+				lines = []
+				for art_type in sorted(enabled):
+					status = "yes" if art_type in on_disk else "no"
+					lines.append(f"  {art_type}: {status}")
+				tooltip = "Artwork:\n" + "\n".join(lines)
+				return tooltip
+			return None
+		# status indicator columns (cols 5-9)
 		if col in STATUS_COLUMNS:
 			attr_name, label = STATUS_COLUMNS[col]
 			flag_value = getattr(movie, attr_name, False)

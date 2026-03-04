@@ -8,6 +8,36 @@ import PySide6.QtWidgets
 import moviemanager.ui.task_api
 
 
+# settings flag name for each artwork type
+_ART_SETTINGS = {
+	"poster": "download_poster",
+	"fanart": "download_fanart",
+	"banner": "download_banner",
+	"clearart": "download_clearart",
+	"logo": "download_logo",
+	"discart": "download_discart",
+}
+
+
+#============================================
+def _check_needs_artwork(movie, settings) -> bool:
+	"""Return True if the movie is missing any enabled artwork type.
+
+	Args:
+		movie: Movie instance with artwork_types_on_disk property.
+		settings: Application settings with download flags.
+
+	Returns:
+		True if at least one enabled artwork type is missing on disk.
+	"""
+	on_disk = movie.artwork_types_on_disk
+	for art_type, setting_name in _ART_SETTINGS.items():
+		if getattr(settings, setting_name, False):
+			if art_type not in on_disk:
+				return True
+	return False
+
+
 #============================================
 class DownloadController(PySide6.QtCore.QObject):
 	"""Handles artwork, trailer, and subtitle downloads.
@@ -162,9 +192,11 @@ class DownloadController(PySide6.QtCore.QObject):
 		languages = self._settings.subtitle_languages
 		for movie in movies:
 			title = movie.title or "Unknown"
-			# artwork (poster + fanart)
-			if (self._settings.download_poster
-					and not movie.has_poster):
+			# artwork -- check if any enabled artwork type is missing
+			needs_artwork = _check_needs_artwork(
+				movie, self._settings,
+			)
+			if needs_artwork:
 				tasks.append((
 					f"Artwork: {title}",
 					self._api.download_artwork,

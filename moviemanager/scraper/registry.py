@@ -198,6 +198,23 @@ class ScraperRegistry:
 			if not already:
 				sub_prov = self.create_provider(sp_name, settings)
 				supplements.append(sub_prov)
+		# add artwork provider if available
+		artwork_providers = self.get_available(
+			_Cap.ARTWORK, settings,
+		)
+		for ap_name in artwork_providers:
+			ap_cls = self._providers[ap_name]["cls"]
+			# skip if primary is the same class
+			if primary is not None and type(primary).__name__ == ap_cls.__name__:
+				continue
+			# skip if already added as supplement
+			already = any(
+				type(s).__name__ == ap_cls.__name__
+				for s in supplements
+			)
+			if not already:
+				art_prov = self.create_provider(ap_name, settings)
+				supplements.append(art_prov)
 		pipeline = ProviderPipeline(
 			primary=primary, supplements=supplements,
 		)
@@ -260,6 +277,21 @@ class ProviderPipeline:
 			if capability in caps:
 				return provider
 		return None
+
+	#============================================
+	def get_artwork_providers(self) -> list:
+		"""Return all providers that support the ARTWORK capability.
+
+		Returns:
+			list: Provider instances with ARTWORK capability.
+		"""
+		_Cap = moviemanager.scraper.interfaces.ProviderCapability
+		providers = []
+		for provider in self.supplements:
+			caps = getattr(provider, "capabilities", set())
+			if _Cap.ARTWORK in caps:
+				providers.append(provider)
+		return providers
 
 
 #============================================

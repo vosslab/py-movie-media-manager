@@ -7,6 +7,7 @@ import PySide6.QtWidgets
 
 # colors for present vs missing indicators
 COLOR_PRESENT = PySide6.QtGui.QColor("#4CAF50")
+COLOR_PARTIAL = PySide6.QtGui.QColor("#FFC107")
 COLOR_MISSING = PySide6.QtGui.QColor("#F44336")
 
 
@@ -40,9 +41,11 @@ class StatusIconDelegate(PySide6.QtWidgets.QStyledItemDelegate):
 			return
 		painter.save()
 		painter.setRenderHint(PySide6.QtGui.QPainter.RenderHint.Antialiasing)
-		# pick color based on flag value
-		if flag:
+		# pick color: supports bool (True/False) and string ("complete"/"partial")
+		if flag is True or flag == "complete":
 			color = COLOR_PRESENT
+		elif flag == "partial":
+			color = COLOR_PARTIAL
 		else:
 			color = COLOR_MISSING
 		painter.setBrush(PySide6.QtGui.QBrush(color))

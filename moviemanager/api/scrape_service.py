@@ -58,6 +58,7 @@ class ScrapeService:
 		ensure_transport_fn=None,
 		tmdb_id: int = 0, imdb_id: str = "",
 		bypass_cache: bool = False,
+		artwork_providers: list = None,
 	) -> None:
 		"""Fetch and apply metadata to a movie from the active scraper.
 
@@ -134,6 +135,11 @@ class ScrapeService:
 			)
 		# map MediaMetadata fields to the Movie object
 		_apply_metadata_to_movie(movie, metadata)
+		# supplement artwork URLs from artwork providers (e.g., fanart.tv)
+		if artwork_providers:
+			self._fetch_artwork_supplement(
+				movie, artwork_providers,
+			)
 		# build NFO path from first video file basename
 		nfo_path = ""
 		video_file = movie.video_file
@@ -209,6 +215,54 @@ class ScrapeService:
 			self._failed_parental_guides.append(
 				(metadata.imdb_id, movie)
 			)
+
+	#============================================
+	def _fetch_artwork_supplement(
+		self, movie, artwork_providers: list,
+	) -> None:
+		"""Supplement movie artwork URLs from artwork providers.
+
+		Calls get_artwork() on each provider and fills in missing
+		artwork URLs on the movie object without overwriting existing ones.
+
+		Args:
+			movie: Movie instance to update with artwork URLs.
+			artwork_providers: List of ArtworkProvider instances.
+		"""
+		# mapping from artwork type to movie attribute name
+		url_attr_map = {
+			"poster": "poster_url",
+			"fanart": "fanart_url",
+			"banner": "banner_url",
+			"clearart": "clearart_url",
+			"logo": "logo_url",
+			"discart": "discart_url",
+			"thumb": "thumb_url",
+		}
+		for provider in artwork_providers:
+			try:
+				artwork = provider.get_artwork(
+					tmdb_id=movie.tmdb_id,
+					imdb_id=movie.imdb_id,
+				)
+			except Exception as err:
+				_LOG.warning(
+					"Artwork supplement failed from %s: %s",
+					type(provider).__name__, err,
+				)
+				continue
+			# fill in missing URLs from artwork results
+			for art_type, url_attr in url_attr_map.items():
+				if art_type not in artwork:
+					continue
+				# only fill if the movie URL is currently empty
+				current = getattr(movie, url_attr, "")
+				if current:
+					continue
+				# use the first URL from the list
+				urls = artwork[art_type]
+				if urls:
+					setattr(movie, url_attr, urls[0])
 
 	#============================================
 	def fetch_parental_guides(
@@ -472,6 +526,10 @@ def _apply_metadata_to_movie(movie, metadata) -> None:
 	movie.tmdb_id = metadata.tmdb_id
 	movie.poster_url = metadata.poster_url
 	movie.fanart_url = metadata.fanart_url
+	movie.banner_url = metadata.banner_url or movie.banner_url
+	movie.clearart_url = metadata.clearart_url or movie.clearart_url
+	movie.logo_url = metadata.logo_url or movie.logo_url
+	movie.discart_url = metadata.discart_url or movie.discart_url
 	movie.certification = metadata.certification
 	movie.release_date = metadata.release_date
 	movie.trailer_url = metadata.trailer_url
