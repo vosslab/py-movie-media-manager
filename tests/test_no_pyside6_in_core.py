@@ -4,9 +4,9 @@ import os
 
 import pytest
 
-import git_file_utils
+import file_utils
 
-REPO_ROOT = git_file_utils.get_repo_root()
+REPO_ROOT = file_utils.get_repo_root()
 
 # directories that must not import PySide6
 GUARDED_DIRS = [

@@ -4,9 +4,9 @@
 import subprocess
 
 # local repo modules
-import git_file_utils
+import file_utils
 
-REPO_ROOT = git_file_utils.get_repo_root()
+REPO_ROOT = file_utils.get_repo_root()
 
 
 #============================================
