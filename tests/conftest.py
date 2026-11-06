@@ -1,17 +1,23 @@
+import sys
+
+import file_utils
+
+# Insert the repo root onto sys.path so top-level modules import from any test
+# file without installing the package first. file_utils.get_repo_root() uses
+# git rev-parse --show-toplevel under the hood.
+_repo_root = file_utils.get_repo_root()
+if _repo_root not in sys.path:
+	sys.path.insert(0, _repo_root)
+
+
 # Exclude both end-to-end tiers from pytest collection. tests/playwright/
 # holds browser-driven tests (Playwright), and tests/e2e/ holds heavier
 # shell/Python whole-system runners. Both run outside pytest -- see
 # docs/PLAYWRIGHT_USAGE.md and docs/E2E_TESTS.md.
+# tests/_temp/ stays collectable so pytest-suitable temporary test_*.py files
+# run in the normal fast lane. Heavier temporary checks run explicitly.
 collect_ignore = ["e2e", "playwright"]
 
-"""Pytest configuration -- add repo root to sys.path for imports."""
-import sys
-import file_utils
-
-# add repo root so 'import moviemanager' works without pip install
-_repo_root = file_utils.get_repo_root()
-if _repo_root not in sys.path:
-	sys.path.insert(0, _repo_root)
 
 # REPO_HYGIENE_FILTERS is the repo-local hygiene-exclusion registry (Layer 2).
 # file_utils.discover_files reads it from this conftest, which is the right
@@ -44,6 +50,7 @@ if _repo_root not in sys.path:
 #       "pyflakes_code_lint": ["devel/scratch_*.py"],
 #   }
 REPO_HYGIENE_FILTERS = {}
+
 
 # === OPTIONAL_HELPERS_MENU ===
 # See meta/docs/PROPAGATION_RULES.md for the managed-block propagation contract.
