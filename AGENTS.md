@@ -3,11 +3,10 @@ See Python coding style in docs/PYTHON_STYLE.md.
 See Markdown style in docs/MARKDOWN_STYLE.md.
 See repo style in docs/REPO_STYLE.md.
 When making edits, document them in docs/CHANGELOG.md.
-When in doubt, implement the changes the user asked for rather than waiting for a response; the user is not the best reader and will likely miss your request and then be confused why it was not implemented or fixed.
-When changing code always run focused tests on changed code, documentation does not require tests.
-Agents may find pytest programs to run in the tests folder, including smoke tests and pyflakes runner scripts. These should all be capable of the -k flag, such as pytest test_feature.py -k changed_file.py
+Record human-stated guidance in docs/HUMAN_GUIDANCE.md; record design decisions in docs/DESIGN_DECISIONS.md.
 
 ## Python Environment
-AI agents (Codex/Claude) must run Python using `source source_me.sh && python3` (use Python 3.12 only).
-This is only for AI agents runtime, not a requirement for repo scripts.
-On this user's macOS (Homebrew Python 3.12), Python modules are installed to `/opt/homebrew/lib/python3.12/site-packages/`.
+AI agents (Codex/Claude) must run Python using `source source_me.sh && python3`
+If additional PYTHONPATH paths are needed add them to source_me.sh
+(Prefer using the system python, use Python 3.12 for macOS and 3.13 for debian13; venv only as a last resort.).
+On this user's macOS (Homebrew Python 3.12), Python modules are installed to `/opt/homebrew/lib/python3.12/site-packages/`. Debian will likely be in `/home/vosslab/.local/lib/python3.1x/site-packages/`
