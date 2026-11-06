@@ -8,6 +8,6 @@ The entries below are development snapshots, not published releases.
 
 - Movie matching behavior is unchanged; its dialog internals now have dedicated search, preview,
   and prefetch components that simplify future maintenance.
-- macOS setup guidance now calls out MediaInfo, yt-dlp, and FFmpeg, and unused runtime dependencies
+- macOS setup guidance now calls out MediaInfo and yt-dlp, and unused runtime dependencies
   have been removed.
 

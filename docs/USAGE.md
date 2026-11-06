@@ -75,8 +75,12 @@ python3 movie_organizer.py rename --directory "/Volumes/Media/Movies" --execute
 
 The CLI `artwork` subcommand downloads configured artwork for scraped movies.
 Use the GUI's Download action for trailer or subtitle downloads. Trailers require
-`yt-dlp` and FFmpeg but no provider API key; subtitles require the OpenSubtitles
+`yt-dlp` but no provider API key; subtitles require the OpenSubtitles
 API key, username, and password saved in **Settings**.
+
+Trailers use an existing combined MP4 download without FFmpeg. Resolution depends
+on what the source offers; sources without a direct combined MP4 cannot be downloaded.
+The app ignores personal yt-dlp configuration to keep this behavior consistent.
 
 ## Inputs, outputs, and configuration
 

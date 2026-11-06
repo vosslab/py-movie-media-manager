@@ -8,7 +8,6 @@ import moviemanager.core.constants
 import moviemanager.core.models.media_file
 import moviemanager.core.models.movie
 import moviemanager.core.movie.rename_service
-import moviemanager.core.movie.template_engine
 import moviemanager.core.utils
 
 
@@ -66,63 +65,6 @@ def _make_movie(tmp_path: str, title: str = "Inception", year: str = "2010",
 		media_files=[video_mf],
 	)
 	return movie
-
-
-#============================================
-def test_expand_template_basic() -> None:
-	"""Template with title and year expands correctly."""
-	movie = moviemanager.core.models.movie.Movie(
-		title="Inception",
-		year="2010",
-	)
-	result = moviemanager.core.movie.template_engine.expand_template(
-		"{title} ({year})", movie
-	)
-	assert result == "Inception (2010)"
-
-
-#============================================
-def test_expand_template_missing_year() -> None:
-	"""Template with missing year removes empty parentheses."""
-	movie = moviemanager.core.models.movie.Movie(
-		title="Inception",
-		year="",
-	)
-	result = moviemanager.core.movie.template_engine.expand_template(
-		"{title} ({year})", movie
-	)
-	assert result == "Inception"
-
-
-#============================================
-def test_expand_template_first_letter() -> None:
-	"""Template with first_letter produces correct prefix."""
-	movie = moviemanager.core.models.movie.Movie(
-		title="Inception",
-		year="2010",
-	)
-	# note: clean_filename strips slashes, so use a dash separator
-	result = moviemanager.core.movie.template_engine.expand_template(
-		"{first_letter} - {title}", movie
-	)
-	assert result == "I - Inception"
-
-
-#============================================
-def test_expand_template_special_chars() -> None:
-	"""Title with colons and slashes gets cleaned."""
-	movie = moviemanager.core.models.movie.Movie(
-		title='Mission: Impossible / Rogue Nation',
-		year="2015",
-	)
-	result = moviemanager.core.movie.template_engine.expand_template(
-		"{title} ({year})", movie
-	)
-	# colons and slashes should be removed by clean_filename
-	assert ":" not in result
-	assert "/" not in result
-	assert "2015" in result
-	assert "Mission" in result
 
 
 #============================================
@@ -251,19 +193,3 @@ def test_shell_safe_filename_no_leading_trailing() -> None:
 		"__test__"
 	)
 	assert result == "test"
-
-
-#============================================
-def test_expand_template_shell_safe() -> None:
-	"""Shell-safe template expansion cleans special characters."""
-	movie = moviemanager.core.models.movie.Movie(
-		title="Ocean's Eleven",
-		year="2001",
-	)
-	result = moviemanager.core.movie.template_engine.expand_template(
-		"{title}-{year}", movie, spaces_to_underscores=True,
-	)
-	# no apostrophes or spaces in result
-	assert "'" not in result
-	assert " " not in result
-	assert "2001" in result

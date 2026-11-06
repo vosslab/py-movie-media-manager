@@ -76,6 +76,8 @@ Start here:
   written next to your videos.
 - [docs/BACKGROUND_JOBS.md](docs/BACKGROUND_JOBS.md) -- follow long-running scan, scrape, rename,
   and download work.
+- [docs/RELATED_PROJECTS.md](docs/RELATED_PROJECTS.md) -- explore the tinyMediaManager inspiration,
+  Kodi NFO references, and adjacent local-media tools.
 
 For maintainers and contributors:
 
@@ -84,6 +86,11 @@ For maintainers and contributors:
 - [docs/FILE_STRUCTURE.md](docs/FILE_STRUCTURE.md) -- where to find the GUI, domain code, tests,
   and developer tools.
 - [docs/CHANGELOG.md](docs/CHANGELOG.md) -- chronological record of changes.
+- Advanced references: [docs/TASK_API.md](docs/TASK_API.md),
+  [docs/WAF_CHALLENGES.md](docs/WAF_CHALLENGES.md), and
+  [docs/HOW_TO_PROPERLY_DOWNLOAD_IMDB_PARENTS_GUIDE_DATA.md](docs/HOW_TO_PROPERLY_DOWNLOAD_IMDB_PARENTS_GUIDE_DATA.md).
+- [docs/NEWS.md](docs/NEWS.md) and [docs/RELEASE_HISTORY.md](docs/RELEASE_HISTORY.md) -- concise
+  release-oriented summaries.
 
 ## License
 

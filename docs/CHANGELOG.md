@@ -4,6 +4,12 @@
 
 ### Fixes and Maintenance
 
+- Removed the FFmpeg requirement: trailers now download an existing combined MP4 over HTTP(S),
+  without merging or transcoding. Sources without that format fail rather than downloading
+  separate streams; available resolution may be lower. Media probing continues to use MediaInfo.
+- Pruned IMDb pytest coverage from 43 tests to four offline parsing contracts using the
+  permanent-test checklist. Removed duplicate helper checks and mocked transport checks that
+  incurred real rate-limit sleeps; production throttling and explicit live E2E checks remain.
 - Updated the GUI screenshot launcher with bounded capture attempts, process-specific cleanup,
   temporary PNG processing, and quality-90 WebP output capped at a 1920-pixel edge.
 - Verified a native 1200x843 WebP capture (73 KB). Automatic window sizing was unavailable;
@@ -21,6 +27,8 @@
 - Refreshed the remaining documentation audit: documented jobs queue control, corrected
   the parental-guide scraper reference, and labeled the original Python port plan as
   historical context rather than a current roadmap.
+- Added a deterministic, settings-isolated native GUI capture helper and a richer static
+  README screenshot with mixed match states and selected-movie details.
 
 ## 2026-03-04
 

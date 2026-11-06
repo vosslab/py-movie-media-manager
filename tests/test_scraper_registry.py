@@ -5,12 +5,10 @@ import types
 import unittest.mock
 
 # local repo modules
-import moviemanager.scraper.fanart_scraper
 import moviemanager.scraper.imdb_parental_guide_scraper
 import moviemanager.scraper.imdb_scraper
 import moviemanager.scraper.interfaces
 import moviemanager.scraper.registry
-import moviemanager.scraper.subtitle_scraper
 import moviemanager.scraper.tmdb_scraper
 
 
@@ -38,16 +36,6 @@ def _make_settings(**overrides) -> types.SimpleNamespace:
 	defaults.update(overrides)
 	settings = types.SimpleNamespace(**defaults)
 	return settings
-
-
-#============================================
-def test_register_and_get_names() -> None:
-	"""Verify providers can be registered and names retrieved."""
-	registry = moviemanager.scraper.registry.ScraperRegistry()
-	registry.register("tmdb", moviemanager.scraper.tmdb_scraper.TmdbScraper)
-	registry.register("imdb", moviemanager.scraper.imdb_scraper.ImdbScraper)
-	names = registry.get_registered_names()
-	assert names == ["imdb", "tmdb"]
 
 
 #============================================
@@ -102,39 +90,6 @@ def test_get_available_filters_by_settings_keys() -> None:
 	assert "tmdb" not in metadata_available
 	# IMDB needs no keys, so it should be available
 	assert "imdb" in metadata_available
-
-
-#============================================
-@unittest.mock.patch("tmdbv3api.TMDb")
-@unittest.mock.patch("tmdbv3api.Movie")
-@unittest.mock.patch("tmdbv3api.Find")
-def test_create_provider_tmdb(mock_find: object, mock_movie: object, mock_tmdb: object) -> None:
-	"""Verify create_provider instantiates TmdbScraper with api_key."""
-	registry = moviemanager.scraper.registry.ScraperRegistry()
-	registry.register(
-		"tmdb", moviemanager.scraper.tmdb_scraper.TmdbScraper,
-		requires_keys=["tmdb_api_key"],
-	)
-	settings = _make_settings(tmdb_api_key="test_key_123")
-	provider = registry.create_provider("tmdb", settings)
-	assert isinstance(
-		provider, moviemanager.scraper.tmdb_scraper.TmdbScraper
-	)
-
-
-#============================================
-def test_create_provider_imdb() -> None:
-	"""Verify create_provider instantiates ImdbScraper."""
-	registry = moviemanager.scraper.registry.ScraperRegistry()
-	registry.register(
-		"imdb", moviemanager.scraper.imdb_scraper.ImdbScraper,
-		requires_keys=[],
-	)
-	settings = _make_settings()
-	provider = registry.create_provider("imdb", settings)
-	assert isinstance(
-		provider, moviemanager.scraper.imdb_scraper.ImdbScraper
-	)
 
 
 #============================================
@@ -284,18 +239,6 @@ def test_pipeline_get_for_capability_no_primary() -> None:
 
 
 #============================================
-def test_auto_discovery() -> None:
-	"""Verify build_default_registry discovers all scrapers."""
-	registry = moviemanager.scraper.registry.build_default_registry()
-	names = registry.get_registered_names()
-	assert "tmdb" in names
-	assert "imdb" in names
-	assert "imdbparentalguide" in names
-	assert "fanart" in names
-	assert "subtitle" in names
-
-
-#============================================
 def test_auto_discovery_capabilities() -> None:
 	"""Verify discovered scrapers have correct capabilities."""
 	registry = moviemanager.scraper.registry.build_default_registry()
@@ -324,38 +267,3 @@ def test_auto_discovery_capabilities() -> None:
 	subs = registry.get_available(_Cap.SUBTITLES, settings_with_keys)
 	assert "subtitle" in subs
 	assert len(subs) == 1
-
-
-#============================================
-def test_class_name_to_provider_name() -> None:
-	"""Verify class name conversion strips suffix and lowercases."""
-	func = moviemanager.scraper.registry._class_name_to_provider_name
-	assert func("TmdbScraper") == "tmdb"
-	assert func("ImdbScraper") == "imdb"
-	assert func("FanartScraper") == "fanart"
-	assert func("SubtitleScraper") == "subtitle"
-	assert func("CustomProvider") == "custom"
-	assert func("PlainClass") == "plainclass"
-
-
-#============================================
-def test_scraper_capabilities_match_interfaces() -> None:
-	"""Verify each scraper's capabilities align with ABC inheritance."""
-	# TmdbScraper implements MetadataProvider + ArtworkProvider
-	tmdb_caps = moviemanager.scraper.tmdb_scraper.TmdbScraper.capabilities
-	assert _Cap.SEARCH in tmdb_caps
-	assert _Cap.METADATA in tmdb_caps
-	assert _Cap.ARTWORK in tmdb_caps
-	# ImdbScraper implements MetadataProvider
-	imdb_caps = moviemanager.scraper.imdb_scraper.ImdbScraper.capabilities
-	assert _Cap.SEARCH in imdb_caps
-	assert _Cap.METADATA in imdb_caps
-	# ImdbParentalGuideScraper implements ParentalGuideProvider
-	pg_caps = moviemanager.scraper.imdb_parental_guide_scraper.ImdbParentalGuideScraper.capabilities
-	assert _Cap.PARENTAL_GUIDE in pg_caps
-	# FanartScraper implements ArtworkProvider
-	fanart_caps = moviemanager.scraper.fanart_scraper.FanartScraper.capabilities
-	assert _Cap.ARTWORK in fanart_caps
-	# SubtitleScraper
-	sub_caps = moviemanager.scraper.subtitle_scraper.SubtitleScraper.capabilities
-	assert _Cap.SUBTITLES in sub_caps

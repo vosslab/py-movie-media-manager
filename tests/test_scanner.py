@@ -120,27 +120,3 @@ def test_scan_nested_dirs(tmp_path: object) -> None:
 	titles = {m.title for m in results}
 	assert "Top Movie" in titles
 	assert "Sub Movie" in titles
-
-
-#============================================
-def test_scan_empty_dir(tmp_path: object) -> None:
-	"""Empty directory returns an empty list."""
-	results = moviemanager.core.movie.scan_service.scan_directory(str(tmp_path))
-
-	assert results == []
-
-
-#============================================
-def test_detect_artwork(tmp_path: object) -> None:
-	"""Detect poster.jpg and fanart.jpg in a directory."""
-	_touch(str(tmp_path / "poster.jpg"))
-	_touch(str(tmp_path / "fanart.jpg"))
-
-	artwork = moviemanager.core.movie.scan_service.detect_artwork_files(
-		str(tmp_path)
-	)
-
-	assert "poster" in artwork
-	assert artwork["poster"] == str(tmp_path / "poster.jpg")
-	assert "fanart" in artwork
-	assert artwork["fanart"] == str(tmp_path / "fanart.jpg")

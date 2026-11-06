@@ -1,28 +1,10 @@
-"""Unit tests for the IMDB scraper with CDN suggestion API and GraphQL.
+"""Offline regression checks for movie identity, metadata, and parental-guide parsing."""
 
-Tests cover suggestion search, __NEXT_DATA__ metadata parsing, parental guide
-GraphQL API, cast extraction, poster URL cleanup, and transport integration.
-"""
-
-# Standard Library
-import os
-import sys
 import json
-import unittest.mock
 
-# PIP3 modules
-import pytest
-
-# add repo root to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-# local repo modules
 import moviemanager.scraper.imdb_parental_guide_scraper
 import moviemanager.scraper.imdb_scraper
-import moviemanager.scraper.types
 
-
-# ---- sample CDN suggestion API fixtures ----
 
 SAMPLE_SUGGESTION_RESPONSE = {
 	"d": [
@@ -68,7 +50,6 @@ SAMPLE_SUGGESTION_RESPONSE = {
 	"v": 1,
 }
 
-# ---- sample __NEXT_DATA__ fixtures for title page ----
 
 SAMPLE_NEXT_DATA_TITLE = {
 	"props": {
@@ -216,7 +197,6 @@ SAMPLE_NEXT_DATA_TITLE = {
 	}
 }
 
-# ---- sample __NEXT_DATA__ for parental guide page ----
 
 SAMPLE_NEXT_DATA_PARENTAL_GUIDE = {
 	"props": {
@@ -252,7 +232,6 @@ SAMPLE_NEXT_DATA_PARENTAL_GUIDE = {
 }
 
 
-#============================================
 def _make_title_html(next_data: dict) -> str:
 	"""Build a minimal IMDB page HTML with __NEXT_DATA__ script tag.
 
@@ -273,77 +252,6 @@ def _make_title_html(next_data: dict) -> str:
 	return html
 
 
-#============================================
-# Tests for _upgrade_poster_url
-#============================================
-
-def test_upgrade_poster_url_removes_resize() -> None:
-	"""Resize parameters are stripped from poster URLs."""
-	url = "https://m.media-amazon.com/images/M/abc._V1_UX300_.jpg"
-	result = moviemanager.scraper.imdb_scraper._upgrade_poster_url(url)
-	expected = "https://m.media-amazon.com/images/M/abc._V1_.jpg"
-	assert result == expected
-
-
-#============================================
-def test_upgrade_poster_url_keeps_clean() -> None:
-	"""Already-clean URLs are returned unchanged."""
-	url = "https://m.media-amazon.com/images/M/abc._V1_.jpg"
-	result = moviemanager.scraper.imdb_scraper._upgrade_poster_url(url)
-	assert result == url
-
-
-#============================================
-def test_upgrade_poster_url_empty() -> None:
-	"""Empty input returns empty string."""
-	result = moviemanager.scraper.imdb_scraper._upgrade_poster_url("")
-	assert result == ""
-
-
-#============================================
-def test_upgrade_poster_url_complex_resize() -> None:
-	"""Complex resize suffixes like _UY300_CR0,0,200,300_ are stripped."""
-	url = "https://m.media-amazon.com/images/M/movie._V1_UY300_CR0,0,200,300_.jpg"
-	result = moviemanager.scraper.imdb_scraper._upgrade_poster_url(url)
-	expected = "https://m.media-amazon.com/images/M/movie._V1_.jpg"
-	assert result == expected
-
-
-#============================================
-# Tests for _safe_get
-#============================================
-
-def test_safe_get_nested() -> None:
-	"""Nested dict traversal returns correct value."""
-	data = {"a": {"b": {"c": 42}}}
-	result = moviemanager.scraper.imdb_scraper._safe_get(data, "a", "b", "c")
-	assert result == 42
-
-
-#============================================
-def test_safe_get_missing_key() -> None:
-	"""Missing intermediate key returns default."""
-	data = {"a": {"x": 1}}
-	result = moviemanager.scraper.imdb_scraper._safe_get(
-		data, "a", "b", "c", default="missing"
-	)
-	assert result == "missing"
-
-
-#============================================
-def test_safe_get_none_value() -> None:
-	"""None intermediate value returns default."""
-	data = {"a": None}
-	result = moviemanager.scraper.imdb_scraper._safe_get(
-		data, "a", "b", default="fallback"
-	)
-	assert result == "fallback"
-
-
-#============================================
-# Tests for CDN suggestion API parsing
-#============================================
-
 def test_parse_suggestion_results_filters_movies() -> None:
 	"""Suggestion parser filters to movie types, excludes TV episodes and people."""
 	entries = SAMPLE_SUGGESTION_RESPONSE["d"]
@@ -357,108 +265,6 @@ def test_parse_suggestion_results_filters_movies() -> None:
 	assert results[1].imdb_id == "tt0305056"
 	assert results[1].year == "2006"
 
-
-#============================================
-def test_parse_suggestion_poster_url_cleaned() -> None:
-	"""Suggestion result poster URLs have resize params stripped."""
-	entries = SAMPLE_SUGGESTION_RESPONSE["d"]
-	results = moviemanager.scraper.imdb_scraper._parse_suggestion_results(entries)
-	assert results[0].poster_url.endswith("._V1_.jpg")
-	assert "UX300" not in results[0].poster_url
-
-
-#============================================
-def test_parse_suggestion_empty() -> None:
-	"""Empty suggestion list returns empty results."""
-	results = moviemanager.scraper.imdb_scraper._parse_suggestion_results([])
-	assert results == []
-
-
-#============================================
-def test_parse_suggestion_no_image() -> None:
-	"""Suggestion entry without image gets empty poster URL."""
-	entries = [
-		{
-			"id": "tt9999999",
-			"l": "No Poster Movie",
-			"qid": "movie",
-			"rank": 50000,
-			"y": 2020,
-		}
-	]
-	results = moviemanager.scraper.imdb_scraper._parse_suggestion_results(entries)
-	assert len(results) == 1
-	assert results[0].poster_url == ""
-
-
-#============================================
-def test_parse_suggestion_score_from_rank() -> None:
-	"""Suggestion results compute a popularity score from rank."""
-	entries = SAMPLE_SUGGESTION_RESPONSE["d"]
-	results = moviemanager.scraper.imdb_scraper._parse_suggestion_results(entries)
-	# lower rank = more popular = higher score
-	assert results[0].score > results[1].score
-	# scores are in 0-10 range
-	assert 0.0 <= results[0].score <= 10.0
-
-
-#============================================
-def test_search_uses_suggestion_api() -> None:
-	"""Search delegates to CDN suggestion API."""
-	mock_response = unittest.mock.Mock()
-	mock_response.status_code = 200
-	mock_response.json.return_value = SAMPLE_SUGGESTION_RESPONSE
-	with unittest.mock.patch(
-		"moviemanager.scraper.imdb_scraper.requests.get",
-		return_value=mock_response,
-	) as mock_get:
-		scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
-		results = scraper.search("Clerks", year="1994")
-	# verify suggestion API was called
-	assert mock_get.called
-	call_url = mock_get.call_args[0][0]
-	assert "suggestion" in call_url
-	# verify results parsed correctly
-	assert len(results) == 2
-	assert results[0].title == "Clerks"
-
-
-#============================================
-def test_search_empty_title() -> None:
-	"""Search with empty title returns empty list without calling API."""
-	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
-	# _fetch_suggestion returns [] for empty query, no HTTP call needed
-	with unittest.mock.patch(
-		"moviemanager.scraper.imdb_scraper.requests.get",
-	) as mock_get:
-		results = scraper.search("")
-	# should not make any HTTP calls
-	assert not mock_get.called
-	assert results == []
-
-
-#============================================
-# Tests for __NEXT_DATA__ extraction
-#============================================
-
-def test_extract_next_data_json() -> None:
-	"""__NEXT_DATA__ JSON is extracted from HTML."""
-	html = _make_title_html({"test": "value"})
-	result = moviemanager.scraper.imdb_scraper._extract_next_data_json(html)
-	assert result == {"test": "value"}
-
-
-#============================================
-def test_extract_next_data_missing() -> None:
-	"""Missing __NEXT_DATA__ returns empty dict."""
-	html = "<html><body>No data</body></html>"
-	result = moviemanager.scraper.imdb_scraper._extract_next_data_json(html)
-	assert result == {}
-
-
-#============================================
-# Tests for metadata HTML parsing
-#============================================
 
 def test_parse_metadata_all_fields() -> None:
 	"""Full metadata parsing populates all expected fields."""
@@ -503,134 +309,6 @@ def test_parse_metadata_all_fields() -> None:
 	assert metadata.producers[0].name == "Scott Mosier"
 
 
-#============================================
-def test_parse_metadata_empty_html() -> None:
-	"""HTML without __NEXT_DATA__ returns minimal metadata."""
-	html = "<html><body>Nothing here</body></html>"
-	metadata = moviemanager.scraper.imdb_scraper._parse_metadata_html(
-		html, "tt0000000"
-	)
-	assert metadata.title == ""
-	assert metadata.year == ""
-	assert metadata.imdb_id == "tt0000000"
-	assert metadata.media_source == "imdb"
-
-
-#============================================
-def test_parse_metadata_empty_next_data() -> None:
-	"""Empty __NEXT_DATA__ returns metadata with defaults."""
-	html = _make_title_html({"props": {"pageProps": {}}})
-	metadata = moviemanager.scraper.imdb_scraper._parse_metadata_html(
-		html, "tt0000000"
-	)
-	assert metadata.title == ""
-	assert metadata.year == ""
-	assert metadata.rating == 0.0
-	assert metadata.votes == 0
-	assert metadata.runtime == 0
-	assert metadata.genres == []
-	assert metadata.actors == []
-	assert metadata.imdb_id == "tt0000000"
-
-
-#============================================
-# Tests for cast extraction
-#============================================
-
-def test_parse_cast() -> None:
-	"""Cast members with character roles are extracted."""
-	above_fold = SAMPLE_NEXT_DATA_TITLE["props"]["pageProps"]["aboveTheFoldData"]
-	main_column = SAMPLE_NEXT_DATA_TITLE["props"]["pageProps"]["mainColumnData"]
-	actors = moviemanager.scraper.imdb_scraper._parse_cast(
-		above_fold, main_column
-	)
-	assert len(actors) == 2
-	# first actor
-	assert actors[0].name == "Brian O'Halloran"
-	assert actors[0].role == "Dante Hicks"
-	assert actors[0].department == "Acting"
-	assert actors[0].imdb_id == "nm0004778"
-	# second actor
-	assert actors[1].name == "Jeff Anderson"
-	assert actors[1].role == "Randal Graves"
-
-
-#============================================
-def test_parse_cast_empty() -> None:
-	"""No principalCredits returns empty actor list."""
-	actors = moviemanager.scraper.imdb_scraper._parse_cast({}, {})
-	assert actors == []
-
-
-#============================================
-# Tests for principal credits extraction
-#============================================
-
-def test_extract_director() -> None:
-	"""Director is extracted from principalCredits."""
-	above_fold = SAMPLE_NEXT_DATA_TITLE["props"]["pageProps"]["aboveTheFoldData"]
-	director = moviemanager.scraper.imdb_scraper._extract_principal_credits(
-		above_fold, "Director"
-	)
-	assert director == "Kevin Smith"
-
-
-#============================================
-def test_extract_writer() -> None:
-	"""Writer is extracted from principalCredits."""
-	above_fold = SAMPLE_NEXT_DATA_TITLE["props"]["pageProps"]["aboveTheFoldData"]
-	writer = moviemanager.scraper.imdb_scraper._extract_principal_credits(
-		above_fold, "Writer"
-	)
-	assert writer == "Kevin Smith"
-
-
-#============================================
-def test_extract_missing_category() -> None:
-	"""Missing category returns empty string."""
-	above_fold = SAMPLE_NEXT_DATA_TITLE["props"]["pageProps"]["aboveTheFoldData"]
-	result = moviemanager.scraper.imdb_scraper._extract_principal_credits(
-		above_fold, "Cinematographer"
-	)
-	assert result == ""
-
-
-#============================================
-# Tests for producers extraction
-#============================================
-
-def test_extract_producers() -> None:
-	"""Producers are extracted with Production department."""
-	above_fold = SAMPLE_NEXT_DATA_TITLE["props"]["pageProps"]["aboveTheFoldData"]
-	producers = moviemanager.scraper.imdb_scraper._extract_producers(above_fold)
-	assert len(producers) == 1
-	assert producers[0].name == "Scott Mosier"
-	assert producers[0].department == "Production"
-	assert producers[0].imdb_id == "nm0588201"
-
-
-#============================================
-# Tests for studio extraction
-#============================================
-
-def test_extract_studio() -> None:
-	"""Production company is extracted, not distributors."""
-	above_fold = SAMPLE_NEXT_DATA_TITLE["props"]["pageProps"]["aboveTheFoldData"]
-	studio = moviemanager.scraper.imdb_scraper._extract_studio(above_fold)
-	assert studio == "View Askew Productions"
-
-
-#============================================
-def test_extract_studio_empty() -> None:
-	"""Empty companyCredits returns empty string."""
-	studio = moviemanager.scraper.imdb_scraper._extract_studio({})
-	assert studio == ""
-
-
-#============================================
-# Tests for parental guide HTML parsing
-#============================================
-
 def test_parse_parental_guide_html() -> None:
 	"""Parental guide categories are extracted from HTML page."""
 	html = _make_title_html(SAMPLE_NEXT_DATA_PARENTAL_GUIDE)
@@ -642,15 +320,6 @@ def test_parse_parental_guide_html() -> None:
 	assert len(result) == 5
 
 
-#============================================
-def test_parse_parental_guide_html_empty() -> None:
-	"""Empty HTML returns empty parental guide."""
-	html = "<html><body>No data</body></html>"
-	result = moviemanager.scraper.imdb_parental_guide_scraper._parse_parental_guide_html(html)
-	assert result == {}
-
-
-#============================================
 def test_parse_parental_guide_fallback_above_fold() -> None:
 	"""Parental guide falls back to aboveTheFoldData format."""
 	# use the title page format which has guide in aboveTheFoldData
@@ -660,180 +329,3 @@ def test_parse_parental_guide_fallback_above_fold() -> None:
 	# should find data from the aboveTheFoldData fallback
 	assert len(result) == 5
 	assert result["Profanity"] == "Severe"
-
-
-#============================================
-def test_advisory_id_to_name() -> None:
-	"""Advisory IDs map to display names correctly."""
-	assert moviemanager.scraper.imdb_parental_guide_scraper._advisory_id_to_name(
-		"advisory-nudity"
-	) == "Sex & Nudity"
-	assert moviemanager.scraper.imdb_parental_guide_scraper._advisory_id_to_name(
-		"advisory-violence"
-	) == "Violence & Gore"
-	assert moviemanager.scraper.imdb_parental_guide_scraper._advisory_id_to_name(
-		"unknown-id"
-	) == ""
-
-
-#============================================
-# Tests for keyword extraction
-#============================================
-
-def test_extract_keywords() -> None:
-	"""Keywords are extracted from mainColumnData."""
-	main_column = SAMPLE_NEXT_DATA_TITLE["props"]["pageProps"]["mainColumnData"]
-	tags = moviemanager.scraper.imdb_scraper._extract_keywords(main_column)
-	assert "convenience store" in tags
-	assert "slacker" in tags
-
-
-#============================================
-def test_extract_keywords_empty() -> None:
-	"""Empty mainColumnData returns empty keyword list."""
-	tags = moviemanager.scraper.imdb_scraper._extract_keywords({})
-	assert tags == []
-
-
-#============================================
-# Tests for top250 extraction
-#============================================
-
-def test_top250_above_range() -> None:
-	"""Top ranking > 250 is set to zero."""
-	html = _make_title_html(SAMPLE_NEXT_DATA_TITLE)
-	metadata = moviemanager.scraper.imdb_scraper._parse_metadata_html(
-		html, "tt0109445"
-	)
-	# sample data has rank 920 which is > 250
-	assert metadata.top250 == 0
-
-
-#============================================
-def test_top250_within_range() -> None:
-	"""Top ranking <= 250 is captured as top250."""
-	data = json.loads(json.dumps(SAMPLE_NEXT_DATA_TITLE))
-	# override rank to be within top 250
-	data["props"]["pageProps"]["aboveTheFoldData"]["ratingsSummary"]["topRanking"]["rank"] = 42
-	html = _make_title_html(data)
-	metadata = moviemanager.scraper.imdb_scraper._parse_metadata_html(
-		html, "tt0000001"
-	)
-	assert metadata.top250 == 42
-
-
-#============================================
-# Tests for get_metadata
-#============================================
-
-def test_get_metadata_requires_imdb_id() -> None:
-	"""get_metadata raises ValueError when no imdb_id is given."""
-	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
-	with pytest.raises(ValueError, match="requires an imdb_id"):
-		scraper.get_metadata()
-
-
-#============================================
-def test_get_metadata_requires_transport() -> None:
-	"""get_metadata raises ConnectionError when transport is not set."""
-	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
-	with pytest.raises(ConnectionError, match="transport not configured"):
-		scraper.get_metadata(imdb_id="tt0109445")
-
-
-#============================================
-def test_get_metadata_with_transport() -> None:
-	"""get_metadata fetches HTML via transport and parses metadata."""
-	html = _make_title_html(SAMPLE_NEXT_DATA_TITLE)
-	mock_transport = unittest.mock.Mock()
-	mock_transport.fetch_html.return_value = html
-	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
-	scraper.set_transport(mock_transport)
-	metadata = scraper.get_metadata(imdb_id="tt0109445")
-	# verify transport was called with correct URL
-	mock_transport.fetch_html.assert_called_once()
-	call_url = mock_transport.fetch_html.call_args[0][0]
-	assert "tt0109445" in call_url
-	# verify result
-	assert metadata.title == "Clerks"
-	assert metadata.imdb_id == "tt0109445"
-
-
-#============================================
-# Tests for get_parental_guide
-#============================================
-
-def test_get_parental_guide_graphql_success() -> None:
-	"""get_parental_guide returns data from GraphQL API."""
-	graphql_result = {
-		"Sex & Nudity": "Moderate",
-		"Violence & Gore": "Mild",
-		"Profanity": "Severe",
-		"Alcohol, Drugs & Smoking": "Moderate",
-		"Frightening & Intense Scenes": "Mild",
-	}
-	scraper = moviemanager.scraper.imdb_parental_guide_scraper.ImdbParentalGuideScraper()
-	with unittest.mock.patch(
-		"moviemanager.scraper.imdb_parental_guide_scraper._fetch_parental_guide_graphql",
-		return_value=graphql_result,
-	):
-		guide = scraper.get_parental_guide("tt0109445")
-	assert len(guide) == 5
-	assert guide["Sex & Nudity"] == "Moderate"
-	assert guide["Profanity"] == "Severe"
-
-
-#============================================
-def test_get_parental_guide_graphql_no_data() -> None:
-	"""get_parental_guide returns empty dict when movie has no guide data."""
-	scraper = moviemanager.scraper.imdb_parental_guide_scraper.ImdbParentalGuideScraper()
-	# GraphQL returns empty dict for movies without parental guide data
-	with unittest.mock.patch(
-		"moviemanager.scraper.imdb_parental_guide_scraper._fetch_parental_guide_graphql",
-		return_value={},
-	):
-		guide = scraper.get_parental_guide("tt0119937")
-	assert guide == {}
-
-
-#============================================
-def test_get_parental_guide_graphql_failure_fallback() -> None:
-	"""get_parental_guide falls back to browser transport when GraphQL fails."""
-	html = _make_title_html(SAMPLE_NEXT_DATA_PARENTAL_GUIDE)
-	mock_transport = unittest.mock.Mock()
-	mock_transport.fetch_html.return_value = html
-	scraper = moviemanager.scraper.imdb_parental_guide_scraper.ImdbParentalGuideScraper()
-	scraper.set_transport(mock_transport)
-	# GraphQL raises ConnectionError so browser transport is used
-	with unittest.mock.patch(
-		"moviemanager.scraper.imdb_parental_guide_scraper._fetch_parental_guide_graphql",
-		side_effect=ConnectionError("HTTP 503"),
-	):
-		guide = scraper.get_parental_guide("tt0109445")
-	assert len(guide) == 5
-	assert guide["Sex & Nudity"] == "Moderate"
-	assert guide["Profanity"] == "Severe"
-	# verify URL includes parentalguide path
-	call_url = mock_transport.fetch_html.call_args[0][0]
-	assert "parentalguide" in call_url
-
-
-#============================================
-def test_get_parental_guide_empty_id() -> None:
-	"""get_parental_guide returns empty dict when no imdb_id is given."""
-	scraper = moviemanager.scraper.imdb_parental_guide_scraper.ImdbParentalGuideScraper()
-	guide = scraper.get_parental_guide("")
-	assert guide == {}
-
-
-#============================================
-def test_get_parental_guide_no_transport() -> None:
-	"""get_parental_guide returns empty dict when GraphQL fails and no transport set."""
-	scraper = moviemanager.scraper.imdb_parental_guide_scraper.ImdbParentalGuideScraper()
-	# GraphQL raises ConnectionError and no transport is configured
-	with unittest.mock.patch(
-		"moviemanager.scraper.imdb_parental_guide_scraper._fetch_parental_guide_graphql",
-		side_effect=ConnectionError("HTTP 503"),
-	):
-		guide = scraper.get_parental_guide("tt0109445")
-	assert guide == {}

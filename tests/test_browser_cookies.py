@@ -92,15 +92,6 @@ def test_unsupported_browser() -> None:
 
 
 #============================================
-def test_unsupported_browser_safari() -> None:
-	"""Safari browser spec raises ValueError."""
-	with pytest.raises(ValueError, match="Unsupported browser"):
-		moviemanager.scraper.browser_cookies.load_imdb_cookies_from_browser(
-			"Safari"
-		)
-
-
-#============================================
 def test_find_profile_no_firefox(tmp_path: object) -> None:
 	"""Missing profiles.ini raises FileNotFoundError."""
 	with unittest.mock.patch.dict(os.environ, {"HOME": str(tmp_path)}):

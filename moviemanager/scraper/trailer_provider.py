@@ -11,7 +11,7 @@ import moviemanager.scraper.interfaces
 class YtdlpTrailerProvider(moviemanager.scraper.interfaces.TrailerProvider):
 	"""Download trailers using the yt-dlp CLI tool.
 
-	Wraps the yt-dlp subprocess to download trailers in mp4 format.
+	Downloads combined MP4 files directly, without merging or transcoding.
 	"""
 
 	# capabilities advertised by this provider
@@ -39,11 +39,16 @@ class YtdlpTrailerProvider(moviemanager.scraper.interfaces.TrailerProvider):
 		"""
 		cmd = [
 			"yt-dlp",
+			"--ignore-config",
 			"-o", output_path,
-			"--format", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4",
+			# A direct combined stream avoids merging and transcoding.
+			"--format", "best[ext=mp4][protocol=https]/best[ext=mp4][protocol=http]",
+			"--fixup", "never",
 			"--no-playlist",
+			"--",
 			url,
 		]
+		# ASVS 1.2.5: pass arguments directly, without shell interpretation.
 		subprocess.run(
 			cmd, check=True, timeout=300,
 			capture_output=True,

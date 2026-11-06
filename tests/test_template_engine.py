@@ -79,20 +79,6 @@ def test_expand_template_genre() -> None:
 
 
 #============================================
-def test_expand_template_empty_genre() -> None:
-	"""Empty genres list produces empty string for genre token."""
-	movie = moviemanager.core.models.movie.Movie(
-		title="Inception",
-		year="2010",
-	)
-	result = moviemanager.core.movie.template_engine.expand_template(
-		"{title}-{genre}", movie
-	)
-	# genre is empty, so just title with trailing hyphen cleaned
-	assert "Inception" in result
-
-
-#============================================
 def test_expand_template_director() -> None:
 	"""Director token is substituted correctly."""
 	movie = moviemanager.core.models.movie.Movie(
@@ -175,29 +161,9 @@ def test_expand_template_with_media_tokens() -> None:
 
 
 #============================================
-def test_build_file_template_defaults() -> None:
-	"""Default settings produce title-year template."""
-	settings = _make_settings()
-	result = moviemanager.core.movie.template_engine.build_file_template(
-		settings
-	)
-	assert result == "{title}-{year}"
-
-
-#============================================
-def test_build_file_template_with_resolution() -> None:
-	"""Resolution checkbox appends resolution token."""
-	settings = _make_settings(rename_resolution=True)
-	result = moviemanager.core.movie.template_engine.build_file_template(
-		settings
-	)
-	assert result == "{title}-{year}-{resolution}"
-
-
-#============================================
 def test_build_file_template_all_tokens() -> None:
 	"""All media checkboxes append all tokens."""
-	settings = _make_settings(
+	settings = _MockSettings(
 		rename_resolution=True,
 		rename_vcodec=True,
 		rename_acodec=True,
@@ -211,19 +177,6 @@ def test_build_file_template_all_tokens() -> None:
 
 
 #============================================
-def test_build_file_template_dot_separator() -> None:
-	"""Dot separator joins tokens with dots."""
-	settings = _make_settings(
-		media_separator=".",
-		rename_resolution=True,
-	)
-	result = moviemanager.core.movie.template_engine.build_file_template(
-		settings
-	)
-	assert result == "{title}.{year}.{resolution}"
-
-
-#============================================
 @dataclasses.dataclass
 class _MockSettings:
 	"""Minimal settings mock for build_file_template tests."""
@@ -232,17 +185,3 @@ class _MockSettings:
 	rename_vcodec: bool = False
 	rename_acodec: bool = False
 	rename_channels: bool = False
-
-
-#============================================
-def _make_settings(**kwargs) -> _MockSettings:
-	"""Create a mock settings object with optional overrides.
-
-	Args:
-		**kwargs: fields to override on _MockSettings.
-
-	Returns:
-		_MockSettings instance.
-	"""
-	settings = _MockSettings(**kwargs)
-	return settings

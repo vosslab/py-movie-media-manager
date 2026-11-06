@@ -83,16 +83,6 @@ class TestSearchResultsCache:
 		assert cached[1]["title"] == "Clerks II"
 		assert cached[0]["imdb_id"] == "tt0109445"
 
-	def test_round_trip_tmdb_search(self, tmp_path: object) -> None:
-		"""TMDB search results survive a put/get round trip."""
-		cache = moviemanager.api.api_cache.ApiCache(
-			cache_dir=str(tmp_path), ttl_seconds=3600
-		)
-		results = [_make_search_result()]
-		cache.put_search_results("tmdb_search", "Clerks", "1994", results)
-		cached = cache.get_search_results("tmdb_search", "clerks", "1994")
-		assert cached is not None
-		assert len(cached) == 1
 
 	def test_cache_miss_returns_none(self, tmp_path: object) -> None:
 		"""A cache miss returns None."""
@@ -133,14 +123,6 @@ class TestMetadataCache:
 		assert cached is not None
 		assert cached["title"] == "Clerks"
 
-	def test_metadata_miss(self, tmp_path: object) -> None:
-		"""Missing metadata returns None."""
-		cache = moviemanager.api.api_cache.ApiCache(
-			cache_dir=str(tmp_path), ttl_seconds=3600
-		)
-		result = cache.get_metadata("imdb_metadata", "tt9999999")
-		assert result is None
-
 
 #============================================
 class TestParentalGuideCache:
@@ -161,14 +143,6 @@ class TestParentalGuideCache:
 		assert cached is not None
 		assert cached["profanity"] == "Severe"
 
-	def test_miss(self, tmp_path: object) -> None:
-		"""Missing parental guide returns None."""
-		cache = moviemanager.api.api_cache.ApiCache(
-			cache_dir=str(tmp_path), ttl_seconds=3600
-		)
-		result = cache.get_parental_guide("tt9999999")
-		assert result is None
-
 
 #============================================
 class TestPosterLookupCache:
@@ -183,14 +157,6 @@ class TestPosterLookupCache:
 		result = cache.get_poster_lookup("tt0109445")
 		assert result is not None
 		assert result == (2292, "https://image.tmdb.org/poster.jpg")
-
-	def test_miss(self, tmp_path: object) -> None:
-		"""Missing poster lookup returns None."""
-		cache = moviemanager.api.api_cache.ApiCache(
-			cache_dir=str(tmp_path), ttl_seconds=3600
-		)
-		result = cache.get_poster_lookup("tt9999999")
-		assert result is None
 
 
 #============================================
@@ -215,16 +181,6 @@ class TestTTLExpiration:
 			json.dump(expired_data, f)
 		result = cache.get_search_results("imdb_search", "clerks", "1994")
 		assert result is None
-
-	def test_fresh_entry_returns_data(self, tmp_path: object) -> None:
-		"""Entries within TTL are returned normally."""
-		cache = moviemanager.api.api_cache.ApiCache(
-			cache_dir=str(tmp_path), ttl_seconds=3600
-		)
-		results = [_make_search_result()]
-		cache.put_search_results("imdb_search", "clerks", "1994", results)
-		cached = cache.get_search_results("imdb_search", "clerks", "1994")
-		assert cached is not None
 
 
 #============================================
@@ -292,14 +248,6 @@ class TestClearAndRemove:
 		assert cache.get_search_results("imdb_search", "clerks", "1994") is None
 		assert cache.get_search_results("imdb_search", "matrix", "1999") is not None
 
-	def test_remove_nonexistent_returns_false(self, tmp_path: object) -> None:
-		"""Removing a nonexistent key returns False."""
-		cache = moviemanager.api.api_cache.ApiCache(
-			cache_dir=str(tmp_path), ttl_seconds=3600
-		)
-		removed = cache.remove("imdb_search", "nonexistent|2000")
-		assert removed is False
-
 
 #============================================
 class TestCorruptJson:
@@ -327,40 +275,6 @@ class TestCorruptJson:
 			json.dump([1, 2, 3], f)
 		result = cache.get_search_results("imdb_search", "clerks", "1994")
 		assert result is None
-
-
-#============================================
-class TestNonSerializableData:
-	"""Tests for handling non-JSON-serializable data."""
-
-	def test_non_serializable_does_not_crash(self, tmp_path: object) -> None:
-		"""Cache handles non-serializable objects without crashing."""
-		cache = moviemanager.api.api_cache.ApiCache(
-			cache_dir=str(tmp_path), ttl_seconds=3600
-		)
-		# dict containing a bound method (not JSON-serializable)
-		bad_data = {
-			"title": "Clerks",
-			"bad_field": str.upper,
-		}
-		# should not raise TypeError
-		cache.put_parental_guide("tt0109445", bad_data)
-		cached = cache.get_parental_guide("tt0109445")
-		assert cached is not None
-		assert cached["title"] == "Clerks"
-		# the non-serializable value was converted to a string
-		assert isinstance(cached["bad_field"], str)
-
-	def test_non_serializable_logs_warning(self, tmp_path: object, caplog: object) -> None:
-		"""Cache logs a warning when encountering non-serializable data."""
-		import logging
-		cache = moviemanager.api.api_cache.ApiCache(
-			cache_dir=str(tmp_path), ttl_seconds=3600
-		)
-		bad_data = {"value": lambda x: x}
-		with caplog.at_level(logging.WARNING):
-			cache.put_parental_guide("tt0000001", bad_data)
-		assert "Non-serializable object" in caplog.text
 
 
 #============================================

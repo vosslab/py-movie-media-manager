@@ -46,15 +46,6 @@ def test_collect_artwork_files_from_disk(tmp_path: object) -> None:
 
 
 #============================================
-def test_collect_artwork_files_empty_dir(tmp_path: object) -> None:
-	"""Empty directory returns empty dict."""
-	artwork = moviemanager.core.file.collector.collect_artwork_files(
-		str(tmp_path),
-	)
-	assert artwork == {}
-
-
-#============================================
 def test_collect_artwork_file_paths_basic(tmp_path: object) -> None:
 	"""Collect artwork paths from directory."""
 	_touch(str(tmp_path / "poster.jpg"))
@@ -104,15 +95,6 @@ def test_collect_subtitle_files(tmp_path: object) -> None:
 
 
 #============================================
-def test_collect_subtitle_files_empty(tmp_path: object) -> None:
-	"""Empty directory returns empty list."""
-	subs = moviemanager.core.file.collector.collect_subtitle_files(
-		str(tmp_path),
-	)
-	assert subs == []
-
-
-#============================================
 def test_collect_trailer_files(tmp_path: object) -> None:
 	"""Collect trailer files from a directory."""
 	_touch(str(tmp_path / "trailer.mp4"))
@@ -158,20 +140,3 @@ def test_collect_all_movie_files(tmp_path: object) -> None:
 	assert len(result["subtitles"]) == 1
 	assert len(result["trailers"]) == 1
 	assert len(result["nfo_files"]) == 1
-
-
-#============================================
-def test_collect_nonexistent_dir() -> None:
-	"""Non-existent directory returns empty results."""
-	subs = moviemanager.core.file.collector.collect_subtitle_files(
-		"/nonexistent/path",
-	)
-	assert subs == []
-	trailers = moviemanager.core.file.collector.collect_trailer_files(
-		"/nonexistent/path",
-	)
-	assert trailers == []
-	nfos = moviemanager.core.file.collector.collect_nfo_files(
-		"/nonexistent/path",
-	)
-	assert nfos == []

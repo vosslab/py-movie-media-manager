@@ -16,7 +16,7 @@ Development snapshots summarize work in this checkout. They are not published re
 
 - Repaired changelog rotation and removed obsolete maintenance tools from the modernization work.
 - Removed unused Pillow and tabulate dependencies, synchronized unidecode metadata, and documented
-  MediaInfo, yt-dlp, and FFmpeg in the macOS Brewfile.
+  MediaInfo and yt-dlp in the macOS Brewfile.
 
 ### Validation
 

@@ -11,8 +11,8 @@ checkout.
 - Git to obtain the source.
 - MediaInfo for media probing. `pymediainfo` supplies the Python interface; the
   Homebrew `media-info` formula supplies the `mediainfo` command and library.
-- `yt-dlp` and FFmpeg only when downloading trailers; FFmpeg merges separately
-  downloaded video and audio streams.
+- `yt-dlp` only when downloading trailers. The app downloads combined MP4 files;
+  FFmpeg and ffprobe are not required.
 
 On macOS, [Brewfile](../Brewfile) installs the supported system tools:
 
@@ -23,7 +23,7 @@ brew bundle
 `imagemagick` and `webp` in that Brewfile support the repository's screenshot
 maintenance script. They are not needed to scan, match, organize, or use the GUI.
 On other platforms, install MediaInfo through the system package manager when it
-is not provided by the `pymediainfo` wheel. Install `yt-dlp` and FFmpeg only for
+is not provided by the `pymediainfo` wheel. Install `yt-dlp` only for
 trailer downloads.
 
 ## Install from source

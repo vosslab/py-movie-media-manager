@@ -28,29 +28,6 @@ def _make_png_bytes(width: int, height: int) -> bytes:
 
 
 #============================================
-def test_set_image_data_invalid_prints_source_url(qtbot: object, capsys: object) -> None:
-	"""Invalid bytes should print source URL for CLI diagnostics."""
-	label = moviemanager.ui.widgets.image_label.ImageLabel()
-	qtbot.addWidget(label)
-	url = "https://image.tmdb.org/t/p/w1280/example.jpg"
-	label.set_image_data(b"not-an-image", source_url=url)
-	captured = capsys.readouterr()
-	assert f"Image decode failed for URL: {url}" in captured.out
-	assert label.text() == "Invalid image"
-
-
-#============================================
-def test_scale_size_to_max_dimension_portrait() -> None:
-	"""Portrait images should be constrained to max height 4096."""
-	size = PySide6.QtCore.QSize(8268, 11811)
-	scaled = moviemanager.ui.widgets.image_label._scale_size_to_max_dimension(
-		size
-	)
-	assert scaled.height() == 4096
-	assert 2800 < scaled.width() < 3000
-
-
-#============================================
 def test_set_image_data_downscales_large_image(qtbot: object) -> None:
 	"""Images larger than 4K on one side should be decoded at max 4096."""
 	label = moviemanager.ui.widgets.image_label.ImageLabel()

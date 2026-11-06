@@ -4,6 +4,5 @@
 brew "python@3.12"
 brew "media-info"  # MediaInfo CLI and libmediainfo for media probing
 brew "yt-dlp"  # Trailer downloads
-brew "ffmpeg"  # Merge separate trailer video and audio streams
 brew "imagemagick"  # Resize documentation screenshots
 brew "webp"  # Encode documentation screenshots with cwebp

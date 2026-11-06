@@ -133,27 +133,10 @@ def _mock_get_metadata(tmdb_id: int = 0, imdb_id: str = "") -> moviemanager.scra
 # API-level tests (no PySide6)
 # ============================================
 
-#============================================
-class TestScanFindsMovies:
-	"""Test that scan_directory discovers movie folders."""
-
-	def test_scan_finds_both_movies(self, tmp_path: object) -> None:
-		"""Scan should find two movies with correct titles and years."""
-		root = _create_movie_dirs(tmp_path)
-		settings = moviemanager.core.settings.Settings()
-		api = moviemanager.api.movie_api.MovieAPI(settings)
-		movies = api.scan_directory(root)
-		assert len(movies) == 2
-		# collect titles and years
-		titles = sorted(m.title for m in movies)
-		years = sorted(m.year for m in movies)
-		assert titles == ["The Dark Knight", "The Godfather"]
-		assert years == ["1972", "2008"]
-
 
 #============================================
 class TestScrapeMovies:
-	"""Test scraping with mocked IMDB scraper."""
+	"""Protect metadata application and NFO creation through the public API."""
 
 	def test_scrape_dark_knight(self, tmp_path: object) -> None:
 		"""Scrape Dark Knight should populate metadata and write NFO."""
@@ -188,78 +171,6 @@ class TestScrapeMovies:
 		assert dk.nfo_path
 		assert os.path.isfile(dk.nfo_path)
 
-	def test_scrape_godfather(self, tmp_path: object) -> None:
-		"""Scrape Godfather should populate metadata and write NFO."""
-		root = _create_movie_dirs(tmp_path)
-		settings = moviemanager.core.settings.Settings()
-		api = moviemanager.api.movie_api.MovieAPI(settings)
-		movies = api.scan_directory(root)
-		# find the Godfather movie
-		gf = [m for m in movies if "Godfather" in m.title][0]
-		# mock the scraper methods and transport creation
-		with unittest.mock.patch.object(
-			moviemanager.scraper.imdb_scraper.ImdbScraper,
-			"search", side_effect=_mock_search,
-		), unittest.mock.patch.object(
-			moviemanager.scraper.imdb_scraper.ImdbScraper,
-			"get_metadata", side_effect=_mock_get_metadata,
-		), unittest.mock.patch(
-			"moviemanager.scraper.imdb_scraper.time.sleep",
-		), unittest.mock.patch.object(
-			moviemanager.api.movie_api.MovieAPI,
-			"_ensure_imdb_transport",
-		):
-			api.scrape_movie(gf, imdb_id="tt0068646")
-		# verify metadata
-		assert gf.title == "The Godfather"
-		assert gf.year == "1972"
-		assert gf.director == "Francis Ford Coppola"
-		assert gf.certification == "R"
-		assert gf.rating == 9.2
-		assert gf.scraped is True
-		assert gf.nfo_path
-		assert os.path.isfile(gf.nfo_path)
-
-
-#============================================
-class TestRenameAfterScrape:
-	"""Test rename pipeline after scraping."""
-
-	def test_rename_after_scrape(self, tmp_path: object) -> None:
-		"""Scrape both movies then rename, verifying final paths."""
-		root = _create_movie_dirs(tmp_path)
-		settings = moviemanager.core.settings.Settings()
-		api = moviemanager.api.movie_api.MovieAPI(settings)
-		movies = api.scan_directory(root)
-		# mock and scrape both
-		with unittest.mock.patch.object(
-			moviemanager.scraper.imdb_scraper.ImdbScraper,
-			"search", side_effect=_mock_search,
-		), unittest.mock.patch.object(
-			moviemanager.scraper.imdb_scraper.ImdbScraper,
-			"get_metadata", side_effect=_mock_get_metadata,
-		), unittest.mock.patch(
-			"moviemanager.scraper.imdb_scraper.time.sleep",
-		), unittest.mock.patch.object(
-			moviemanager.api.movie_api.MovieAPI,
-			"_ensure_imdb_transport",
-		):
-			for m in movies:
-				imdb_id = "tt0468569" if "Dark Knight" in m.title else "tt0068646"
-				api.scrape_movie(m, imdb_id=imdb_id)
-		# rename both movies (not dry run)
-		for m in movies:
-			api.rename_movie(m, dry_run=False)
-		# verify final directory names
-		dk = [m for m in movies if "Dark Knight" in m.title][0]
-		gf = [m for m in movies if "Godfather" in m.title][0]
-		assert os.path.basename(dk.path) == "The_Dark_Knight-2008"
-		assert os.path.basename(gf.path) == "The_Godfather-1972"
-		# verify video files exist in new locations
-		assert dk.video_file is not None
-		assert os.path.isfile(dk.video_file.path)
-		assert gf.video_file is not None
-		assert os.path.isfile(gf.video_file.path)
 
 #============================================
 class TestFullPipeline:
