@@ -14,14 +14,13 @@ authors = [
 dependencies = [
 	"curl_cffi",
 	"lxml",
-	"pillow",
 	"pymediainfo",
 	"PySide6",
 	"pyyaml",
 	"requests",
 	"rich",
-	"tabulate",
 	"tmdbv3api",
+	"unidecode",
 ]
 
 [project.scripts]

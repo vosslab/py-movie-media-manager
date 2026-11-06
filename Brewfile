@@ -2,3 +2,8 @@
 # Python 3.12 is the pinned interpreter for macOS tooling.
 # this is for macOS installs only
 brew "python@3.12"
+brew "media-info"  # MediaInfo CLI and libmediainfo for media probing
+brew "yt-dlp"  # Trailer downloads
+brew "ffmpeg"  # Merge separate trailer video and audio streams
+brew "imagemagick"  # Resize documentation screenshots
+brew "webp"  # Encode documentation screenshots with cwebp

@@ -4,6 +4,15 @@
 
 ### Fixes and Maintenance
 
+- Updated the GUI screenshot launcher with bounded capture attempts, process-specific cleanup,
+  temporary PNG processing, and quality-90 WebP output capped at a 1920-pixel edge.
+- Verified a native 1200x843 WebP capture (73 KB). Automatic window sizing was unavailable;
+  retained the app's dimensions. Capture evidence stayed temporary because this update targets
+  the launcher rather than a managed README or documentation screenshot block.
+- Reviewed runtime dependencies: removed unused Pillow and tabulate, synchronized unidecode
+  in package metadata, and declared MediaInfo, yt-dlp, and FFmpeg in the macOS Brewfile.
+- Clarified system-library and trailer-tool installation requirements; retained the managed
+  shared development dependency block and the required pytest-qt plugin.
 - Began repository modernization: repaired changelog structure, removed obsolete maintenance tools, and updated code and test standards.
 - Rotated prior dated history into `CHANGELOG-2026-03a.md` and `CHANGELOG-2026-02a.md`.
 - Split movie matching by responsibility: `MovieChooserDialog` now coordinates prematch,

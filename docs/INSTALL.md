@@ -7,8 +7,21 @@ are available on your system.
 
 - Python 3.12 or later.
 - `pip` for installing Python packages.
-- `MediaInfo` (system library, required by `pymediainfo` for codec detection).
-- `yt-dlp` (optional, for trailer downloading).
+- The MediaInfo library for codec detection. Supported `pymediainfo` wheels bundle it;
+  source installations need a system copy.
+- `yt-dlp` and FFmpeg for trailer downloading and merging video/audio streams.
+
+On macOS, install the system tools from [Brewfile](../Brewfile):
+
+```bash
+brew bundle
+```
+
+The `media-info` formula installs the `mediainfo` command and depends on `libmediainfo`.
+See the [Homebrew formula](https://formulae.brew.sh/formula/media-info) and
+[pymediainfo installation notes](https://pymediainfo.readthedocs.io/en/stable/introduction.html#installation).
+On other platforms, install the MediaInfo library when needed and install `yt-dlp` and FFmpeg
+through your package manager. Scanning and metadata editing do not require the trailer tools.
 
 ## Install steps
 
@@ -51,8 +64,3 @@ source source_me.sh && python3 movie_organizer.py --help
 ```
 
 This prints the CLI usage and available subcommands.
-
-## Known gaps
-
-- [ ] Confirm whether `MediaInfo` is required at install time or only at runtime.
-- [ ] Document macOS Homebrew install for `mediainfo` and `yt-dlp` if a Brewfile is added.
