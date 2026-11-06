@@ -4,6 +4,17 @@
 
 ### Fixes and Maintenance
 
+- Expanded the GitHub README into a four-view visual tour: collection overview, live IMDb
+  match search with poster preview, dry-run rename comparison, and metadata editing with artwork.
+  Refreshed native captures as quality-90 WebP files (177 KB combined) and extended the isolated
+  sample-library capture helper with repeatable view selection.
+- Applied the permanent-test checklist across repository-owned tests: removed 73 pytest
+  functions, two test modules, and the help-only CLI runner (1,112 lines net). Kept filesystem
+  safety, NFO/cache integrity, provider parsing/routing, worker failures/cancellation, and
+  CLI/GUI workflows. Replaced a tunable confidence threshold with relative movie ranking.
+- Removed the mirrored browser-transport fake and trivial display-format tests; browser timeout
+  and CAPTCHA signal details no longer have dedicated unit assertions. The remaining suite
+  passed 2,398 checks; CLI integration and offscreen GUI runners also passed.
 - Removed the FFmpeg requirement: trailers now download an existing combined MP4 over HTTP(S),
   without merging or transcoding. Sources without that format fail rather than downloading
   separate streams; available resolution may be lower. Media probing continues to use MediaInfo.

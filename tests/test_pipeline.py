@@ -1,4 +1,4 @@
-"""Smoke tests covering scan/scrape/rename pipeline and GUI batch mode."""
+"""Integration tests for metadata application and the scan/scrape/rename pipeline."""
 
 # Standard Library
 import os

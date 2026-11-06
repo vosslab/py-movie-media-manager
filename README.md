@@ -2,6 +2,30 @@
 
 Movie Media Manager helps you turn a messy local movie collection into organized, matched folders with Kodi-ready metadata, artwork, and clear review steps before any rename.
 
+## Your collection, at a glance
+
+Scan your folders, find movies that need attention, and inspect their metadata in one place.
+The views below use a temporary sample library; the match search shows real IMDb results.
+
+<!-- screenshots:begin (managed by screenshot-docs) -->
+![Collection overview with ten movies, mixed match states, filters, and selected-movie details](docs/screenshots/main_window.webp)
+
+**Compare matches before accepting one.** Search candidates, compare their match confidence,
+and inspect the selected poster. Batch controls let you keep, skip, or revisit a match.
+
+![Batch match search for Moon with IMDb candidates, confidence scores, poster preview, and navigation controls](docs/screenshots/match_search.webp)
+
+**Review file moves before renaming.** Compare current filenames with proposed folders and
+filenames, including the NFO metadata that moves alongside each movie.
+
+![Rename preview comparing twelve current video and NFO paths with their proposed destinations](docs/screenshots/rename_preview.webp)
+
+**Correct the details yourself.** Edit titles, IDs, plot, genres, ratings, and other metadata
+before saving it beside your movie.
+
+![Arrival metadata editor with poster, parental-guide indicators, editable movie fields, and Save and Cancel controls](docs/screenshots/metadata_editor.webp)
+<!-- screenshots:end -->
+
 ## Put a collection in order, one reviewable step at a time
 
 Use the GUI to work through the collection you already have instead of rebuilding it
@@ -17,15 +41,6 @@ by hand:
 - Write Kodi-compatible NFO files and download poster, fanart, trailers, or subtitles for
   matched movies.
 - Keep scanning, scraping, renaming, and downloads visible in the background-jobs view.
-
-## See the collection before changing it
-
-Scan a directory, narrow the table to the movies that need attention, and inspect their details
-before you accept a match or run a rename.
-
-<!-- screenshots:begin (managed by screenshot-docs) -->
-![Movie Media Manager showing collection filters, mixed match statuses, and selected-movie details](docs/screenshots/main_window.webp)
-<!-- screenshots:end -->
 
 ## Quick start
 

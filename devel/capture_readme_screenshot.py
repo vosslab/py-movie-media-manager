@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Open a populated local demo library for the README screenshot capture."""
+"""Open a sample GUI view for capture; match/edit views fetch live IMDb artwork."""
 
 # Standard Library
 import pathlib
+import argparse
 import sys
 import tempfile
+import time
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
@@ -15,8 +17,13 @@ import PySide6.QtWidgets
 
 # local repo modules
 import moviemanager.core.settings
+import moviemanager.core.movie.rename_service
+import moviemanager.ui.dialogs.movie_chooser
+import moviemanager.ui.dialogs.movie_editor
+import moviemanager.ui.dialogs.rename_preview
 import moviemanager.ui.main_window
 import moviemanager.ui.theme
+import moviemanager.ui.workers
 
 
 SAMPLE_MOVIES = [
@@ -69,7 +76,7 @@ def _write_nfo(movie_dir: pathlib.Path, movie: tuple) -> None:
 #============================================
 def _create_sample_library(temp_dir: pathlib.Path) -> pathlib.Path:
 	"""Create a ten-movie local library with matched and unmatched rows."""
-	library_dir = temp_dir / "sample_library"
+	library_dir = temp_dir / "Sample Library" / "Media" / "Movies"
 	for movie in SAMPLE_MOVIES:
 		title = movie[0]
 		year = movie[1]
@@ -101,19 +108,70 @@ def _select_arrival(window: object) -> None:
 
 
 #============================================
-def _prepare_capture(window: object) -> None:
-	"""Show the completed scan at a readable documentation size."""
+def _prepare_capture(window: object, view: str) -> None:
+	"""Show one real workflow against the completed sample scan."""
 	_select_arrival(window)
 	window.resize(1440, 900)
 	window.setWindowTitle("Movie Media Manager - Sample Library")
 	window.show()
-	print("README_DEMO_READY", flush=True)
+	movies = window._api.get_movies()
+	arrival = next(movie for movie in movies if movie.title == "Arrival")
+	if view == "main":
+		print("README_DEMO_READY", flush=True)
+		return
+	if view == "rename":
+		pairs = []
+		for movie in movies:
+			if movie.scraped:
+				pairs.extend(moviemanager.core.movie.rename_service.rename_movie(
+					movie, path_template="{title} ({year})",
+					file_template="{title} ({year})", dry_run=True,
+				))
+		dialog = moviemanager.ui.dialogs.rename_preview.RenamePreviewDialog(pairs, window)
+	elif view == "edit":
+		results = window._api.search_movie(arrival.title, arrival.year)
+		result = next(result for result in results if result.imdb_id == arrival.imdb_id)
+		poster = moviemanager.ui.workers.download_image_bytes(result.poster_url)
+		(pathlib.Path(arrival.path) / "poster.jpg").write_bytes(poster)
+		dialog = moviemanager.ui.dialogs.movie_editor.MovieEditorDialog(arrival, window)
+	else:
+		moon = next(movie for movie in movies if movie.title == "Moon")
+		dialog = moviemanager.ui.dialogs.movie_chooser.MovieChooserDialog(
+			moon, window._api, window, movie_list=[moon, arrival],
+		)
+		dialog._switch_to_search_mode()
+	size = (850, 900) if view == "edit" else (1100, 700)
+	dialog.resize(*size)
+	dialog.show()
+	window._capture_dialog = dialog
+	if view != "match":
+		print("README_DEMO_READY", flush=True)
+		return
+	deadline = time.monotonic() + 45
+	timer = PySide6.QtCore.QTimer(dialog)
+
+	def wait_for_search() -> None:
+		"""Wait for real search results and their selected poster to finish."""
+		pane = dialog._search_pane
+		if pane._results_table.rowCount() and pane._preview._poster_worker is None:
+			timer.stop()
+			print("README_DEMO_READY", flush=True)
+		elif time.monotonic() >= deadline:
+			timer.stop()
+			print("README_DEMO_FAILED: live search did not settle", flush=True)
+			PySide6.QtWidgets.QApplication.exit(1)
+
+	timer.timeout.connect(wait_for_search)
+	timer.start(250)
 
 
 #============================================
 def main() -> None:
 	"""Run the real GUI against temporary local data until closed."""
-	app = PySide6.QtWidgets.QApplication(sys.argv)
+	parser = argparse.ArgumentParser(description=__doc__)
+	parser.add_argument("--view", choices=["main", "match", "rename", "edit"], default="main")
+	args = parser.parse_args()
+	app = PySide6.QtWidgets.QApplication(sys.argv[:1])
 	app.setApplicationName("Movie Media Manager")
 	settings = moviemanager.core.settings.Settings(theme="dark")
 	moviemanager.ui.theme.apply_theme(app, settings.theme)
@@ -134,11 +192,13 @@ def main() -> None:
 		window = moviemanager.ui.main_window.MainWindow(
 			settings, directory=str(library_dir),
 		)
+		# Search results from a capture must not enter the user's persistent cache.
+		window._api._cache._cache_dir = str(temp_dir / "api_cache")
 		window._scan_ctrl.probe_completed.connect(
-			lambda: _prepare_capture(window)
+			lambda: _prepare_capture(window, args.view)
 		)
 		window._scan_ctrl.probe_error.connect(
-			lambda _error: _prepare_capture(window)
+			lambda _error: _prepare_capture(window, args.view)
 		)
 		window.show()
 		exit_code = app.exec()
