@@ -1,6 +1,10 @@
 """API-level scan service wrapping core scan_service and MovieList."""
 
+# Standard Library
+import collections.abc
+
 # local repo modules
+import moviemanager.core.models.movie
 import moviemanager.core.movie.movie_list
 import moviemanager.core.movie.scan_service
 
@@ -17,7 +21,7 @@ class ScanService:
 	def __init__(
 		self,
 		movie_list: moviemanager.core.movie.movie_list.MovieList,
-	):
+	) -> None:
 		"""Initialize the scan service.
 
 		Args:
@@ -27,9 +31,10 @@ class ScanService:
 
 	#============================================
 	def scan_directory(
-		self, root_path: str, progress_callback=None,
-		movie_callback=None,
-	) -> list:
+		self, root_path: str,
+		progress_callback: collections.abc.Callable[[int, str], None] | None = None,
+		movie_callback: collections.abc.Callable[[moviemanager.core.models.movie.Movie], None] | None = None,
+	) -> list[moviemanager.core.models.movie.Movie]:
 		"""Scan a directory for movie files and add them to the library.
 
 		Args:

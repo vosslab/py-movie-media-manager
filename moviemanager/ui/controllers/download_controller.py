@@ -20,7 +20,7 @@ _ART_SETTINGS = {
 
 
 #============================================
-def _check_needs_artwork(movie, settings) -> bool:
+def _check_needs_artwork(movie: object, settings: object) -> bool:
 	"""Return True if the movie is missing any enabled artwork type.
 
 	Args:
@@ -55,7 +55,7 @@ class DownloadController(PySide6.QtCore.QObject):
 	download_completed = PySide6.QtCore.Signal()
 	download_failed = PySide6.QtCore.Signal(str)
 
-	def __init__(self, api, task_api, settings, parent=None):
+	def __init__(self, api: object, task_api: object, settings: object, parent: object=None) -> object:
 		"""Initialize the download controller.
 
 		Args:
@@ -78,7 +78,7 @@ class DownloadController(PySide6.QtCore.QObject):
 		return list(self._download_task_ids)
 
 	#============================================
-	def set_api(self, api) -> None:
+	def set_api(self, api: object) -> None:
 		"""Replace the MovieAPI instance (after settings change).
 
 		Args:
@@ -87,7 +87,7 @@ class DownloadController(PySide6.QtCore.QObject):
 		self._api = api
 
 	#============================================
-	def set_settings(self, settings) -> None:
+	def set_settings(self, settings: object) -> None:
 		"""Replace the settings instance.
 
 		Args:
@@ -97,7 +97,7 @@ class DownloadController(PySide6.QtCore.QObject):
 
 	#============================================
 	def download_content(
-		self, movie_panel, main_window,
+		self, movie_panel: object, main_window: object,
 	) -> None:
 		"""Download artwork, trailers, and subtitles via TaskAPI.
 
@@ -222,7 +222,7 @@ class DownloadController(PySide6.QtCore.QObject):
 
 	#============================================
 	def on_download_job_done(
-		self, task_id: int, result,
+		self, task_id: int, result: object,
 	) -> None:
 		"""Handle individual download job completion.
 
@@ -248,7 +248,7 @@ class DownloadController(PySide6.QtCore.QObject):
 
 	#============================================
 	def download_trailer(
-		self, movie_panel, main_window,
+		self, movie_panel: object, main_window: object,
 	) -> None:
 		"""Download trailer for selected movie via TaskAPI.
 
@@ -279,7 +279,7 @@ class DownloadController(PySide6.QtCore.QObject):
 
 	#============================================
 	def check_subtitle_credentials(
-		self, main_window,
+		self, main_window: object,
 	) -> bool:
 		"""Check OpenSubtitles API key and login credentials.
 
@@ -316,7 +316,7 @@ class DownloadController(PySide6.QtCore.QObject):
 
 	#============================================
 	def download_subtitles(
-		self, movie_panel, main_window,
+		self, movie_panel: object, main_window: object,
 	) -> None:
 		"""Download subtitles for selected movie via TaskAPI.
 

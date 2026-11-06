@@ -6,14 +6,17 @@ import time
 import random
 import datetime
 import logging
+import collections.abc
 
 # local repo modules
 import moviemanager.api.api_cache
 import moviemanager.core.nfo.writer
+import moviemanager.core.models.movie
 import moviemanager.core.settings
 import moviemanager.scraper.imdb_scraper
 import moviemanager.scraper.interfaces
 import moviemanager.scraper.types
+import moviemanager.api.search_service
 
 
 # module logger
@@ -37,8 +40,8 @@ class ScrapeService:
 		self,
 		settings: moviemanager.core.settings.Settings,
 		cache: moviemanager.api.api_cache.ApiCache,
-		search_service=None,
-	):
+		search_service: moviemanager.api.search_service.SearchService | None = None,
+	) -> None:
 		"""Initialize the scrape service.
 
 		Args:
@@ -54,11 +57,13 @@ class ScrapeService:
 
 	#============================================
 	def scrape_movie(
-		self, movie, scraper, imdb_scraper=None,
-		ensure_transport_fn=None,
+		self, movie: moviemanager.core.models.movie.Movie,
+		scraper: moviemanager.scraper.interfaces.MetadataProvider,
+		imdb_scraper: moviemanager.scraper.interfaces.ParentalGuideProvider | None = None,
+		ensure_transport_fn: collections.abc.Callable[[], None] | None = None,
 		tmdb_id: int = 0, imdb_id: str = "",
 		bypass_cache: bool = False,
-		artwork_providers: list = None,
+		artwork_providers: list[moviemanager.scraper.interfaces.ArtworkProvider] | None = None,
 	) -> None:
 		"""Fetch and apply metadata to a movie from the active scraper.
 
@@ -156,8 +161,11 @@ class ScrapeService:
 
 	#============================================
 	def _fetch_parental_guide_supplement(
-		self, movie, metadata, imdb_scraper,
-		ensure_transport_fn, bypass_cache: bool,
+		self, movie: moviemanager.core.models.movie.Movie,
+		metadata: moviemanager.scraper.types.MediaMetadata,
+		imdb_scraper: moviemanager.scraper.interfaces.ParentalGuideProvider,
+		ensure_transport_fn: collections.abc.Callable[[], None] | None,
+		bypass_cache: bool,
 	) -> None:
 		"""Fetch parental guide from IMDB supplement scraper.
 
@@ -218,7 +226,8 @@ class ScrapeService:
 
 	#============================================
 	def _fetch_artwork_supplement(
-		self, movie, artwork_providers: list,
+		self, movie: moviemanager.core.models.movie.Movie,
+		artwork_providers: list[moviemanager.scraper.interfaces.ArtworkProvider],
 	) -> None:
 		"""Supplement movie artwork URLs from artwork providers.
 
@@ -266,8 +275,11 @@ class ScrapeService:
 
 	#============================================
 	def fetch_parental_guides(
-		self, movies: list, scraper, imdb_scraper=None,
-		ensure_transport_fn=None, progress_callback=None,
+		self, movies: list[moviemanager.core.models.movie.Movie],
+		scraper: moviemanager.scraper.interfaces.MetadataProvider,
+		imdb_scraper: moviemanager.scraper.interfaces.ParentalGuideProvider | None = None,
+		ensure_transport_fn: collections.abc.Callable[[], None] | None = None,
+		progress_callback: collections.abc.Callable[[int, int, str], None] | None = None,
 	) -> dict:
 		"""Fetch parental guide data for movies missing it.
 
@@ -419,13 +431,21 @@ class ScrapeService:
 		return has_failures
 
 	#============================================
+	def get_failed_parental_guide_count(self) -> int:
+		"""Return the number of parental-guide fetches available to retry."""
+		count = len(self._failed_parental_guides)
+		return count
+
+	#============================================
 	def clear_failed_parental_guides(self) -> None:
 		"""Clear the list of failed parental guide fetches."""
 		self._failed_parental_guides.clear()
 
 	#============================================
 	def retry_failed_parental_guides(
-		self, imdb_scraper, ensure_transport_fn=None,
+		self,
+		imdb_scraper: moviemanager.scraper.interfaces.ParentalGuideProvider,
+		ensure_transport_fn: collections.abc.Callable[[], None] | None = None,
 	) -> dict:
 		"""Retry previously failed parental guide fetches.
 
@@ -470,7 +490,9 @@ class ScrapeService:
 
 
 #============================================
-def _should_skip_parental_guide(movie, current_guide: dict) -> bool:
+def _should_skip_parental_guide(
+	movie: moviemanager.core.models.movie.Movie, current_guide: dict,
+) -> bool:
 	"""Return True if parental guide fetch should be skipped.
 
 	Skips when the movie has no guide data but was checked within
@@ -499,7 +521,10 @@ def _should_skip_parental_guide(movie, current_guide: dict) -> bool:
 
 
 #============================================
-def _apply_metadata_to_movie(movie, metadata) -> None:
+def _apply_metadata_to_movie(
+	movie: moviemanager.core.models.movie.Movie,
+	metadata: moviemanager.scraper.types.MediaMetadata,
+) -> None:
 	"""Map MediaMetadata fields onto a Movie object.
 
 	Args:

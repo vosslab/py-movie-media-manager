@@ -11,6 +11,7 @@ import requests
 
 # local repo modules
 import moviemanager.core.constants
+import moviemanager.core.models.movie
 import moviemanager.core.settings
 
 
@@ -38,7 +39,7 @@ class ArtworkService:
 	"""
 
 	#============================================
-	def __init__(self, settings: moviemanager.core.settings.Settings):
+	def __init__(self, settings: moviemanager.core.settings.Settings) -> None:
 		"""Initialize the artwork service.
 
 		Args:
@@ -47,7 +48,7 @@ class ArtworkService:
 		self._settings = settings
 
 	#============================================
-	def download_artwork(self, movie) -> list:
+	def download_artwork(self, movie: moviemanager.core.models.movie.Movie) -> list:
 		"""Download all enabled artwork files for a movie.
 
 		Iterates over all artwork types, checking the settings

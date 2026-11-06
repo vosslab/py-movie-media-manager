@@ -2,6 +2,7 @@
 
 # Standard Library
 import logging
+import collections.abc
 
 # local repo modules
 import moviemanager.api.api_cache
@@ -15,6 +16,7 @@ import moviemanager.api.trailer_service
 import moviemanager.core.movie.movie_list
 import moviemanager.core.movie.rename_service
 import moviemanager.core.movie.template_engine
+import moviemanager.core.models.movie
 import moviemanager.core.settings
 import moviemanager.scraper.browser_cookies
 import moviemanager.scraper.interfaces
@@ -35,8 +37,8 @@ class MovieAPI:
 
 	def __init__(
 		self,
-		settings: moviemanager.core.settings.Settings = None,
-	):
+		settings: moviemanager.core.settings.Settings | None = None,
+	) -> None:
 		"""Initialize the MovieAPI.
 
 		Args:
@@ -141,7 +143,7 @@ class MovieAPI:
 			)
 
 	#============================================
-	def get_imdb_transport(self):
+	def get_imdb_transport(self) -> object | None:
 		"""Return the IMDB browser transport, creating if needed.
 
 		Returns:
@@ -284,8 +286,9 @@ class MovieAPI:
 
 	#============================================
 	def scan_directory(
-		self, root_path: str, progress_callback=None,
-		movie_callback=None,
+		self, root_path: str,
+		progress_callback: collections.abc.Callable[[int, str], None] | None = None,
+		movie_callback: collections.abc.Callable[[moviemanager.core.models.movie.Movie], None] | None = None,
 	) -> list:
 		"""Scan a directory for movie files and add them to the library.
 
@@ -302,7 +305,6 @@ class MovieAPI:
 			movie_callback=movie_callback,
 		)
 		return result
-
 	#============================================
 	def get_movies(self) -> list:
 		"""Return all movies in the library.
@@ -312,7 +314,6 @@ class MovieAPI:
 		"""
 		result = self._scan_svc.get_movies()
 		return result
-
 	#============================================
 	def get_unscraped(self) -> list:
 		"""Return movies that have not been scraped.
@@ -381,7 +382,6 @@ class MovieAPI:
 			query_runtime=query_runtime,
 		)
 		return result
-
 	#============================================
 	def search_movie_with_fallback(
 		self, title: str, year: str = "",
@@ -408,7 +408,6 @@ class MovieAPI:
 			query_runtime=query_runtime,
 		)
 		return result
-
 	#============================================
 	@staticmethod
 	def compute_match_confidence(
@@ -439,7 +438,7 @@ class MovieAPI:
 
 	#============================================
 	def scrape_movie(
-		self, movie, tmdb_id: int = 0, imdb_id: str = "",
+		self, movie: moviemanager.core.models.movie.Movie, tmdb_id: int = 0, imdb_id: str = "",
 		bypass_cache: bool = False,
 	) -> None:
 		"""Fetch and apply metadata to a movie from the active scraper.
@@ -466,7 +465,7 @@ class MovieAPI:
 	#============================================
 	def rename_movie(
 		self,
-		movie,
+		movie: moviemanager.core.models.movie.Movie,
 		path_template: str = "",
 		file_template: str = "",
 		dry_run: bool = True,
@@ -498,9 +497,8 @@ class MovieAPI:
 			),
 		)
 		return result
-
 	#============================================
-	def download_artwork(self, movie) -> list:
+	def download_artwork(self, movie: moviemanager.core.models.movie.Movie) -> list:
 		"""Download artwork files for a movie.
 
 		Downloads poster and fanart images to the movie directory
@@ -516,7 +514,7 @@ class MovieAPI:
 		return result
 
 	#============================================
-	def download_trailer(self, movie) -> str:
+	def download_trailer(self, movie: moviemanager.core.models.movie.Movie) -> str:
 		"""Download a movie trailer using yt-dlp.
 
 		Args:
@@ -533,7 +531,7 @@ class MovieAPI:
 
 	#============================================
 	def download_subtitles(
-		self, movie, languages: str = "en",
+		self, movie: moviemanager.core.models.movie.Movie, languages: str = "en",
 	) -> list:
 		"""Download subtitles for a movie from OpenSubtitles.
 
@@ -554,7 +552,8 @@ class MovieAPI:
 
 	#============================================
 	def fetch_parental_guides(
-		self, movies: list, progress_callback=None,
+		self, movies: list[moviemanager.core.models.movie.Movie],
+		progress_callback: collections.abc.Callable[[int, int, str], None] | None = None,
 	) -> dict:
 		"""Fetch parental guide data for movies missing it.
 
@@ -590,6 +589,12 @@ class MovieAPI:
 		return result
 
 	#============================================
+	def get_failed_parental_guide_count(self) -> int:
+		"""Return the number of parental-guide fetches available to retry."""
+		count = self._scrape_svc.get_failed_parental_guide_count()
+		return count
+
+	#============================================
 	def clear_failed_parental_guides(self) -> None:
 		"""Clear the list of failed parental guide fetches."""
 		self._scrape_svc.clear_failed_parental_guides()
@@ -613,15 +618,3 @@ class MovieAPI:
 			),
 		)
 		return result
-
-	#============================================
-	# -- backward compatibility: _failed_parental_guides access --
-	#============================================
-
-	@property
-	def _failed_parental_guides(self) -> list:
-		"""Provide backward-compatible access to scrape service failures.
-
-		main_window.py accesses this attribute directly for counting.
-		"""
-		return self._scrape_svc._failed_parental_guides

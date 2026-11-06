@@ -7,7 +7,7 @@ import PySide6.QtWidgets
 
 
 #============================================
-def build_toolbar(window) -> dict:
+def build_toolbar(window: object) -> dict:
 	"""Build the main toolbar with labeled icons in 3-step workflow order.
 
 	Layout: Open | sep | 1. Match | 2. Organize | 3. Download
@@ -174,8 +174,8 @@ def build_toolbar(window) -> dict:
 
 #============================================
 def _make_action(
-	window, toolbar, label: str,
-	theme_name: str, fallback_pixmap,
+	window: object, toolbar: object, label: str,
+	theme_name: str, fallback_pixmap: object,
 	tooltip: str,
 ) -> PySide6.QtGui.QAction:
 	"""Create a toolbar action with themed icon and fallback.
@@ -203,7 +203,7 @@ def _make_action(
 
 
 #============================================
-def _build_action_map(window) -> dict:
+def _build_action_map(window: object) -> dict:
 	"""Build mapping from action names to window methods.
 
 	Args:

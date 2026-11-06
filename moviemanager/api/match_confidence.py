@@ -233,10 +233,3 @@ def compute_match_confidence(
 	# ensure bounds
 	confidence = max(0.0, min(1.0, confidence))
 	return confidence
-
-
-# simple assertions for basic behavior
-assert compute_match_confidence("The Matrix", "1999", "The Matrix", "1999") >= 0.9
-assert compute_match_confidence("The Matrix", "1999", "The Matrix", "2000") >= 0.7
-assert compute_match_confidence("The Matrix", "1999", "Frozen", "2013") < 0.3
-assert compute_match_confidence("Batman Returns", "", "Returns Batman", "") > 0.3

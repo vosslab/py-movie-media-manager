@@ -10,7 +10,7 @@ import PySide6.QtWidgets
 
 
 #============================================
-def build_menus(window, config_path: str = "") -> dict:
+def build_menus(window: object, config_path: str = "") -> dict:
 	"""Build menus and shortcuts from YAML config on a QMainWindow.
 
 	Args:
@@ -68,7 +68,7 @@ def build_menus(window, config_path: str = "") -> dict:
 
 
 #============================================
-def _build_action_map(window) -> dict:
+def _build_action_map(window: object) -> dict:
 	"""Build mapping from action names to window methods.
 
 	Args:

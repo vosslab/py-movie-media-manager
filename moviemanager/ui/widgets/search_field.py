@@ -12,7 +12,7 @@ class SearchField(PySide6.QtWidgets.QLineEdit):
 	# signal emitted when filter text changes (debounced)
 	filter_changed = PySide6.QtCore.Signal(str)
 
-	def __init__(self, parent=None):
+	def __init__(self, parent: PySide6.QtWidgets.QWidget | None = None) -> None:
 		super().__init__(parent)
 		self.setPlaceholderText("Filter movies...")
 		self.setClearButtonEnabled(True)

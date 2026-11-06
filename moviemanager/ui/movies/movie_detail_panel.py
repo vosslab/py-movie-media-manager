@@ -22,7 +22,7 @@ MEDIA_COLUMNS = ["Filename", "Type", "Size", "Resolution"]
 class MediaFileTableModel(PySide6.QtCore.QAbstractTableModel):
 	"""Table model for the media files list."""
 
-	def __init__(self, parent=None):
+	def __init__(self, parent: object=None) -> object:
 		super().__init__(parent)
 		self._files = []
 
@@ -34,17 +34,17 @@ class MediaFileTableModel(PySide6.QtCore.QAbstractTableModel):
 		self.endResetModel()
 
 	#============================================
-	def rowCount(self, parent=None) -> int:
+	def rowCount(self, parent: object=None) -> int:
 		"""Return number of rows."""
 		return len(self._files)
 
 	#============================================
-	def columnCount(self, parent=None) -> int:
+	def columnCount(self, parent: object=None) -> int:
 		"""Return number of columns."""
 		return len(MEDIA_COLUMNS)
 
 	#============================================
-	def headerData(self, section, orientation, role=None):
+	def headerData(self, section: object, orientation: object, role: object=None) -> object:
 		"""Return header data for the given section."""
 		if role is None:
 			role = PySide6.QtCore.Qt.ItemDataRole.DisplayRole
@@ -54,7 +54,7 @@ class MediaFileTableModel(PySide6.QtCore.QAbstractTableModel):
 		return None
 
 	#============================================
-	def data(self, index, role=None):
+	def data(self, index: object, role: object=None) -> object:
 		"""Return data for the given index and role."""
 		if role is None:
 			role = PySide6.QtCore.Qt.ItemDataRole.DisplayRole
@@ -83,7 +83,7 @@ class MediaFileTableModel(PySide6.QtCore.QAbstractTableModel):
 class MovieDetailPanel(PySide6.QtWidgets.QTabWidget):
 	"""Tabbed panel showing movie details."""
 
-	def __init__(self, parent=None):
+	def __init__(self, parent: object=None) -> object:
 		super().__init__(parent)
 		self._pool = PySide6.QtCore.QThreadPool()
 		# track in-flight image workers for cancellation
@@ -103,7 +103,7 @@ class MovieDetailPanel(PySide6.QtWidgets.QTabWidget):
 		self.addTab(self._media_widget, "Media Files")
 
 	#============================================
-	def _setup_info_tab(self):
+	def _setup_info_tab(self) -> object:
 		"""Create the info tab with poster on top and compact info below."""
 		layout = PySide6.QtWidgets.QVBoxLayout(self._info_widget)
 		# poster image at the top
@@ -142,7 +142,7 @@ class MovieDetailPanel(PySide6.QtWidgets.QTabWidget):
 		self._title_label.setText("No movie selected")
 
 	#============================================
-	def _setup_artwork_tab(self):
+	def _setup_artwork_tab(self) -> object:
 		"""Create the artwork tab with fanart label."""
 		layout = PySide6.QtWidgets.QHBoxLayout(self._artwork_widget)
 		# fanart only (poster is now on the Info tab)
@@ -151,7 +151,7 @@ class MovieDetailPanel(PySide6.QtWidgets.QTabWidget):
 		layout.addWidget(self._fanart_label)
 
 	#============================================
-	def _setup_media_tab(self):
+	def _setup_media_tab(self) -> object:
 		"""Create the media files tab with a QTableView and model (#21)."""
 		layout = PySide6.QtWidgets.QVBoxLayout(self._media_widget)
 		self._media_model = MediaFileTableModel()
@@ -178,7 +178,7 @@ class MovieDetailPanel(PySide6.QtWidgets.QTabWidget):
 		self._pool.waitForDone(1000)
 
 	#============================================
-	def set_movie(self, movie) -> None:
+	def set_movie(self, movie: object) -> None:
 		"""Display details for the given movie."""
 		if movie is None:
 			self._clear()

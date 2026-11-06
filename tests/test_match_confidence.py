@@ -12,7 +12,7 @@ import moviemanager.api.match_confidence
 
 
 #============================================
-def test_exact_title_and_year():
+def test_exact_title_and_year() -> None:
 	"""Exact title + year should score very high (>= 0.9)."""
 	score = moviemanager.api.match_confidence.compute_match_confidence(
 		"The Matrix", "1999", "The Matrix", "1999",
@@ -21,7 +21,7 @@ def test_exact_title_and_year():
 
 
 #============================================
-def test_exact_title_year_off_by_one():
+def test_exact_title_year_off_by_one() -> None:
 	"""Exact title, year off by 1 should score >= 0.7."""
 	score = moviemanager.api.match_confidence.compute_match_confidence(
 		"The Matrix", "1999", "The Matrix", "2000",
@@ -30,7 +30,7 @@ def test_exact_title_year_off_by_one():
 
 
 #============================================
-def test_similar_title_with_article():
+def test_similar_title_with_article() -> None:
 	"""Similar title with dropped article + year should score >= 0.7."""
 	score = moviemanager.api.match_confidence.compute_match_confidence(
 		"The Matrix", "1999", "Matrix", "1999",
@@ -39,7 +39,7 @@ def test_similar_title_with_article():
 
 
 #============================================
-def test_different_title_low_score():
+def test_different_title_low_score() -> None:
 	"""Completely different title should score < 0.3."""
 	score = moviemanager.api.match_confidence.compute_match_confidence(
 		"The Matrix", "1999", "Frozen", "2013",
@@ -48,7 +48,7 @@ def test_different_title_low_score():
 
 
 #============================================
-def test_token_reorder_reasonable_score():
+def test_token_reorder_reasonable_score() -> None:
 	"""Reordered tokens should still produce a reasonable score."""
 	score = moviemanager.api.match_confidence.compute_match_confidence(
 		"Batman Returns", "1992", "Returns Batman", "1992",
@@ -57,7 +57,7 @@ def test_token_reorder_reasonable_score():
 
 
 #============================================
-def test_missing_query_year_moderate_score():
+def test_missing_query_year_moderate_score() -> None:
 	"""Missing query year should produce a moderate score."""
 	score = moviemanager.api.match_confidence.compute_match_confidence(
 		"The Matrix", "", "The Matrix", "1999",
@@ -67,7 +67,7 @@ def test_missing_query_year_moderate_score():
 
 
 #============================================
-def test_popularity_tiebreaker():
+def test_popularity_tiebreaker() -> None:
 	"""Among similar titles, higher-rated result scores slightly higher."""
 	# use year off-by-1 so score does not saturate at 1.0
 	score_high = moviemanager.api.match_confidence.compute_match_confidence(
@@ -84,7 +84,7 @@ def test_popularity_tiebreaker():
 
 
 #============================================
-def test_original_title_match():
+def test_original_title_match() -> None:
 	"""Match against original_title when it differs from title."""
 	score = moviemanager.api.match_confidence.compute_match_confidence(
 		"Crouching Tiger Hidden Dragon", "2000",
@@ -95,7 +95,7 @@ def test_original_title_match():
 
 
 #============================================
-def test_empty_result_title():
+def test_empty_result_title() -> None:
 	"""Empty result title should score very low."""
 	score = moviemanager.api.match_confidence.compute_match_confidence(
 		"The Matrix", "1999", "", "",
@@ -104,7 +104,7 @@ def test_empty_result_title():
 
 
 #============================================
-def test_score_within_bounds():
+def test_score_within_bounds() -> None:
 	"""Score should always be between 0.0 and 1.0."""
 	# test a variety of inputs
 	test_cases = [
@@ -124,7 +124,7 @@ def test_score_within_bounds():
 
 
 #============================================
-def test_normalize_title_internal():
+def test_normalize_title_internal() -> None:
 	"""Test the internal _normalize_title helper."""
 	normalize = moviemanager.api.match_confidence._normalize_title
 	assert normalize("The Matrix") == "matrix"
@@ -135,7 +135,7 @@ def test_normalize_title_internal():
 
 
 #============================================
-def test_year_proximity_internal():
+def test_year_proximity_internal() -> None:
 	"""Test the internal _year_proximity bell curve helper."""
 	prox = moviemanager.api.match_confidence._year_proximity
 	# exact match is 1.0
@@ -155,7 +155,7 @@ def test_year_proximity_internal():
 
 
 #============================================
-def test_runtime_proximity_internal():
+def test_runtime_proximity_internal() -> None:
 	"""Test the internal _runtime_proximity bell curve helper."""
 	prox = moviemanager.api.match_confidence._runtime_proximity
 	# exact match is 1.0
@@ -176,7 +176,7 @@ def test_runtime_proximity_internal():
 
 
 #============================================
-def test_runtime_improves_match():
+def test_runtime_improves_match() -> None:
 	"""Matching runtime should boost confidence vs missing runtime."""
 	# same title/year but one has matching runtime, other has none
 	score_with_runtime = (
@@ -198,7 +198,7 @@ def test_runtime_improves_match():
 
 
 #============================================
-def test_runtime_mismatch_hurts():
+def test_runtime_mismatch_hurts() -> None:
 	"""Very different runtime should reduce confidence."""
 	# same title/year, one with close runtime, one with far runtime
 	score_close = (

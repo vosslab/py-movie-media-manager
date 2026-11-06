@@ -17,7 +17,7 @@ class RenamePreviewDialog(PySide6.QtWidgets.QDialog):
 		parent: Parent widget.
 	"""
 
-	def __init__(self, pairs: list, parent=None):
+	def __init__(self, pairs: list, parent: object=None) -> object:
 		super().__init__(parent)
 		self._pairs = pairs
 		self.setWindowTitle("Rename Preview")

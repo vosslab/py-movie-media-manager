@@ -13,7 +13,7 @@ import moviemanager.core.movie.template_engine
 
 
 #============================================
-def test_expand_template_title_year():
+def test_expand_template_title_year() -> None:
 	"""Basic title and year substitution."""
 	movie = moviemanager.core.models.movie.Movie(
 		title="Inception",
@@ -26,7 +26,7 @@ def test_expand_template_title_year():
 
 
 #============================================
-def test_expand_template_missing_year_removes_parens():
+def test_expand_template_missing_year_removes_parens() -> None:
 	"""Empty year causes empty parentheses to be removed."""
 	movie = moviemanager.core.models.movie.Movie(
 		title="Inception",
@@ -39,7 +39,7 @@ def test_expand_template_missing_year_removes_parens():
 
 
 #============================================
-def test_expand_template_missing_brackets():
+def test_expand_template_missing_brackets() -> None:
 	"""Empty tokens cause empty brackets to be removed."""
 	movie = moviemanager.core.models.movie.Movie(
 		title="Inception",
@@ -52,7 +52,7 @@ def test_expand_template_missing_brackets():
 
 
 #============================================
-def test_expand_template_first_letter():
+def test_expand_template_first_letter() -> None:
 	"""First letter token extracts uppercase initial."""
 	movie = moviemanager.core.models.movie.Movie(
 		title="Inception",
@@ -65,7 +65,7 @@ def test_expand_template_first_letter():
 
 
 #============================================
-def test_expand_template_genre():
+def test_expand_template_genre() -> None:
 	"""Genre token uses first genre from list."""
 	movie = moviemanager.core.models.movie.Movie(
 		title="Inception",
@@ -79,7 +79,7 @@ def test_expand_template_genre():
 
 
 #============================================
-def test_expand_template_empty_genre():
+def test_expand_template_empty_genre() -> None:
 	"""Empty genres list produces empty string for genre token."""
 	movie = moviemanager.core.models.movie.Movie(
 		title="Inception",
@@ -93,7 +93,7 @@ def test_expand_template_empty_genre():
 
 
 #============================================
-def test_expand_template_director():
+def test_expand_template_director() -> None:
 	"""Director token is substituted correctly."""
 	movie = moviemanager.core.models.movie.Movie(
 		title="Inception",
@@ -107,7 +107,7 @@ def test_expand_template_director():
 
 
 #============================================
-def test_expand_template_special_chars_cleaned():
+def test_expand_template_special_chars_cleaned() -> None:
 	"""Colons and slashes are removed by clean_filename."""
 	movie = moviemanager.core.models.movie.Movie(
 		title='Mission: Impossible / Rogue Nation',
@@ -123,7 +123,7 @@ def test_expand_template_special_chars_cleaned():
 
 
 #============================================
-def test_expand_template_shell_safe():
+def test_expand_template_shell_safe() -> None:
 	"""Shell-safe mode replaces spaces and special chars."""
 	movie = moviemanager.core.models.movie.Movie(
 		title="Ocean's Eleven",
@@ -138,7 +138,7 @@ def test_expand_template_shell_safe():
 
 
 #============================================
-def test_expand_template_collapses_spaces():
+def test_expand_template_collapses_spaces() -> None:
 	"""Multiple spaces from empty tokens collapse to single space."""
 	movie = moviemanager.core.models.movie.Movie(
 		title="Inception",
@@ -153,7 +153,7 @@ def test_expand_template_collapses_spaces():
 
 
 #============================================
-def test_expand_template_with_media_tokens():
+def test_expand_template_with_media_tokens() -> None:
 	"""Media tokens from video file are substituted."""
 	video_mf = moviemanager.core.models.media_file.MediaFile(
 		path=os.path.join(tempfile.gettempdir(), "test.mkv"),
@@ -175,7 +175,7 @@ def test_expand_template_with_media_tokens():
 
 
 #============================================
-def test_build_file_template_defaults():
+def test_build_file_template_defaults() -> None:
 	"""Default settings produce title-year template."""
 	settings = _make_settings()
 	result = moviemanager.core.movie.template_engine.build_file_template(
@@ -185,7 +185,7 @@ def test_build_file_template_defaults():
 
 
 #============================================
-def test_build_file_template_with_resolution():
+def test_build_file_template_with_resolution() -> None:
 	"""Resolution checkbox appends resolution token."""
 	settings = _make_settings(rename_resolution=True)
 	result = moviemanager.core.movie.template_engine.build_file_template(
@@ -195,7 +195,7 @@ def test_build_file_template_with_resolution():
 
 
 #============================================
-def test_build_file_template_all_tokens():
+def test_build_file_template_all_tokens() -> None:
 	"""All media checkboxes append all tokens."""
 	settings = _make_settings(
 		rename_resolution=True,
@@ -211,7 +211,7 @@ def test_build_file_template_all_tokens():
 
 
 #============================================
-def test_build_file_template_dot_separator():
+def test_build_file_template_dot_separator() -> None:
 	"""Dot separator joins tokens with dots."""
 	settings = _make_settings(
 		media_separator=".",

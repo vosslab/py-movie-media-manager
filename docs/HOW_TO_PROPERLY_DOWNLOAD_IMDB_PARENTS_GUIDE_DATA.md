@@ -122,13 +122,13 @@ props.pageProps.aboveTheFoldData.parentsGuide.categories[]
 
 IMDB applies per-IP rate limits independent of WAF challenges. Add a
 `time.sleep(random.random())` pause before each request to stay under
-the limit. See [docs/WAF_CHALLENGES.md](docs/WAF_CHALLENGES.md) for
+the limit. See [docs/WAF_CHALLENGES.md](WAF_CHALLENGES.md) for
 full WAF documentation.
 
 ## Implementation in this project
 
 The parental guide fetch is implemented in
-[moviemanager/scraper/imdb_scraper.py](moviemanager/scraper/imdb_scraper.py):
+[moviemanager/scraper/imdb_scraper.py](../moviemanager/scraper/imdb_scraper.py):
 
 - `_fetch_parental_guide_graphql()` -- primary transport via IMDB GraphQL API
 - `get_parental_guide()` -- tries GraphQL first, falls back to browser transport

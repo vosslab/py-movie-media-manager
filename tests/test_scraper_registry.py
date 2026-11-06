@@ -41,7 +41,7 @@ def _make_settings(**overrides) -> types.SimpleNamespace:
 
 
 #============================================
-def test_register_and_get_names():
+def test_register_and_get_names() -> None:
 	"""Verify providers can be registered and names retrieved."""
 	registry = moviemanager.scraper.registry.ScraperRegistry()
 	registry.register("tmdb", moviemanager.scraper.tmdb_scraper.TmdbScraper)
@@ -51,7 +51,7 @@ def test_register_and_get_names():
 
 
 #============================================
-def test_get_available_filters_by_capability():
+def test_get_available_filters_by_capability() -> None:
 	"""Verify get_available only returns providers with matching capability."""
 	registry = moviemanager.scraper.registry.ScraperRegistry()
 	registry.register(
@@ -84,7 +84,7 @@ def test_get_available_filters_by_capability():
 
 
 #============================================
-def test_get_available_filters_by_settings_keys():
+def test_get_available_filters_by_settings_keys() -> None:
 	"""Verify get_available excludes providers when required keys are missing."""
 	registry = moviemanager.scraper.registry.ScraperRegistry()
 	registry.register(
@@ -108,7 +108,7 @@ def test_get_available_filters_by_settings_keys():
 @unittest.mock.patch("tmdbv3api.TMDb")
 @unittest.mock.patch("tmdbv3api.Movie")
 @unittest.mock.patch("tmdbv3api.Find")
-def test_create_provider_tmdb(mock_find, mock_movie, mock_tmdb):
+def test_create_provider_tmdb(mock_find: object, mock_movie: object, mock_tmdb: object) -> None:
 	"""Verify create_provider instantiates TmdbScraper with api_key."""
 	registry = moviemanager.scraper.registry.ScraperRegistry()
 	registry.register(
@@ -123,7 +123,7 @@ def test_create_provider_tmdb(mock_find, mock_movie, mock_tmdb):
 
 
 #============================================
-def test_create_provider_imdb():
+def test_create_provider_imdb() -> None:
 	"""Verify create_provider instantiates ImdbScraper."""
 	registry = moviemanager.scraper.registry.ScraperRegistry()
 	registry.register(
@@ -138,7 +138,7 @@ def test_create_provider_imdb():
 
 
 #============================================
-def test_create_provider_unknown_raises():
+def test_create_provider_unknown_raises() -> None:
 	"""Verify create_provider raises KeyError for unknown provider."""
 	registry = moviemanager.scraper.registry.ScraperRegistry()
 	settings = _make_settings()
@@ -154,7 +154,7 @@ def test_create_provider_unknown_raises():
 @unittest.mock.patch("tmdbv3api.TMDb")
 @unittest.mock.patch("tmdbv3api.Movie")
 @unittest.mock.patch("tmdbv3api.Find")
-def test_create_pipeline_tmdb_primary(mock_find, mock_movie, mock_tmdb):
+def test_create_pipeline_tmdb_primary(mock_find: object, mock_movie: object, mock_tmdb: object) -> None:
 	"""Verify pipeline uses TMDB primary + IMDB + parental guide supplements."""
 	registry = moviemanager.scraper.registry.ScraperRegistry()
 	registry.register(
@@ -190,7 +190,7 @@ def test_create_pipeline_tmdb_primary(mock_find, mock_movie, mock_tmdb):
 
 
 #============================================
-def test_create_pipeline_imdb_fallback():
+def test_create_pipeline_imdb_fallback() -> None:
 	"""Verify pipeline falls back to IMDB-only when no TMDB key."""
 	registry = moviemanager.scraper.registry.ScraperRegistry()
 	registry.register(
@@ -214,8 +214,8 @@ def test_create_pipeline_imdb_fallback():
 @unittest.mock.patch("tmdbv3api.Movie")
 @unittest.mock.patch("tmdbv3api.Find")
 def test_create_pipeline_imdb_primary_with_tmdb_supplement(
-	mock_find, mock_movie, mock_tmdb,
-):
+	mock_find: object, mock_movie: object, mock_tmdb: object,
+) -> None:
 	"""Verify IMDB primary adds TMDB as supplement for artwork."""
 	registry = moviemanager.scraper.registry.ScraperRegistry()
 	registry.register(
@@ -250,7 +250,7 @@ def test_create_pipeline_imdb_primary_with_tmdb_supplement(
 
 
 #============================================
-def test_pipeline_get_for_capability():
+def test_pipeline_get_for_capability() -> None:
 	"""Verify pipeline routes capability requests to correct provider."""
 	# create mock providers with capabilities
 	primary = types.SimpleNamespace(
@@ -271,7 +271,7 @@ def test_pipeline_get_for_capability():
 
 
 #============================================
-def test_pipeline_get_for_capability_no_primary():
+def test_pipeline_get_for_capability_no_primary() -> None:
 	"""Verify pipeline handles None primary gracefully."""
 	supplement = types.SimpleNamespace(
 		capabilities={_Cap.PARENTAL_GUIDE},
@@ -284,7 +284,7 @@ def test_pipeline_get_for_capability_no_primary():
 
 
 #============================================
-def test_auto_discovery():
+def test_auto_discovery() -> None:
 	"""Verify build_default_registry discovers all scrapers."""
 	registry = moviemanager.scraper.registry.build_default_registry()
 	names = registry.get_registered_names()
@@ -296,7 +296,7 @@ def test_auto_discovery():
 
 
 #============================================
-def test_auto_discovery_capabilities():
+def test_auto_discovery_capabilities() -> None:
 	"""Verify discovered scrapers have correct capabilities."""
 	registry = moviemanager.scraper.registry.build_default_registry()
 	settings_with_keys = _make_settings(
@@ -327,7 +327,7 @@ def test_auto_discovery_capabilities():
 
 
 #============================================
-def test_class_name_to_provider_name():
+def test_class_name_to_provider_name() -> None:
 	"""Verify class name conversion strips suffix and lowercases."""
 	func = moviemanager.scraper.registry._class_name_to_provider_name
 	assert func("TmdbScraper") == "tmdb"
@@ -339,7 +339,7 @@ def test_class_name_to_provider_name():
 
 
 #============================================
-def test_scraper_capabilities_match_interfaces():
+def test_scraper_capabilities_match_interfaces() -> None:
 	"""Verify each scraper's capabilities align with ABC inheritance."""
 	# TmdbScraper implements MetadataProvider + ArtworkProvider
 	tmdb_caps = moviemanager.scraper.tmdb_scraper.TmdbScraper.capabilities

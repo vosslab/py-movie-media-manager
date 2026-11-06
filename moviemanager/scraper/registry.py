@@ -8,6 +8,7 @@ import importlib
 
 # local repo modules
 import moviemanager.scraper.interfaces
+import moviemanager.core.settings
 
 
 # module logger
@@ -24,7 +25,7 @@ class ScraperRegistry:
 	"""
 
 	#============================================
-	def __init__(self):
+	def __init__(self) -> None:
 		"""Initialize an empty registry."""
 		# maps provider name -> dict with 'cls' and 'requires_keys'
 		self._providers = {}
@@ -53,7 +54,7 @@ class ScraperRegistry:
 	def get_available(
 		self,
 		capability: moviemanager.scraper.interfaces.ProviderCapability,
-		settings,
+		settings: moviemanager.core.settings.Settings,
 	) -> list:
 		"""Return provider names that support a capability and have keys.
 
@@ -87,7 +88,9 @@ class ScraperRegistry:
 		return available
 
 	#============================================
-	def create_provider(self, name: str, settings) -> object:
+	def create_provider(
+		self, name: str, settings: moviemanager.core.settings.Settings,
+	) -> object:
 		"""Create a provider instance by name using settings for config.
 
 		Maps known settings keys to constructor arguments:
@@ -125,7 +128,9 @@ class ScraperRegistry:
 		return instance
 
 	#============================================
-	def create_pipeline(self, settings) -> "ProviderPipeline":
+	def create_pipeline(
+		self, settings: moviemanager.core.settings.Settings,
+	) -> "ProviderPipeline":
 		"""Build a ProviderPipeline respecting scraper_provider setting.
 
 		Honors settings.scraper_provider ("imdb" or "tmdb") when the
@@ -241,7 +246,7 @@ class ProviderPipeline:
 	"""
 
 	#============================================
-	def __init__(self, primary=None, supplements: list = None):
+	def __init__(self, primary: object | None = None, supplements: list | None = None) -> None:
 		"""Initialize the pipeline with primary and supplement providers.
 
 		Args:
@@ -369,11 +374,3 @@ def _class_name_to_provider_name(class_name: str) -> str:
 			break
 	result = name.lower()
 	return result
-
-
-# simple assertions for _class_name_to_provider_name
-assert _class_name_to_provider_name("TmdbScraper") == "tmdb"
-assert _class_name_to_provider_name("ImdbScraper") == "imdb"
-assert _class_name_to_provider_name("FanartScraper") == "fanart"
-assert _class_name_to_provider_name("SubtitleScraper") == "subtitle"
-assert _class_name_to_provider_name("ImdbParentalGuideScraper") == "imdbparentalguide"

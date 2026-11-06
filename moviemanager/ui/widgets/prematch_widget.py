@@ -29,7 +29,7 @@ class PrematchWidget(PySide6.QtWidgets.QFrame):
 	# emitted when user clicks "Find Different Match"
 	rematch_requested = PySide6.QtCore.Signal()
 
-	def __init__(self, parent=None):
+	def __init__(self, parent: object=None) -> object:
 		super().__init__(parent)
 		self._setup_ui()
 
@@ -126,7 +126,7 @@ class PrematchWidget(PySide6.QtWidgets.QFrame):
 		outer.addLayout(content_layout, stretch=1)
 
 	#============================================
-	def show_movie(self, movie, task_api) -> None:
+	def show_movie(self, movie: object, task_api: object) -> None:
 		"""Populate the card with existing movie metadata.
 
 		Args:
@@ -197,7 +197,7 @@ class PrematchWidget(PySide6.QtWidgets.QFrame):
 
 
 #============================================
-def _get_movie_poster_path(movie) -> str:
+def _get_movie_poster_path(movie: object) -> str:
 	"""Find existing poster or build a movie-specific cache path.
 
 	Checks for an existing poster.jpg first (the standard download

@@ -44,7 +44,7 @@ class TaskAPI(PySide6.QtCore.QObject):
 	# emitted when pause state changes (True = paused)
 	paused_changed = PySide6.QtCore.Signal(bool)
 
-	def __init__(self, max_workers: int = 2, parent=None):
+	def __init__(self, max_workers: int = 2, parent: object=None) -> object:
 		"""Initialize the task manager.
 
 		Args:
@@ -69,7 +69,7 @@ class TaskAPI(PySide6.QtCore.QObject):
 
 	#============================================
 	def submit_job(
-		self, name: str, fn, *args, _priority: int = PRIORITY_NORMAL, **kwargs,
+		self, name: str, fn: object, *args, _priority: int = PRIORITY_NORMAL, **kwargs,
 	) -> int:
 		"""Submit a named job for background execution with UI tracking.
 
@@ -181,7 +181,7 @@ class TaskAPI(PySide6.QtCore.QObject):
 
 	#============================================
 	def submit(
-		self, fn, *args, _priority: int = PRIORITY_NORMAL, **kwargs,
+		self, fn: object, *args, _priority: int = PRIORITY_NORMAL, **kwargs,
 	) -> int:
 		"""Submit a callable for background execution.
 
@@ -272,7 +272,7 @@ class TaskAPI(PySide6.QtCore.QObject):
 			worker.cancel()
 
 	#============================================
-	def get_result(self, task_id: int):
+	def get_result(self, task_id: int) -> object:
 		"""Get the result of a completed task.
 
 		Args:
@@ -290,7 +290,7 @@ class TaskAPI(PySide6.QtCore.QObject):
 			return self._results[task_id]
 
 	#============================================
-	def get_worker(self, task_id: int):
+	def get_worker(self, task_id: int) -> object:
 		"""Get the Worker instance for a task.
 
 		Useful for connecting additional signals or checking
@@ -333,7 +333,7 @@ class TaskAPI(PySide6.QtCore.QObject):
 			self.job_list_changed.emit()
 
 	#============================================
-	def _on_finished(self, task_id: int, result) -> None:
+	def _on_finished(self, task_id: int, result: object) -> None:
 		"""Handle worker completion and store result.
 
 		Args:

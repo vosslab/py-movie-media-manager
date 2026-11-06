@@ -3,6 +3,7 @@
 # Standard Library
 import os
 import time
+import collections.abc
 
 # local repo modules
 import moviemanager.core.constants
@@ -35,8 +36,10 @@ def detect_artwork_files(dir_path: str, filenames: list = None) -> dict:
 
 #============================================
 def scan_directory(
-	root_path: str, progress_callback=None, movie_callback=None,
-) -> list:
+	root_path: str,
+	progress_callback: collections.abc.Callable[[int, str], None] | None = None,
+	movie_callback: collections.abc.Callable[[moviemanager.core.models.movie.Movie], None] | None = None,
+) -> list[moviemanager.core.models.movie.Movie]:
 	"""Recursively scan a directory tree for movie files.
 
 	Walks root_path, skipping hidden directories and directories listed

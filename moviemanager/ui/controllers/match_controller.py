@@ -31,7 +31,7 @@ class MatchController(PySide6.QtCore.QObject):
 	parental_guides_completed = PySide6.QtCore.Signal(dict)
 	error = PySide6.QtCore.Signal(str)
 
-	def __init__(self, api, task_api, parent=None):
+	def __init__(self, api: object, task_api: object, parent: object=None) -> object:
 		"""Initialize the match controller.
 
 		Args:
@@ -66,7 +66,7 @@ class MatchController(PySide6.QtCore.QObject):
 		return self._pg_task_id
 
 	#============================================
-	def set_api(self, api) -> None:
+	def set_api(self, api: object) -> None:
 		"""Replace the MovieAPI instance (after settings change).
 
 		Args:
@@ -76,7 +76,7 @@ class MatchController(PySide6.QtCore.QObject):
 
 	#============================================
 	def scrape_selected(
-		self, movie_panel, main_window,
+		self, movie_panel: object, main_window: object,
 	) -> None:
 		"""Scrape metadata for selected or checked movies.
 
@@ -133,7 +133,7 @@ class MatchController(PySide6.QtCore.QObject):
 			self.scrape_completed.emit(result)
 
 	#============================================
-	def batch_scrape_unscraped(self, main_window) -> None:
+	def batch_scrape_unscraped(self, main_window: object) -> None:
 		"""Scrape all unscraped movies using auto-select best match.
 
 		Uses confidence scoring to only auto-select high-confidence
@@ -216,9 +216,7 @@ class MatchController(PySide6.QtCore.QObject):
 				)
 			scraped_count += 1
 		# check how many parental guide fetches failed
-		pg_fail_count = len(
-			self._api._failed_parental_guides
-		)
+		pg_fail_count = self._api.get_failed_parental_guide_count()
 		result = {
 			"scraped_count": scraped_count,
 			"skipped_low_confidence": skipped_low_confidence,
@@ -229,7 +227,7 @@ class MatchController(PySide6.QtCore.QObject):
 
 	#============================================
 	def on_batch_scrape_done(
-		self, result: dict, main_window,
+		self, result: dict, main_window: object,
 	) -> None:
 		"""Handle batch scrape completion.
 
@@ -283,7 +281,7 @@ class MatchController(PySide6.QtCore.QObject):
 
 	#============================================
 	def refresh_metadata(
-		self, movie_panel, main_window,
+		self, movie_panel: object, main_window: object,
 	) -> None:
 		"""Re-fetch metadata from IMDB/TMDB for matched movies.
 
@@ -366,7 +364,7 @@ class MatchController(PySide6.QtCore.QObject):
 
 	#============================================
 	def on_refresh_metadata_done(
-		self, result: dict, main_window,
+		self, result: dict, main_window: object,
 	) -> None:
 		"""Handle metadata refresh completion.
 
@@ -385,7 +383,7 @@ class MatchController(PySide6.QtCore.QObject):
 
 	#============================================
 	def fetch_parental_guides(
-		self, movie_panel, main_window,
+		self, movie_panel: object, main_window: object,
 	) -> None:
 		"""Fetch parental guide data from IMDB for matched movies.
 
@@ -462,7 +460,7 @@ class MatchController(PySide6.QtCore.QObject):
 
 	#============================================
 	def on_fetch_parental_guides_done(
-		self, result: dict, main_window,
+		self, result: dict, main_window: object,
 	) -> None:
 		"""Handle parental guide fetch completion.
 

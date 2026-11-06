@@ -69,7 +69,7 @@ def _make_metadata() -> object:
 class TestSearchResultsCache:
 	"""Tests for search result caching."""
 
-	def test_round_trip_imdb_search(self, tmp_path):
+	def test_round_trip_imdb_search(self, tmp_path: object) -> None:
 		"""Search results survive a put/get round trip."""
 		cache = moviemanager.api.api_cache.ApiCache(
 			cache_dir=str(tmp_path), ttl_seconds=3600
@@ -83,7 +83,7 @@ class TestSearchResultsCache:
 		assert cached[1]["title"] == "Clerks II"
 		assert cached[0]["imdb_id"] == "tt0109445"
 
-	def test_round_trip_tmdb_search(self, tmp_path):
+	def test_round_trip_tmdb_search(self, tmp_path: object) -> None:
 		"""TMDB search results survive a put/get round trip."""
 		cache = moviemanager.api.api_cache.ApiCache(
 			cache_dir=str(tmp_path), ttl_seconds=3600
@@ -94,7 +94,7 @@ class TestSearchResultsCache:
 		assert cached is not None
 		assert len(cached) == 1
 
-	def test_cache_miss_returns_none(self, tmp_path):
+	def test_cache_miss_returns_none(self, tmp_path: object) -> None:
 		"""A cache miss returns None."""
 		cache = moviemanager.api.api_cache.ApiCache(
 			cache_dir=str(tmp_path), ttl_seconds=3600
@@ -107,7 +107,7 @@ class TestSearchResultsCache:
 class TestMetadataCache:
 	"""Tests for metadata caching."""
 
-	def test_round_trip_imdb_metadata(self, tmp_path):
+	def test_round_trip_imdb_metadata(self, tmp_path: object) -> None:
 		"""IMDB metadata survives a put/get round trip."""
 		cache = moviemanager.api.api_cache.ApiCache(
 			cache_dir=str(tmp_path), ttl_seconds=3600
@@ -122,7 +122,7 @@ class TestMetadataCache:
 		assert cached["actors"][0]["name"] == "Brian O'Halloran"
 		assert cached["actors"][0]["role"] == "Dante Hicks"
 
-	def test_round_trip_tmdb_metadata_composite_key(self, tmp_path):
+	def test_round_trip_tmdb_metadata_composite_key(self, tmp_path: object) -> None:
 		"""TMDB metadata with composite key survives round trip."""
 		cache = moviemanager.api.api_cache.ApiCache(
 			cache_dir=str(tmp_path), ttl_seconds=3600
@@ -133,7 +133,7 @@ class TestMetadataCache:
 		assert cached is not None
 		assert cached["title"] == "Clerks"
 
-	def test_metadata_miss(self, tmp_path):
+	def test_metadata_miss(self, tmp_path: object) -> None:
 		"""Missing metadata returns None."""
 		cache = moviemanager.api.api_cache.ApiCache(
 			cache_dir=str(tmp_path), ttl_seconds=3600
@@ -146,7 +146,7 @@ class TestMetadataCache:
 class TestParentalGuideCache:
 	"""Tests for parental guide caching."""
 
-	def test_round_trip(self, tmp_path):
+	def test_round_trip(self, tmp_path: object) -> None:
 		"""Parental guide data survives round trip."""
 		cache = moviemanager.api.api_cache.ApiCache(
 			cache_dir=str(tmp_path), ttl_seconds=3600
@@ -161,7 +161,7 @@ class TestParentalGuideCache:
 		assert cached is not None
 		assert cached["profanity"] == "Severe"
 
-	def test_miss(self, tmp_path):
+	def test_miss(self, tmp_path: object) -> None:
 		"""Missing parental guide returns None."""
 		cache = moviemanager.api.api_cache.ApiCache(
 			cache_dir=str(tmp_path), ttl_seconds=3600
@@ -174,7 +174,7 @@ class TestParentalGuideCache:
 class TestPosterLookupCache:
 	"""Tests for TMDB poster lookup caching."""
 
-	def test_round_trip(self, tmp_path):
+	def test_round_trip(self, tmp_path: object) -> None:
 		"""Poster lookup survives round trip as a tuple."""
 		cache = moviemanager.api.api_cache.ApiCache(
 			cache_dir=str(tmp_path), ttl_seconds=3600
@@ -184,7 +184,7 @@ class TestPosterLookupCache:
 		assert result is not None
 		assert result == (2292, "https://image.tmdb.org/poster.jpg")
 
-	def test_miss(self, tmp_path):
+	def test_miss(self, tmp_path: object) -> None:
 		"""Missing poster lookup returns None."""
 		cache = moviemanager.api.api_cache.ApiCache(
 			cache_dir=str(tmp_path), ttl_seconds=3600
@@ -197,7 +197,7 @@ class TestPosterLookupCache:
 class TestTTLExpiration:
 	"""Tests for TTL expiration behavior."""
 
-	def test_expired_entry_returns_none(self, tmp_path):
+	def test_expired_entry_returns_none(self, tmp_path: object) -> None:
 		"""Entries older than TTL are treated as cache misses."""
 		cache = moviemanager.api.api_cache.ApiCache(
 			cache_dir=str(tmp_path), ttl_seconds=60
@@ -216,7 +216,7 @@ class TestTTLExpiration:
 		result = cache.get_search_results("imdb_search", "clerks", "1994")
 		assert result is None
 
-	def test_fresh_entry_returns_data(self, tmp_path):
+	def test_fresh_entry_returns_data(self, tmp_path: object) -> None:
 		"""Entries within TTL are returned normally."""
 		cache = moviemanager.api.api_cache.ApiCache(
 			cache_dir=str(tmp_path), ttl_seconds=3600
@@ -231,7 +231,7 @@ class TestTTLExpiration:
 class TestKeyNormalization:
 	"""Tests for cache key normalization."""
 
-	def test_case_insensitive(self, tmp_path):
+	def test_case_insensitive(self, tmp_path: object) -> None:
 		"""Keys are case-insensitive."""
 		cache = moviemanager.api.api_cache.ApiCache(
 			cache_dir=str(tmp_path), ttl_seconds=3600
@@ -241,7 +241,7 @@ class TestKeyNormalization:
 		cached = cache.get_search_results("imdb_search", "clerks", "1994")
 		assert cached is not None
 
-	def test_whitespace_stripped(self, tmp_path):
+	def test_whitespace_stripped(self, tmp_path: object) -> None:
 		"""Leading/trailing whitespace is stripped from keys."""
 		cache = moviemanager.api.api_cache.ApiCache(
 			cache_dir=str(tmp_path), ttl_seconds=3600
@@ -256,7 +256,7 @@ class TestKeyNormalization:
 class TestClearAndRemove:
 	"""Tests for clear and remove operations."""
 
-	def test_clear_single_type(self, tmp_path):
+	def test_clear_single_type(self, tmp_path: object) -> None:
 		"""Clearing one cache type removes only that file."""
 		cache = moviemanager.api.api_cache.ApiCache(
 			cache_dir=str(tmp_path), ttl_seconds=3600
@@ -269,7 +269,7 @@ class TestClearAndRemove:
 		# parental guide cache is untouched
 		assert cache.get_parental_guide("tt0109445") is not None
 
-	def test_clear_all(self, tmp_path):
+	def test_clear_all(self, tmp_path: object) -> None:
 		"""Clearing without a type removes all cache files."""
 		cache = moviemanager.api.api_cache.ApiCache(
 			cache_dir=str(tmp_path), ttl_seconds=3600
@@ -280,7 +280,7 @@ class TestClearAndRemove:
 		assert cache.get_search_results("imdb_search", "clerks", "1994") is None
 		assert cache.get_parental_guide("tt0109445") is None
 
-	def test_remove_single_entry(self, tmp_path):
+	def test_remove_single_entry(self, tmp_path: object) -> None:
 		"""Removing a single entry keeps other entries intact."""
 		cache = moviemanager.api.api_cache.ApiCache(
 			cache_dir=str(tmp_path), ttl_seconds=3600
@@ -292,7 +292,7 @@ class TestClearAndRemove:
 		assert cache.get_search_results("imdb_search", "clerks", "1994") is None
 		assert cache.get_search_results("imdb_search", "matrix", "1999") is not None
 
-	def test_remove_nonexistent_returns_false(self, tmp_path):
+	def test_remove_nonexistent_returns_false(self, tmp_path: object) -> None:
 		"""Removing a nonexistent key returns False."""
 		cache = moviemanager.api.api_cache.ApiCache(
 			cache_dir=str(tmp_path), ttl_seconds=3600
@@ -305,7 +305,7 @@ class TestClearAndRemove:
 class TestCorruptJson:
 	"""Tests for handling corrupt cache files."""
 
-	def test_corrupt_json_returns_empty(self, tmp_path):
+	def test_corrupt_json_returns_empty(self, tmp_path: object) -> None:
 		"""Corrupt JSON file is handled gracefully."""
 		cache = moviemanager.api.api_cache.ApiCache(
 			cache_dir=str(tmp_path), ttl_seconds=3600
@@ -317,7 +317,7 @@ class TestCorruptJson:
 		result = cache.get_search_results("imdb_search", "clerks", "1994")
 		assert result is None
 
-	def test_non_dict_json_returns_empty(self, tmp_path):
+	def test_non_dict_json_returns_empty(self, tmp_path: object) -> None:
 		"""A JSON file containing a list instead of dict is reset."""
 		cache = moviemanager.api.api_cache.ApiCache(
 			cache_dir=str(tmp_path), ttl_seconds=3600
@@ -333,7 +333,7 @@ class TestCorruptJson:
 class TestNonSerializableData:
 	"""Tests for handling non-JSON-serializable data."""
 
-	def test_non_serializable_does_not_crash(self, tmp_path):
+	def test_non_serializable_does_not_crash(self, tmp_path: object) -> None:
 		"""Cache handles non-serializable objects without crashing."""
 		cache = moviemanager.api.api_cache.ApiCache(
 			cache_dir=str(tmp_path), ttl_seconds=3600
@@ -351,7 +351,7 @@ class TestNonSerializableData:
 		# the non-serializable value was converted to a string
 		assert isinstance(cached["bad_field"], str)
 
-	def test_non_serializable_logs_warning(self, tmp_path, caplog):
+	def test_non_serializable_logs_warning(self, tmp_path: object, caplog: object) -> None:
 		"""Cache logs a warning when encountering non-serializable data."""
 		import logging
 		cache = moviemanager.api.api_cache.ApiCache(
@@ -367,7 +367,7 @@ class TestNonSerializableData:
 class TestDirectoryCreation:
 	"""Tests for automatic directory creation."""
 
-	def test_creates_missing_directory(self, tmp_path):
+	def test_creates_missing_directory(self, tmp_path: object) -> None:
 		"""Cache creates its directory on first write."""
 		nested_dir = os.path.join(str(tmp_path), "nested", "cache", "dir")
 		cache = moviemanager.api.api_cache.ApiCache(

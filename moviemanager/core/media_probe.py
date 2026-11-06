@@ -3,9 +3,13 @@
 # Standard Library
 import os
 import time
+import collections.abc
 
 # PIP3 modules
 import pymediainfo
+
+# local repo modules
+import moviemanager.core.models.movie
 
 
 # codec name normalization: pymediainfo codec ID -> short label
@@ -103,7 +107,7 @@ def _normalize_audio_codec(raw: str) -> str:
 
 
 #============================================
-def _normalize_channels(count) -> str:
+def _normalize_channels(count: object) -> str:
 	"""Convert a channel count to a human-readable label.
 
 	Args:
@@ -188,7 +192,10 @@ def probe_media_file(path: str) -> dict:
 
 
 #============================================
-def probe_movie_list(movies: list, progress_callback=None) -> None:
+def probe_movie_list(
+	movies: list["moviemanager.core.models.movie.Movie"],
+	progress_callback: collections.abc.Callable[[int, int, str], None] | None = None,
+) -> None:
 	"""Probe all video MediaFiles in a list of movies for codec metadata.
 
 	Iterates through each movie's media files, finds VIDEO-type files,

@@ -2,8 +2,8 @@
 
 # Standard Library
 import os
-import dataclasses
 import collections.abc
+import dataclasses
 
 # local repo modules
 import moviemanager.core.constants
@@ -30,7 +30,8 @@ class DirEntry:
 
 #============================================
 def walk_movie_directories(
-	root_path: str, progress_callback=None,
+	root_path: str,
+	progress_callback: collections.abc.Callable[[int, str], None] | None = None,
 ) -> collections.abc.Iterator:
 	"""Walk a directory tree and yield DirEntry for dirs with video files.
 

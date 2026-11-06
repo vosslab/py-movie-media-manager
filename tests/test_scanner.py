@@ -18,7 +18,7 @@ def _touch(path: str) -> None:
 
 
 #============================================
-def test_scan_single_movie(tmp_path):
+def test_scan_single_movie(tmp_path: object) -> None:
 	"""Scan a directory with one mkv file and verify title/year parsing."""
 	movie_dir = tmp_path / "The Matrix (1999)"
 	movie_dir.mkdir()
@@ -37,7 +37,7 @@ def test_scan_single_movie(tmp_path):
 
 
 #============================================
-def test_scan_with_nfo(tmp_path):
+def test_scan_with_nfo(tmp_path: object) -> None:
 	"""Scan a directory with mkv + nfo and verify NFO metadata is loaded."""
 	movie_dir = tmp_path / "Inception"
 	movie_dir.mkdir()
@@ -63,7 +63,7 @@ def test_scan_with_nfo(tmp_path):
 
 
 #============================================
-def test_scan_multi_movie_dir(tmp_path):
+def test_scan_multi_movie_dir(tmp_path: object) -> None:
 	"""Scan a directory with multiple mkv files and verify multi_movie_dir."""
 	movie_dir = tmp_path / "Collection"
 	movie_dir.mkdir()
@@ -78,7 +78,7 @@ def test_scan_multi_movie_dir(tmp_path):
 
 
 #============================================
-def test_scan_skips_hidden_dirs(tmp_path):
+def test_scan_skips_hidden_dirs(tmp_path: object) -> None:
 	"""Hidden directories starting with dot should be skipped."""
 	hidden_dir = tmp_path / ".hidden"
 	hidden_dir.mkdir()
@@ -90,7 +90,7 @@ def test_scan_skips_hidden_dirs(tmp_path):
 
 
 #============================================
-def test_scan_skips_recycle_bin(tmp_path):
+def test_scan_skips_recycle_bin(tmp_path: object) -> None:
 	"""$RECYCLE.BIN directory should be skipped."""
 	recycle_dir = tmp_path / "$RECYCLE.BIN"
 	recycle_dir.mkdir()
@@ -102,7 +102,7 @@ def test_scan_skips_recycle_bin(tmp_path):
 
 
 #============================================
-def test_scan_nested_dirs(tmp_path):
+def test_scan_nested_dirs(tmp_path: object) -> None:
 	"""Scan nested structure with movies at different levels."""
 	# top-level movie
 	top_dir = tmp_path / "TopMovie"
@@ -123,7 +123,7 @@ def test_scan_nested_dirs(tmp_path):
 
 
 #============================================
-def test_scan_empty_dir(tmp_path):
+def test_scan_empty_dir(tmp_path: object) -> None:
 	"""Empty directory returns an empty list."""
 	results = moviemanager.core.movie.scan_service.scan_directory(str(tmp_path))
 
@@ -131,7 +131,7 @@ def test_scan_empty_dir(tmp_path):
 
 
 #============================================
-def test_detect_artwork(tmp_path):
+def test_detect_artwork(tmp_path: object) -> None:
 	"""Detect poster.jpg and fanart.jpg in a directory."""
 	_touch(str(tmp_path / "poster.jpg"))
 	_touch(str(tmp_path / "fanart.jpg"))

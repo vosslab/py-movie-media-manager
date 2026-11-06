@@ -16,7 +16,7 @@ import moviemanager.core.utils
 class SettingsDialog(PySide6.QtWidgets.QDialog):
 	"""Dialog for editing application settings."""
 
-	def __init__(self, settings, parent=None):
+	def __init__(self, settings: object, parent: object=None) -> object:
 		super().__init__(parent)
 		self._settings = settings
 		self.setWindowTitle("Settings")
@@ -25,7 +25,7 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		self._load_settings()
 
 	#============================================
-	def _setup_ui(self):
+	def _setup_ui(self) -> object:
 		"""Build the tabbed settings form and buttons."""
 		layout = PySide6.QtWidgets.QVBoxLayout(self)
 		# tabs for different settings groups
@@ -301,7 +301,7 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		layout.addLayout(btn_layout)
 
 	#============================================
-	def _load_settings(self):
+	def _load_settings(self) -> object:
 		"""Populate form from settings."""
 		s = self._settings
 		# provider combo
@@ -358,7 +358,7 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		self._sub_lang_edit.setText(s.subtitle_languages)
 
 	#============================================
-	def _save(self):
+	def _save(self) -> object:
 		"""Save form values to settings and write config."""
 		s = self._settings
 		s.scraper_provider = self._provider_combo.currentData()
@@ -466,7 +466,7 @@ class SettingsDialog(PySide6.QtWidgets.QDialog):
 		self._rename_preview.setText(preview_text)
 
 	#============================================
-	def get_settings(self):
+	def get_settings(self) -> object:
 		"""Return the settings object.
 
 		Returns:

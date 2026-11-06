@@ -8,7 +8,7 @@ import moviemanager.core.models.movie_set
 
 
 #============================================
-def test_round_trip_basic(tmp_path):
+def test_round_trip_basic(tmp_path: object) -> None:
 	"""Write a Movie to NFO, read it back, verify all fields match."""
 	# create a movie with representative data
 	original = moviemanager.core.models.movie.Movie(
@@ -92,7 +92,7 @@ def test_round_trip_basic(tmp_path):
 
 
 #============================================
-def test_round_trip_empty(tmp_path):
+def test_round_trip_empty(tmp_path: object) -> None:
 	"""Empty movie should round-trip without errors."""
 	original = moviemanager.core.models.movie.Movie()
 	nfo_file = str(tmp_path / "empty.nfo")
@@ -105,7 +105,7 @@ def test_round_trip_empty(tmp_path):
 
 
 #============================================
-def test_round_trip_special_characters(tmp_path):
+def test_round_trip_special_characters(tmp_path: object) -> None:
 	"""Movie with special characters in title should round-trip."""
 	original = moviemanager.core.models.movie.Movie(
 		title="Leon: The Professional",
@@ -121,7 +121,7 @@ def test_round_trip_special_characters(tmp_path):
 
 
 #============================================
-def test_round_trip_movie_set(tmp_path):
+def test_round_trip_movie_set(tmp_path: object) -> None:
 	"""Movie with a movie set should round-trip the set name."""
 	movie_set = moviemanager.core.models.movie_set.MovieSet(
 		name="The Dark Knight Trilogy"
@@ -138,7 +138,7 @@ def test_round_trip_movie_set(tmp_path):
 
 
 #============================================
-def test_round_trip_parental_guide(tmp_path):
+def test_round_trip_parental_guide(tmp_path: object) -> None:
 	"""Parental guide severity data should round-trip through NFO."""
 	original = moviemanager.core.models.movie.Movie(
 		title="The Dark Knight",
@@ -157,7 +157,7 @@ def test_round_trip_parental_guide(tmp_path):
 
 
 #============================================
-def test_round_trip_trailers(tmp_path):
+def test_round_trip_trailers(tmp_path: object) -> None:
 	"""Movie with trailer URLs should round-trip them."""
 	original = moviemanager.core.models.movie.Movie(
 		title="Test Movie",

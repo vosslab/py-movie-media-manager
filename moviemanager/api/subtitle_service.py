@@ -11,6 +11,7 @@ import requests
 
 # local repo modules
 import moviemanager.api.download_errors
+import moviemanager.core.models.movie
 import moviemanager.core.settings
 import moviemanager.scraper.subtitle_scraper
 
@@ -35,8 +36,8 @@ class SubtitleService:
 	def __init__(
 		self,
 		settings: moviemanager.core.settings.Settings,
-		provider=None,
-	):
+		provider: moviemanager.scraper.subtitle_scraper.SubtitleScraper | None = None,
+	) -> None:
 		"""Initialize the subtitle service.
 
 		Args:
@@ -72,7 +73,9 @@ class SubtitleService:
 				self._login_time = 0.0
 
 	#============================================
-	def _ensure_provider_logged_in(self, provider) -> None:
+	def _ensure_provider_logged_in(
+		self, provider: moviemanager.scraper.subtitle_scraper.SubtitleScraper,
+	) -> None:
 		"""Authenticate an external provider if not already done.
 
 		OpenSubtitles requires JWT auth for downloads. Providers
@@ -121,7 +124,9 @@ class SubtitleService:
 		self._login_time = time.time()
 
 	#============================================
-	def _get_subtitle_scraper(self):
+	def _get_subtitle_scraper(
+		self,
+	) -> moviemanager.scraper.subtitle_scraper.SubtitleScraper:
 		"""Return a cached, authenticated SubtitleScraper.
 
 		If an external provider was injected at init time, returns
@@ -194,7 +199,7 @@ class SubtitleService:
 
 	#============================================
 	def download_subtitles(
-		self, movie, languages: str = "en",
+		self, movie: moviemanager.core.models.movie.Movie, languages: str = "en",
 	) -> list:
 		"""Download subtitles for a movie from OpenSubtitles.
 

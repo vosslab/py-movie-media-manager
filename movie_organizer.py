@@ -17,7 +17,7 @@ import moviemanager.core.settings
 
 
 #============================================
-def parse_args():
+def parse_args() -> argparse.Namespace:
 	"""Parse command-line arguments.
 
 	Returns:
@@ -478,7 +478,7 @@ def cmd_list(args: argparse.Namespace) -> None:
 
 
 #============================================
-def main():
+def main() -> None:
 	"""Main entry point for the CLI."""
 	args = parse_args()
 	# handle missing command

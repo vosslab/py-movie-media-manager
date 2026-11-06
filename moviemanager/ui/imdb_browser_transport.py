@@ -54,7 +54,7 @@ class ImdbBrowserTransport(PySide6.QtCore.QObject):
 	challenge_needed = PySide6.QtCore.Signal(str)
 
 	#============================================
-	def __init__(self, parent=None):
+	def __init__(self, parent: object=None) -> object:
 		"""Initialize the transport with a persistent browser profile.
 
 		Args:

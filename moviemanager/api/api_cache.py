@@ -45,7 +45,7 @@ def _normalize_key(raw_key: str) -> str:
 
 
 #============================================
-def _serialize_value(value) -> object:
+def _serialize_value(value: object) -> object:
 	"""Convert dataclass instances (and lists thereof) to JSON-safe dicts.
 
 	Args:
@@ -93,7 +93,7 @@ class ApiCache:
 	on load.
 	"""
 
-	def __init__(self, cache_dir: str = "", ttl_seconds: int = _DEFAULT_TTL_SECONDS):
+	def __init__(self, cache_dir: str = "", ttl_seconds: int = _DEFAULT_TTL_SECONDS) -> None:
 		"""Initialize the API cache.
 
 		Args:

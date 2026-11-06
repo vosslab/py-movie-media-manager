@@ -28,7 +28,7 @@ _IMDB_BASE = "https://www.imdb.com"
 
 
 #============================================
-def _safe_get(obj: dict, *keys, default=None):
+def _safe_get(obj: dict, *keys, default: object=None) -> object:
 	"""Safely traverse nested dict keys, returning default if any key is missing.
 
 	Args:
@@ -247,12 +247,12 @@ class ImdbParentalGuideScraper(
 	requires_keys = []
 
 	#============================================
-	def __init__(self):
+	def __init__(self) -> None:
 		"""Initialize the parental guide scraper."""
 		self._transport = None
 
 	#============================================
-	def set_transport(self, transport) -> None:
+	def set_transport(self, transport: object) -> None:
 		"""Set the browser transport for fallback HTML page loading.
 
 		Args:

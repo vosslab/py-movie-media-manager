@@ -62,7 +62,7 @@ class TmdbScraper(
 	requires_keys = ["tmdb_api_key"]
 
 	#============================================
-	def __init__(self, api_key: str, language: str = "en"):
+	def __init__(self, api_key: str, language: str = "en") -> None:
 		"""Initialize the TMDB scraper with an API key.
 
 		Args:

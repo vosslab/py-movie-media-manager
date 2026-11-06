@@ -13,7 +13,7 @@ class BatchNavigator:
 		movie_list: Optional list of movies for batch mode.
 	"""
 
-	def __init__(self, movie, movie_list=None):
+	def __init__(self, movie: object, movie_list: object=None) -> object:
 		self._movie_list = movie_list or [movie]
 		self._current_index = 0
 		# find the starting movie in the list
@@ -36,7 +36,7 @@ class BatchNavigator:
 
 	#============================================
 	@property
-	def current_movie(self):
+	def current_movie(self) -> object:
 		"""The currently active movie."""
 		return self._movie_list[self._current_index]
 
@@ -74,7 +74,7 @@ class BatchNavigator:
 
 	#============================================
 	def mark_result(
-		self, movie_path: str, result,
+		self, movie_path: str, result: object,
 	) -> None:
 		"""Record a match result for a movie.
 
@@ -110,7 +110,7 @@ class BatchNavigator:
 		return True
 
 	#============================================
-	def get_next_movie(self):
+	def get_next_movie(self) -> object:
 		"""Get the next movie without advancing the index.
 
 		Returns:

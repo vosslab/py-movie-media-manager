@@ -10,6 +10,7 @@ import moviemanager.core.file.classifier
 import moviemanager.core.file.collector
 import moviemanager.core.models.media_file
 import moviemanager.core.models.movie_set
+import moviemanager.core.settings
 
 
 #============================================
@@ -246,7 +247,9 @@ class Movie:
 		return result
 
 	#============================================
-	def check_organized(self, settings=None) -> bool:
+	def check_organized(
+		self, settings: moviemanager.core.settings.Settings | None = None,
+	) -> bool:
 		"""Check whether movie folder matches the expected path template.
 
 		When settings is provided, skips the load_settings() disk read.
@@ -266,7 +269,6 @@ class Movie:
 		# lazy import to avoid circular dependency (template_engine imports movie)
 		import moviemanager.core.movie.template_engine
 		if settings is None:
-			import moviemanager.core.settings
 			settings = moviemanager.core.settings.load_settings()
 		# expand the template to get the expected folder name
 		expected = moviemanager.core.movie.template_engine.expand_template(

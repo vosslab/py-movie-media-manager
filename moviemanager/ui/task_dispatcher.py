@@ -22,9 +22,9 @@ class TaskDispatcher(PySide6.QtCore.QObject):
 	"""
 
 	def __init__(
-		self, scan_ctrl, match_ctrl, rename_ctrl,
-		download_ctrl, status_bar, parent=None,
-	):
+		self, scan_ctrl: object, match_ctrl: object, rename_ctrl: object,
+		download_ctrl: object, status_bar: object, parent: object=None,
+	) -> object:
 		super().__init__(parent)
 		self._scan_ctrl = scan_ctrl
 		self._match_ctrl = match_ctrl
@@ -34,7 +34,7 @@ class TaskDispatcher(PySide6.QtCore.QObject):
 
 	#============================================
 	def on_task_finished(
-		self, task_id: int, result,
+		self, task_id: int, result: object,
 	) -> None:
 		"""Route task completion to the appropriate handler.
 

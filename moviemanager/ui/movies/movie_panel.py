@@ -43,7 +43,7 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 	# signal emitted when check state changes (checked, total)
 	checked_changed = PySide6.QtCore.Signal(int, int)
 
-	def __init__(self, parent=None):
+	def __init__(self, parent: object=None) -> object:
 		super().__init__(parent)
 		layout = PySide6.QtWidgets.QVBoxLayout(self)
 		# stacked widget to swap between empty state and content
@@ -266,7 +266,7 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 		self._detail.shutdown()
 
 	#============================================
-	def set_settings(self, settings) -> None:
+	def set_settings(self, settings: object) -> None:
 		"""Pass settings to the table model for artwork checks.
 
 		Args:
@@ -324,7 +324,7 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 			self._stack.setCurrentIndex(1)
 
 	#============================================
-	def get_selected_movie(self):
+	def get_selected_movie(self) -> object:
 		"""Get the currently selected movie."""
 		index = self._table_view.currentIndex()
 		if index.isValid():
@@ -452,19 +452,19 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 		self._table_model.set_filter(text)
 
 	#============================================
-	def _on_row_changed(self, current, previous) -> None:
+	def _on_row_changed(self, current: object, previous: object) -> None:
 		"""Update detail panel when selection changes."""
 		movie = self._table_model.get_movie(current.row())
 		self._detail.set_movie(movie)
 
 	#============================================
-	def _on_double_click(self, index) -> None:
+	def _on_double_click(self, index: object) -> None:
 		"""Emit double-click signal for editing."""
 		if index.isValid():
 			self.movie_double_clicked.emit()
 
 	#============================================
-	def _show_context_menu(self, pos) -> None:
+	def _show_context_menu(self, pos: object) -> None:
 		"""Show right-click context menu on the table."""
 		index = self._table_view.indexAt(pos)
 		if not index.isValid():
@@ -500,7 +500,7 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 				)
 
 	#============================================
-	def _show_header_context_menu(self, pos) -> None:
+	def _show_header_context_menu(self, pos: object) -> None:
 		"""Show column chooser context menu on header right-click."""
 		header = self._table_view.horizontalHeader()
 		menu = PySide6.QtWidgets.QMenu(self)
@@ -535,7 +535,7 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 		self._table_view.setColumnHidden(col_idx, not visible)
 
 	#============================================
-	def save_table_state(self, settings) -> None:
+	def save_table_state(self, settings: object) -> None:
 		"""Save column widths, sort state, and visibility to QSettings."""
 		header = self._table_view.horizontalHeader()
 		settings.setValue("movieTable/headerState", header.saveState())
@@ -556,7 +556,7 @@ class MoviePanel(PySide6.QtWidgets.QWidget):
 		settings.setValue("movieTable/visibleColumns", visible)
 
 	#============================================
-	def restore_table_state(self, settings) -> None:
+	def restore_table_state(self, settings: object) -> None:
 		"""Restore column widths, sort state, and visibility from QSettings."""
 		# columns that must always be visible (Title + status indicators)
 		locked_columns = {1, 5, 6, 7, 8, 9}

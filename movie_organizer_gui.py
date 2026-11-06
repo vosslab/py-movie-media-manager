@@ -18,7 +18,7 @@ import moviemanager.core.settings
 
 
 #============================================
-def parse_args():
+def parse_args() -> argparse.Namespace:
 	"""Parse command-line arguments."""
 	parser = argparse.ArgumentParser(
 		description="Movie media manager GUI"
@@ -41,7 +41,7 @@ def parse_args():
 
 
 #============================================
-def main():
+def main() -> None:
 	"""Launch the GUI application."""
 	args = parse_args()
 	settings = moviemanager.core.settings.load_settings(args.config_file)

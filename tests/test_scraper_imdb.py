@@ -277,7 +277,7 @@ def _make_title_html(next_data: dict) -> str:
 # Tests for _upgrade_poster_url
 #============================================
 
-def test_upgrade_poster_url_removes_resize():
+def test_upgrade_poster_url_removes_resize() -> None:
 	"""Resize parameters are stripped from poster URLs."""
 	url = "https://m.media-amazon.com/images/M/abc._V1_UX300_.jpg"
 	result = moviemanager.scraper.imdb_scraper._upgrade_poster_url(url)
@@ -286,7 +286,7 @@ def test_upgrade_poster_url_removes_resize():
 
 
 #============================================
-def test_upgrade_poster_url_keeps_clean():
+def test_upgrade_poster_url_keeps_clean() -> None:
 	"""Already-clean URLs are returned unchanged."""
 	url = "https://m.media-amazon.com/images/M/abc._V1_.jpg"
 	result = moviemanager.scraper.imdb_scraper._upgrade_poster_url(url)
@@ -294,14 +294,14 @@ def test_upgrade_poster_url_keeps_clean():
 
 
 #============================================
-def test_upgrade_poster_url_empty():
+def test_upgrade_poster_url_empty() -> None:
 	"""Empty input returns empty string."""
 	result = moviemanager.scraper.imdb_scraper._upgrade_poster_url("")
 	assert result == ""
 
 
 #============================================
-def test_upgrade_poster_url_complex_resize():
+def test_upgrade_poster_url_complex_resize() -> None:
 	"""Complex resize suffixes like _UY300_CR0,0,200,300_ are stripped."""
 	url = "https://m.media-amazon.com/images/M/movie._V1_UY300_CR0,0,200,300_.jpg"
 	result = moviemanager.scraper.imdb_scraper._upgrade_poster_url(url)
@@ -313,7 +313,7 @@ def test_upgrade_poster_url_complex_resize():
 # Tests for _safe_get
 #============================================
 
-def test_safe_get_nested():
+def test_safe_get_nested() -> None:
 	"""Nested dict traversal returns correct value."""
 	data = {"a": {"b": {"c": 42}}}
 	result = moviemanager.scraper.imdb_scraper._safe_get(data, "a", "b", "c")
@@ -321,7 +321,7 @@ def test_safe_get_nested():
 
 
 #============================================
-def test_safe_get_missing_key():
+def test_safe_get_missing_key() -> None:
 	"""Missing intermediate key returns default."""
 	data = {"a": {"x": 1}}
 	result = moviemanager.scraper.imdb_scraper._safe_get(
@@ -331,7 +331,7 @@ def test_safe_get_missing_key():
 
 
 #============================================
-def test_safe_get_none_value():
+def test_safe_get_none_value() -> None:
 	"""None intermediate value returns default."""
 	data = {"a": None}
 	result = moviemanager.scraper.imdb_scraper._safe_get(
@@ -344,7 +344,7 @@ def test_safe_get_none_value():
 # Tests for CDN suggestion API parsing
 #============================================
 
-def test_parse_suggestion_results_filters_movies():
+def test_parse_suggestion_results_filters_movies() -> None:
 	"""Suggestion parser filters to movie types, excludes TV episodes and people."""
 	entries = SAMPLE_SUGGESTION_RESPONSE["d"]
 	results = moviemanager.scraper.imdb_scraper._parse_suggestion_results(entries)
@@ -359,7 +359,7 @@ def test_parse_suggestion_results_filters_movies():
 
 
 #============================================
-def test_parse_suggestion_poster_url_cleaned():
+def test_parse_suggestion_poster_url_cleaned() -> None:
 	"""Suggestion result poster URLs have resize params stripped."""
 	entries = SAMPLE_SUGGESTION_RESPONSE["d"]
 	results = moviemanager.scraper.imdb_scraper._parse_suggestion_results(entries)
@@ -368,14 +368,14 @@ def test_parse_suggestion_poster_url_cleaned():
 
 
 #============================================
-def test_parse_suggestion_empty():
+def test_parse_suggestion_empty() -> None:
 	"""Empty suggestion list returns empty results."""
 	results = moviemanager.scraper.imdb_scraper._parse_suggestion_results([])
 	assert results == []
 
 
 #============================================
-def test_parse_suggestion_no_image():
+def test_parse_suggestion_no_image() -> None:
 	"""Suggestion entry without image gets empty poster URL."""
 	entries = [
 		{
@@ -392,7 +392,7 @@ def test_parse_suggestion_no_image():
 
 
 #============================================
-def test_parse_suggestion_score_from_rank():
+def test_parse_suggestion_score_from_rank() -> None:
 	"""Suggestion results compute a popularity score from rank."""
 	entries = SAMPLE_SUGGESTION_RESPONSE["d"]
 	results = moviemanager.scraper.imdb_scraper._parse_suggestion_results(entries)
@@ -403,7 +403,7 @@ def test_parse_suggestion_score_from_rank():
 
 
 #============================================
-def test_search_uses_suggestion_api():
+def test_search_uses_suggestion_api() -> None:
 	"""Search delegates to CDN suggestion API."""
 	mock_response = unittest.mock.Mock()
 	mock_response.status_code = 200
@@ -424,7 +424,7 @@ def test_search_uses_suggestion_api():
 
 
 #============================================
-def test_search_empty_title():
+def test_search_empty_title() -> None:
 	"""Search with empty title returns empty list without calling API."""
 	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
 	# _fetch_suggestion returns [] for empty query, no HTTP call needed
@@ -441,7 +441,7 @@ def test_search_empty_title():
 # Tests for __NEXT_DATA__ extraction
 #============================================
 
-def test_extract_next_data_json():
+def test_extract_next_data_json() -> None:
 	"""__NEXT_DATA__ JSON is extracted from HTML."""
 	html = _make_title_html({"test": "value"})
 	result = moviemanager.scraper.imdb_scraper._extract_next_data_json(html)
@@ -449,7 +449,7 @@ def test_extract_next_data_json():
 
 
 #============================================
-def test_extract_next_data_missing():
+def test_extract_next_data_missing() -> None:
 	"""Missing __NEXT_DATA__ returns empty dict."""
 	html = "<html><body>No data</body></html>"
 	result = moviemanager.scraper.imdb_scraper._extract_next_data_json(html)
@@ -460,7 +460,7 @@ def test_extract_next_data_missing():
 # Tests for metadata HTML parsing
 #============================================
 
-def test_parse_metadata_all_fields():
+def test_parse_metadata_all_fields() -> None:
 	"""Full metadata parsing populates all expected fields."""
 	html = _make_title_html(SAMPLE_NEXT_DATA_TITLE)
 	metadata = moviemanager.scraper.imdb_scraper._parse_metadata_html(
@@ -504,7 +504,7 @@ def test_parse_metadata_all_fields():
 
 
 #============================================
-def test_parse_metadata_empty_html():
+def test_parse_metadata_empty_html() -> None:
 	"""HTML without __NEXT_DATA__ returns minimal metadata."""
 	html = "<html><body>Nothing here</body></html>"
 	metadata = moviemanager.scraper.imdb_scraper._parse_metadata_html(
@@ -517,7 +517,7 @@ def test_parse_metadata_empty_html():
 
 
 #============================================
-def test_parse_metadata_empty_next_data():
+def test_parse_metadata_empty_next_data() -> None:
 	"""Empty __NEXT_DATA__ returns metadata with defaults."""
 	html = _make_title_html({"props": {"pageProps": {}}})
 	metadata = moviemanager.scraper.imdb_scraper._parse_metadata_html(
@@ -537,7 +537,7 @@ def test_parse_metadata_empty_next_data():
 # Tests for cast extraction
 #============================================
 
-def test_parse_cast():
+def test_parse_cast() -> None:
 	"""Cast members with character roles are extracted."""
 	above_fold = SAMPLE_NEXT_DATA_TITLE["props"]["pageProps"]["aboveTheFoldData"]
 	main_column = SAMPLE_NEXT_DATA_TITLE["props"]["pageProps"]["mainColumnData"]
@@ -556,7 +556,7 @@ def test_parse_cast():
 
 
 #============================================
-def test_parse_cast_empty():
+def test_parse_cast_empty() -> None:
 	"""No principalCredits returns empty actor list."""
 	actors = moviemanager.scraper.imdb_scraper._parse_cast({}, {})
 	assert actors == []
@@ -566,7 +566,7 @@ def test_parse_cast_empty():
 # Tests for principal credits extraction
 #============================================
 
-def test_extract_director():
+def test_extract_director() -> None:
 	"""Director is extracted from principalCredits."""
 	above_fold = SAMPLE_NEXT_DATA_TITLE["props"]["pageProps"]["aboveTheFoldData"]
 	director = moviemanager.scraper.imdb_scraper._extract_principal_credits(
@@ -576,7 +576,7 @@ def test_extract_director():
 
 
 #============================================
-def test_extract_writer():
+def test_extract_writer() -> None:
 	"""Writer is extracted from principalCredits."""
 	above_fold = SAMPLE_NEXT_DATA_TITLE["props"]["pageProps"]["aboveTheFoldData"]
 	writer = moviemanager.scraper.imdb_scraper._extract_principal_credits(
@@ -586,7 +586,7 @@ def test_extract_writer():
 
 
 #============================================
-def test_extract_missing_category():
+def test_extract_missing_category() -> None:
 	"""Missing category returns empty string."""
 	above_fold = SAMPLE_NEXT_DATA_TITLE["props"]["pageProps"]["aboveTheFoldData"]
 	result = moviemanager.scraper.imdb_scraper._extract_principal_credits(
@@ -599,7 +599,7 @@ def test_extract_missing_category():
 # Tests for producers extraction
 #============================================
 
-def test_extract_producers():
+def test_extract_producers() -> None:
 	"""Producers are extracted with Production department."""
 	above_fold = SAMPLE_NEXT_DATA_TITLE["props"]["pageProps"]["aboveTheFoldData"]
 	producers = moviemanager.scraper.imdb_scraper._extract_producers(above_fold)
@@ -613,7 +613,7 @@ def test_extract_producers():
 # Tests for studio extraction
 #============================================
 
-def test_extract_studio():
+def test_extract_studio() -> None:
 	"""Production company is extracted, not distributors."""
 	above_fold = SAMPLE_NEXT_DATA_TITLE["props"]["pageProps"]["aboveTheFoldData"]
 	studio = moviemanager.scraper.imdb_scraper._extract_studio(above_fold)
@@ -621,7 +621,7 @@ def test_extract_studio():
 
 
 #============================================
-def test_extract_studio_empty():
+def test_extract_studio_empty() -> None:
 	"""Empty companyCredits returns empty string."""
 	studio = moviemanager.scraper.imdb_scraper._extract_studio({})
 	assert studio == ""
@@ -631,7 +631,7 @@ def test_extract_studio_empty():
 # Tests for parental guide HTML parsing
 #============================================
 
-def test_parse_parental_guide_html():
+def test_parse_parental_guide_html() -> None:
 	"""Parental guide categories are extracted from HTML page."""
 	html = _make_title_html(SAMPLE_NEXT_DATA_PARENTAL_GUIDE)
 	result = moviemanager.scraper.imdb_parental_guide_scraper._parse_parental_guide_html(html)
@@ -643,7 +643,7 @@ def test_parse_parental_guide_html():
 
 
 #============================================
-def test_parse_parental_guide_html_empty():
+def test_parse_parental_guide_html_empty() -> None:
 	"""Empty HTML returns empty parental guide."""
 	html = "<html><body>No data</body></html>"
 	result = moviemanager.scraper.imdb_parental_guide_scraper._parse_parental_guide_html(html)
@@ -651,7 +651,7 @@ def test_parse_parental_guide_html_empty():
 
 
 #============================================
-def test_parse_parental_guide_fallback_above_fold():
+def test_parse_parental_guide_fallback_above_fold() -> None:
 	"""Parental guide falls back to aboveTheFoldData format."""
 	# use the title page format which has guide in aboveTheFoldData
 	html = _make_title_html(SAMPLE_NEXT_DATA_TITLE)
@@ -663,7 +663,7 @@ def test_parse_parental_guide_fallback_above_fold():
 
 
 #============================================
-def test_advisory_id_to_name():
+def test_advisory_id_to_name() -> None:
 	"""Advisory IDs map to display names correctly."""
 	assert moviemanager.scraper.imdb_parental_guide_scraper._advisory_id_to_name(
 		"advisory-nudity"
@@ -680,7 +680,7 @@ def test_advisory_id_to_name():
 # Tests for keyword extraction
 #============================================
 
-def test_extract_keywords():
+def test_extract_keywords() -> None:
 	"""Keywords are extracted from mainColumnData."""
 	main_column = SAMPLE_NEXT_DATA_TITLE["props"]["pageProps"]["mainColumnData"]
 	tags = moviemanager.scraper.imdb_scraper._extract_keywords(main_column)
@@ -689,7 +689,7 @@ def test_extract_keywords():
 
 
 #============================================
-def test_extract_keywords_empty():
+def test_extract_keywords_empty() -> None:
 	"""Empty mainColumnData returns empty keyword list."""
 	tags = moviemanager.scraper.imdb_scraper._extract_keywords({})
 	assert tags == []
@@ -699,7 +699,7 @@ def test_extract_keywords_empty():
 # Tests for top250 extraction
 #============================================
 
-def test_top250_above_range():
+def test_top250_above_range() -> None:
 	"""Top ranking > 250 is set to zero."""
 	html = _make_title_html(SAMPLE_NEXT_DATA_TITLE)
 	metadata = moviemanager.scraper.imdb_scraper._parse_metadata_html(
@@ -710,7 +710,7 @@ def test_top250_above_range():
 
 
 #============================================
-def test_top250_within_range():
+def test_top250_within_range() -> None:
 	"""Top ranking <= 250 is captured as top250."""
 	data = json.loads(json.dumps(SAMPLE_NEXT_DATA_TITLE))
 	# override rank to be within top 250
@@ -726,7 +726,7 @@ def test_top250_within_range():
 # Tests for get_metadata
 #============================================
 
-def test_get_metadata_requires_imdb_id():
+def test_get_metadata_requires_imdb_id() -> None:
 	"""get_metadata raises ValueError when no imdb_id is given."""
 	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
 	with pytest.raises(ValueError, match="requires an imdb_id"):
@@ -734,7 +734,7 @@ def test_get_metadata_requires_imdb_id():
 
 
 #============================================
-def test_get_metadata_requires_transport():
+def test_get_metadata_requires_transport() -> None:
 	"""get_metadata raises ConnectionError when transport is not set."""
 	scraper = moviemanager.scraper.imdb_scraper.ImdbScraper()
 	with pytest.raises(ConnectionError, match="transport not configured"):
@@ -742,7 +742,7 @@ def test_get_metadata_requires_transport():
 
 
 #============================================
-def test_get_metadata_with_transport():
+def test_get_metadata_with_transport() -> None:
 	"""get_metadata fetches HTML via transport and parses metadata."""
 	html = _make_title_html(SAMPLE_NEXT_DATA_TITLE)
 	mock_transport = unittest.mock.Mock()
@@ -763,7 +763,7 @@ def test_get_metadata_with_transport():
 # Tests for get_parental_guide
 #============================================
 
-def test_get_parental_guide_graphql_success():
+def test_get_parental_guide_graphql_success() -> None:
 	"""get_parental_guide returns data from GraphQL API."""
 	graphql_result = {
 		"Sex & Nudity": "Moderate",
@@ -784,7 +784,7 @@ def test_get_parental_guide_graphql_success():
 
 
 #============================================
-def test_get_parental_guide_graphql_no_data():
+def test_get_parental_guide_graphql_no_data() -> None:
 	"""get_parental_guide returns empty dict when movie has no guide data."""
 	scraper = moviemanager.scraper.imdb_parental_guide_scraper.ImdbParentalGuideScraper()
 	# GraphQL returns empty dict for movies without parental guide data
@@ -797,7 +797,7 @@ def test_get_parental_guide_graphql_no_data():
 
 
 #============================================
-def test_get_parental_guide_graphql_failure_fallback():
+def test_get_parental_guide_graphql_failure_fallback() -> None:
 	"""get_parental_guide falls back to browser transport when GraphQL fails."""
 	html = _make_title_html(SAMPLE_NEXT_DATA_PARENTAL_GUIDE)
 	mock_transport = unittest.mock.Mock()
@@ -819,7 +819,7 @@ def test_get_parental_guide_graphql_failure_fallback():
 
 
 #============================================
-def test_get_parental_guide_empty_id():
+def test_get_parental_guide_empty_id() -> None:
 	"""get_parental_guide returns empty dict when no imdb_id is given."""
 	scraper = moviemanager.scraper.imdb_parental_guide_scraper.ImdbParentalGuideScraper()
 	guide = scraper.get_parental_guide("")
@@ -827,7 +827,7 @@ def test_get_parental_guide_empty_id():
 
 
 #============================================
-def test_get_parental_guide_no_transport():
+def test_get_parental_guide_no_transport() -> None:
 	"""get_parental_guide returns empty dict when GraphQL fails and no transport set."""
 	scraper = moviemanager.scraper.imdb_parental_guide_scraper.ImdbParentalGuideScraper()
 	# GraphQL raises ConnectionError and no transport is configured

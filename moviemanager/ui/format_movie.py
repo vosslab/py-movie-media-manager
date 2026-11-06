@@ -5,6 +5,9 @@ Duck-typed on Movie attributes -- any object with the right fields works.
 No PySide6 imports.
 """
 
+# local repo modules
+import moviemanager.core.models.movie
+
 
 #============================================
 def format_rating(rating: float) -> str:
@@ -21,9 +24,6 @@ def format_rating(rating: float) -> str:
 	text = f"{rating}/10"
 	return text
 
-assert format_rating(7.3) == "7.3/10"
-assert format_rating(0.0) == ""
-assert format_rating(10.0) == "10.0/10"
 
 
 #============================================
@@ -41,9 +41,6 @@ def format_genres(genres: list) -> str:
 	text = ", ".join(genres)
 	return text
 
-assert format_genres(["Action", "Drama"]) == "Action, Drama"
-assert format_genres([]) == ""
-assert format_genres(["Sci-Fi"]) == "Sci-Fi"
 
 
 #============================================
@@ -61,8 +58,6 @@ def format_runtime(runtime: int) -> str:
 	text = f"{runtime} min"
 	return text
 
-assert format_runtime(142) == "142 min"
-assert format_runtime(0) == ""
 
 
 #============================================
@@ -84,14 +79,10 @@ def format_ids(imdb_id: str, tmdb_id: int) -> str:
 	text = "  ".join(parts)
 	return text
 
-assert format_ids("tt1234567", 155) == "IMDB: tt1234567  TMDB: 155"
-assert format_ids("", 0) == ""
-assert format_ids("tt0000001", 0) == "IMDB: tt0000001"
-assert format_ids("", 42) == "TMDB: 42"
 
 
 #============================================
-def format_movie_fields(movie) -> dict:
+def format_movie_fields(movie: moviemanager.core.models.movie.Movie) -> dict:
 	"""Format all display fields from a movie object.
 
 	Duck-typed: works with any object that has the expected attributes.

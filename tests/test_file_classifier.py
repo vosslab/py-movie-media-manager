@@ -34,7 +34,7 @@ CLASSIFY_CASES = [
 
 #============================================
 @pytest.mark.parametrize("filename, expected", CLASSIFY_CASES)
-def test_classify_file(filename: str, expected) -> None:
+def test_classify_file(filename: str, expected: object) -> None:
 	"""Verify classify_file returns the correct MediaFileType."""
 	result = moviemanager.core.file.classifier.classify_file(filename)
 	assert result == expected

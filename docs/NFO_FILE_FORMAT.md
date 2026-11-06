@@ -195,10 +195,10 @@ A complete example using a fictional movie with all common tags populated.
 ## Our implementation
 
 The NFO reader and writer live in
-[moviemanager/core/nfo/reader.py](moviemanager/core/nfo/reader.py) and
-[moviemanager/core/nfo/writer.py](moviemanager/core/nfo/writer.py).
+[moviemanager/core/nfo/reader.py](../moviemanager/core/nfo/reader.py) and
+[moviemanager/core/nfo/writer.py](../moviemanager/core/nfo/writer.py).
 The movie data model is defined in
-[moviemanager/core/models/movie.py](moviemanager/core/models/movie.py).
+[moviemanager/core/models/movie.py](../moviemanager/core/models/movie.py).
 
 ### Reading NFO files
 

@@ -6,6 +6,7 @@ import subprocess
 
 # local repo modules
 import moviemanager.api.download_errors
+import moviemanager.core.models.movie
 import moviemanager.scraper.trailer_provider
 
 
@@ -19,7 +20,10 @@ class TrailerService:
 	"""
 
 	#============================================
-	def __init__(self, provider=None):
+	def __init__(
+		self,
+		provider: moviemanager.scraper.trailer_provider.YtdlpTrailerProvider | None = None,
+	) -> None:
 		"""Initialize with an optional trailer provider.
 
 		Args:
@@ -34,7 +38,7 @@ class TrailerService:
 		self._provider = provider
 
 	#============================================
-	def download_trailer(self, movie) -> str:
+	def download_trailer(self, movie: moviemanager.core.models.movie.Movie) -> str:
 		"""Download a movie trailer using the configured provider.
 
 		Args:

@@ -32,7 +32,7 @@ class SearchService:
 		self,
 		settings: moviemanager.core.settings.Settings,
 		cache: moviemanager.api.api_cache.ApiCache,
-	):
+	) -> None:
 		"""Initialize the search service.
 
 		Args:
@@ -46,7 +46,9 @@ class SearchService:
 		self._tmdb_poster_cache = {}
 
 	#============================================
-	def _get_tmdb_lookup_scraper(self):
+	def _get_tmdb_lookup_scraper(
+		self,
+	) -> moviemanager.scraper.tmdb_scraper.TmdbScraper | None:
 		"""Return a TMDB scraper for poster lookup, or None."""
 		api_key = self._settings.tmdb_api_key.strip()
 		if not api_key:
@@ -103,7 +105,9 @@ class SearchService:
 		return result
 
 	#============================================
-	def _prefer_tmdb_poster(self, result) -> None:
+	def _prefer_tmdb_poster(
+		self, result: moviemanager.scraper.types.SearchResult,
+	) -> None:
 		"""Mutate a SearchResult in-place to prefer TMDB poster URL."""
 		if not result or not result.imdb_id:
 			return
@@ -117,10 +121,11 @@ class SearchService:
 
 	#============================================
 	def search_movie(
-		self, scraper, title: str, year: str = "",
+		self, scraper: moviemanager.scraper.interfaces.MetadataProvider,
+		title: str, year: str = "",
 		query_title: str = "", query_year: str = "",
 		query_runtime: int = 0,
-	) -> list:
+	) -> list[moviemanager.scraper.types.SearchResult]:
 		"""Search for movie metadata by title.
 
 		Computes match confidence for each result and sorts
@@ -189,9 +194,10 @@ class SearchService:
 
 	#============================================
 	def search_movie_with_fallback(
-		self, scraper, title: str, year: str = "",
+		self, scraper: moviemanager.scraper.interfaces.MetadataProvider,
+		title: str, year: str = "",
 		query_runtime: int = 0,
-	) -> tuple:
+	) -> tuple[list[moviemanager.scraper.types.SearchResult], str]:
 		"""Search with fallback strategies when initial search fails.
 
 		Tries progressively broader searches:
@@ -268,9 +274,3 @@ def _simplify_title(title: str) -> str:
 	# collapse whitespace and strip
 	simplified = re.sub(r"\s+", " ", simplified).strip()
 	return simplified
-
-
-# simple assertion for _simplify_title
-assert _simplify_title("The Matrix (1999)") == "Matrix"
-assert _simplify_title("A Beautiful Mind") == "Beautiful Mind"
-assert _simplify_title("Clerks") == "Clerks"

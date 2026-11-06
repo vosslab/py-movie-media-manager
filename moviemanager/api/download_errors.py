@@ -30,7 +30,7 @@ class DownloadError(Exception):
 		detail: Optional human-readable detail string.
 	"""
 
-	def __init__(self, category: DownloadCategory, detail: str = ""):
+	def __init__(self, category: DownloadCategory, detail: str = "") -> None:
 		self.category = category
 		self.detail = detail
 		# build message as "category_value: detail"

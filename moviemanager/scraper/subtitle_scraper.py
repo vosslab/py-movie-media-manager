@@ -34,7 +34,7 @@ class SubtitleScraper(
 	requires_keys = ["opensubtitles_api_key"]
 
 	#============================================
-	def __init__(self, api_key: str):
+	def __init__(self, api_key: str) -> None:
 		"""Initialize with an OpenSubtitles API key.
 
 		Args:

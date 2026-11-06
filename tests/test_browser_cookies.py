@@ -40,7 +40,7 @@ def _create_mock_cookies_db(db_path: str, cookies: list) -> None:
 
 
 #============================================
-def test_load_firefox_cookies(tmp_path):
+def test_load_firefox_cookies(tmp_path: object) -> None:
 	"""Load IMDB cookies from a mocked Firefox profile."""
 	# create a mock profile directory with cookies.sqlite
 	profile_dir = str(tmp_path / "test_profile")
@@ -72,7 +72,7 @@ def test_load_firefox_cookies(tmp_path):
 
 
 #============================================
-def test_load_firefox_cookies_missing_db(tmp_path):
+def test_load_firefox_cookies_missing_db(tmp_path: object) -> None:
 	"""Missing cookies.sqlite returns empty list."""
 	profile_dir = str(tmp_path / "empty_profile")
 	os.makedirs(profile_dir)
@@ -83,7 +83,7 @@ def test_load_firefox_cookies_missing_db(tmp_path):
 
 
 #============================================
-def test_unsupported_browser():
+def test_unsupported_browser() -> None:
 	"""Unsupported browser spec raises ValueError."""
 	with pytest.raises(ValueError, match="Unsupported browser"):
 		moviemanager.scraper.browser_cookies.load_imdb_cookies_from_browser(
@@ -92,7 +92,7 @@ def test_unsupported_browser():
 
 
 #============================================
-def test_unsupported_browser_safari():
+def test_unsupported_browser_safari() -> None:
 	"""Safari browser spec raises ValueError."""
 	with pytest.raises(ValueError, match="Unsupported browser"):
 		moviemanager.scraper.browser_cookies.load_imdb_cookies_from_browser(
@@ -101,7 +101,7 @@ def test_unsupported_browser_safari():
 
 
 #============================================
-def test_find_profile_no_firefox(tmp_path):
+def test_find_profile_no_firefox(tmp_path: object) -> None:
 	"""Missing profiles.ini raises FileNotFoundError."""
 	with unittest.mock.patch.dict(os.environ, {"HOME": str(tmp_path)}):
 		with pytest.raises(FileNotFoundError, match="profiles.ini"):
@@ -109,7 +109,7 @@ def test_find_profile_no_firefox(tmp_path):
 
 
 #============================================
-def test_find_profile_no_imdb_cookies(tmp_path):
+def test_find_profile_no_imdb_cookies(tmp_path: object) -> None:
 	"""Profile found but no IMDB cookies raises FileNotFoundError."""
 	# set up macOS-style Firefox directory
 	ff_dir = tmp_path / "Library" / "Application Support" / "Firefox"
@@ -136,7 +136,7 @@ def test_find_profile_no_imdb_cookies(tmp_path):
 
 
 #============================================
-def test_find_profile_with_imdb_cookies(tmp_path):
+def test_find_profile_with_imdb_cookies(tmp_path: object) -> None:
 	"""Profile with IMDB cookies is correctly found."""
 	# set up macOS-style Firefox directory
 	ff_dir = tmp_path / "Library" / "Application Support" / "Firefox"
@@ -162,7 +162,7 @@ def test_find_profile_with_imdb_cookies(tmp_path):
 
 
 #============================================
-def test_load_imdb_cookies_from_browser_firefox(tmp_path):
+def test_load_imdb_cookies_from_browser_firefox(tmp_path: object) -> None:
 	"""Full pipeline: load_imdb_cookies_from_browser with firefox spec."""
 	# set up macOS-style Firefox directory
 	ff_dir = tmp_path / "Library" / "Application Support" / "Firefox"

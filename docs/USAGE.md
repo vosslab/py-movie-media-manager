@@ -89,7 +89,7 @@ python3 movie_organizer.py artwork -d ~/Movies --trailer
   artwork (`poster.jpg`, `fanart.jpg`) and optional trailers saved in each movie folder.
 - **Config**: `~/.config/movie_organizer.yaml` stores API keys and settings.
 
-See [docs/NFO_FILE_FORMAT.md](docs/NFO_FILE_FORMAT.md) for the NFO XML schema.
+See [docs/NFO_FILE_FORMAT.md](NFO_FILE_FORMAT.md) for the NFO XML schema.
 
 ## Known gaps
 

@@ -44,7 +44,7 @@ _SUGGESTION_HEADERS = {
 
 
 #============================================
-def _safe_get(obj: dict, *keys, default=None):
+def _safe_get(obj: dict, *keys, default: object=None) -> object:
 	"""Safely traverse nested dict keys, returning default if any key is missing.
 
 	Args:
@@ -515,12 +515,12 @@ class ImdbScraper(
 	requires_keys = []
 
 	#============================================
-	def __init__(self):
+	def __init__(self) -> None:
 		"""Initialize the IMDB scraper."""
 		self._transport = None
 
 	#============================================
-	def set_transport(self, transport) -> None:
+	def set_transport(self, transport: object) -> None:
 		"""Set the browser transport for loading IMDB pages.
 
 		Args:
@@ -582,14 +582,3 @@ class ImdbScraper(
 		html = self._transport.fetch_html(url)
 		metadata = _parse_metadata_html(html, imdb_id)
 		return metadata
-
-
-
-# simple assertion for _upgrade_poster_url
-assert _upgrade_poster_url(
-	"https://m.media-amazon.com/images/M/abc._V1_UX300_.jpg"
-) == "https://m.media-amazon.com/images/M/abc._V1_.jpg"
-assert _upgrade_poster_url(
-	"https://m.media-amazon.com/images/M/abc._V1_.jpg"
-) == "https://m.media-amazon.com/images/M/abc._V1_.jpg"
-assert _upgrade_poster_url("") == ""

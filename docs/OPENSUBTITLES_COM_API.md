@@ -259,9 +259,9 @@ Always include `--location` in curl commands to follow redirects.
 
 This project's OpenSubtitles integration lives in two files:
 
-- [moviemanager/scraper/subtitle_scraper.py](moviemanager/scraper/subtitle_scraper.py):
+- [moviemanager/scraper/subtitle_scraper.py](../moviemanager/scraper/subtitle_scraper.py):
   low-level API client handling login, search, and download requests.
-- [moviemanager/api/subtitle_service.py](moviemanager/api/subtitle_service.py):
+- [moviemanager/api/subtitle_service.py](../moviemanager/api/subtitle_service.py):
   service layer managing JWT lifecycle, token freshness (23h max age), and quota
   tracking.
 

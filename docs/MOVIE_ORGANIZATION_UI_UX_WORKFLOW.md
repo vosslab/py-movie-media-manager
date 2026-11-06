@@ -43,6 +43,14 @@ a fallback to all movies. Other operations show an error message instead.
 Right-clicking a row opens a context menu for that single movie. The context menu is
 independent of both checkboxes and row selection. It always acts on the right-clicked row.
 
+## Match preview
+
+The match dialog coordinates prematch decisions, batch navigation, and scraping.
+`MovieSearchPane` owns the query controls, result table, search state, and its
+`SearchResultPreview` child. `MovieSearchPrefetch` owns the next-movie result and
+poster caches. The pane and prefetcher cancel in-flight work when the dialog closes;
+the preview shows loading, empty, and error states without blocking the dialog.
+
 ## Button bar summary
 
 | Button | Action |

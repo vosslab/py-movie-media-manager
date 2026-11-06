@@ -12,7 +12,7 @@ class MovieList:
 	Movie instances without persistence.
 	"""
 
-	def __init__(self):
+	def __init__(self) -> None:
 		"""Initialize an empty movie list."""
 		self._movies: list = []
 

@@ -18,7 +18,7 @@ def _touch(path: str) -> None:
 
 
 #============================================
-def test_collect_artwork_files_with_filenames(tmp_path):
+def test_collect_artwork_files_with_filenames(tmp_path: object) -> None:
 	"""Collect artwork using a filenames list (scanner use case)."""
 	filenames = ["poster.jpg", "fanart.jpg", "movie.mkv"]
 	artwork = moviemanager.core.file.collector.collect_artwork_files(
@@ -31,7 +31,7 @@ def test_collect_artwork_files_with_filenames(tmp_path):
 
 
 #============================================
-def test_collect_artwork_files_from_disk(tmp_path):
+def test_collect_artwork_files_from_disk(tmp_path: object) -> None:
 	"""Collect artwork by scanning actual files on disk."""
 	_touch(str(tmp_path / "poster.jpg"))
 	_touch(str(tmp_path / "fanart.jpg"))
@@ -46,7 +46,7 @@ def test_collect_artwork_files_from_disk(tmp_path):
 
 
 #============================================
-def test_collect_artwork_files_empty_dir(tmp_path):
+def test_collect_artwork_files_empty_dir(tmp_path: object) -> None:
 	"""Empty directory returns empty dict."""
 	artwork = moviemanager.core.file.collector.collect_artwork_files(
 		str(tmp_path),
@@ -55,7 +55,7 @@ def test_collect_artwork_files_empty_dir(tmp_path):
 
 
 #============================================
-def test_collect_artwork_file_paths_basic(tmp_path):
+def test_collect_artwork_file_paths_basic(tmp_path: object) -> None:
 	"""Collect artwork paths from directory."""
 	_touch(str(tmp_path / "poster.jpg"))
 	_touch(str(tmp_path / "fanart.jpg"))
@@ -72,7 +72,7 @@ def test_collect_artwork_file_paths_basic(tmp_path):
 
 
 #============================================
-def test_collect_artwork_file_paths_with_prefix(tmp_path):
+def test_collect_artwork_file_paths_with_prefix(tmp_path: object) -> None:
 	"""Collect prefixed artwork like Movie.Name-poster.jpg."""
 	_touch(str(tmp_path / "Movie.Name-poster.jpg"))
 	_touch(str(tmp_path / "Movie.Name-fanart.jpg"))
@@ -88,7 +88,7 @@ def test_collect_artwork_file_paths_with_prefix(tmp_path):
 
 
 #============================================
-def test_collect_subtitle_files(tmp_path):
+def test_collect_subtitle_files(tmp_path: object) -> None:
 	"""Collect subtitle files from a directory."""
 	_touch(str(tmp_path / "movie.srt"))
 	_touch(str(tmp_path / "movie.en.srt"))
@@ -104,7 +104,7 @@ def test_collect_subtitle_files(tmp_path):
 
 
 #============================================
-def test_collect_subtitle_files_empty(tmp_path):
+def test_collect_subtitle_files_empty(tmp_path: object) -> None:
 	"""Empty directory returns empty list."""
 	subs = moviemanager.core.file.collector.collect_subtitle_files(
 		str(tmp_path),
@@ -113,7 +113,7 @@ def test_collect_subtitle_files_empty(tmp_path):
 
 
 #============================================
-def test_collect_trailer_files(tmp_path):
+def test_collect_trailer_files(tmp_path: object) -> None:
 	"""Collect trailer files from a directory."""
 	_touch(str(tmp_path / "trailer.mp4"))
 	_touch(str(tmp_path / "movie-trailer.mkv"))
@@ -129,7 +129,7 @@ def test_collect_trailer_files(tmp_path):
 
 
 #============================================
-def test_collect_nfo_files(tmp_path):
+def test_collect_nfo_files(tmp_path: object) -> None:
 	"""Collect NFO files from a directory."""
 	_touch(str(tmp_path / "movie.nfo"))
 	_touch(str(tmp_path / "movie.mkv"))
@@ -143,7 +143,7 @@ def test_collect_nfo_files(tmp_path):
 
 
 #============================================
-def test_collect_all_movie_files(tmp_path):
+def test_collect_all_movie_files(tmp_path: object) -> None:
 	"""Collect all movie-related files from a directory."""
 	_touch(str(tmp_path / "poster.jpg"))
 	_touch(str(tmp_path / "movie.srt"))
@@ -161,7 +161,7 @@ def test_collect_all_movie_files(tmp_path):
 
 
 #============================================
-def test_collect_nonexistent_dir():
+def test_collect_nonexistent_dir() -> None:
 	"""Non-existent directory returns empty results."""
 	subs = moviemanager.core.file.collector.collect_subtitle_files(
 		"/nonexistent/path",

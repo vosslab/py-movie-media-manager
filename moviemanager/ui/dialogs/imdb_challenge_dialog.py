@@ -25,9 +25,9 @@ class ImdbChallengeDialog(PySide6.QtWidgets.QDialog):
 
 	#============================================
 	def __init__(
-		self, url: str, parent=None,
-		seed_cookies: list = None, profile=None,
-	):
+		self, url: str, parent: object=None,
+		seed_cookies: list = None, profile: object=None,
+	) -> object:
 		"""Initialize the challenge dialog.
 
 		Args:
@@ -107,7 +107,7 @@ class ImdbChallengeDialog(PySide6.QtWidgets.QDialog):
 				cookie_store.setCookie(qt_cookie)
 
 	#============================================
-	def _on_cookie_added(self, cookie) -> None:
+	def _on_cookie_added(self, cookie: object) -> None:
 		"""Collect cookies as the browser receives them.
 
 		Args:

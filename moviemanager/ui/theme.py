@@ -162,7 +162,7 @@ QCheckBox::indicator:checked {
 
 
 #============================================
-def apply_theme(app, theme_name: str) -> None:
+def apply_theme(app: object, theme_name: str) -> None:
 	"""Apply a color theme to the application.
 
 	Args:

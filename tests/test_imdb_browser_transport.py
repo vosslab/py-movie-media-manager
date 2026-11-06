@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
 #============================================
-def test_transport_module_imports():
+def test_transport_module_imports() -> None:
 	"""Transport module can be imported without a Qt application."""
 	import moviemanager.ui.imdb_browser_transport
 	assert hasattr(
@@ -29,7 +29,7 @@ def test_transport_module_imports():
 
 
 #============================================
-def test_custom_user_agent_defined():
+def test_custom_user_agent_defined() -> None:
 	"""Custom User-Agent string is defined and not empty."""
 	import moviemanager.ui.imdb_browser_transport
 	ua = moviemanager.ui.imdb_browser_transport._CUSTOM_USER_AGENT
@@ -43,7 +43,7 @@ def test_custom_user_agent_defined():
 
 
 #============================================
-def test_profile_storage_dir_defined():
+def test_profile_storage_dir_defined() -> None:
 	"""Profile storage directory is under ~/.cache/movie_organizer/."""
 	import moviemanager.ui.imdb_browser_transport
 	path = moviemanager.ui.imdb_browser_transport._PROFILE_STORAGE_DIR
@@ -52,7 +52,7 @@ def test_profile_storage_dir_defined():
 
 
 #============================================
-def test_transport_class_has_required_methods():
+def test_transport_class_has_required_methods() -> None:
 	"""ImdbBrowserTransport has all expected public methods."""
 	import moviemanager.ui.imdb_browser_transport
 	cls = moviemanager.ui.imdb_browser_transport.ImdbBrowserTransport
@@ -70,7 +70,7 @@ class FakeTransport:
 	methods like _on_html_received and _on_load_finished.
 	"""
 
-	def __init__(self):
+	def __init__(self) -> None:
 		"""Set up fake transport with test doubles."""
 		self._event = threading.Event()
 		self._result_html = ""
@@ -96,7 +96,7 @@ class FakeTransport:
 
 
 #============================================
-def _bind_fetch_methods(fake):
+def _bind_fetch_methods(fake: object) -> None:
 	"""Bind the real transport fetch methods onto a FakeTransport instance.
 
 	This patches both fetch_html and its internal worker/main-thread helpers
@@ -111,7 +111,7 @@ def _bind_fetch_methods(fake):
 
 
 #============================================
-def test_transport_fetch_html_timeout():
+def test_transport_fetch_html_timeout() -> None:
 	"""Worker-thread fetch_html raises ConnectionError on timeout."""
 	fake = FakeTransport()
 	_bind_fetch_methods(fake)
@@ -124,13 +124,13 @@ def test_transport_fetch_html_timeout():
 
 
 #============================================
-def test_transport_fetch_html_load_failure():
+def test_transport_fetch_html_load_failure() -> None:
 	"""Worker-thread fetch_html raises ConnectionError when page load fails."""
 	fake = FakeTransport()
 	_bind_fetch_methods(fake)
 
 	# make the mock signal's emit simulate a load failure
-	def fake_emit(url):
+	def fake_emit(url: object) -> None:
 		fake._load_ok = False
 		fake._event.set()
 
@@ -143,7 +143,7 @@ def test_transport_fetch_html_load_failure():
 
 
 #============================================
-def test_transport_on_html_received_sets_event():
+def test_transport_on_html_received_sets_event() -> None:
 	"""_on_html_received stores HTML and sets the threading event."""
 	import moviemanager.ui.imdb_browser_transport
 	cls = moviemanager.ui.imdb_browser_transport.ImdbBrowserTransport
@@ -157,7 +157,7 @@ def test_transport_on_html_received_sets_event():
 
 
 #============================================
-def test_transport_on_load_finished_failure():
+def test_transport_on_load_finished_failure() -> None:
 	"""_on_load_finished with ok=False sets event without HTML."""
 	import moviemanager.ui.imdb_browser_transport
 	cls = moviemanager.ui.imdb_browser_transport.ImdbBrowserTransport
@@ -171,7 +171,7 @@ def test_transport_on_load_finished_failure():
 
 
 #============================================
-def test_transport_on_load_finished_success():
+def test_transport_on_load_finished_success() -> None:
 	"""_on_load_finished with ok=True calls toHtml to extract content."""
 	import moviemanager.ui.imdb_browser_transport
 	cls = moviemanager.ui.imdb_browser_transport.ImdbBrowserTransport
@@ -186,7 +186,7 @@ def test_transport_on_load_finished_success():
 
 
 #============================================
-def test_transport_captcha_detection():
+def test_transport_captcha_detection() -> None:
 	"""_on_html_received emits challenge_needed when CAPTCHA detected."""
 	import moviemanager.ui.imdb_browser_transport
 	cls = moviemanager.ui.imdb_browser_transport.ImdbBrowserTransport
@@ -202,7 +202,7 @@ def test_transport_captcha_detection():
 
 
 #============================================
-def test_transport_no_captcha_no_signal():
+def test_transport_no_captcha_no_signal() -> None:
 	"""_on_html_received does not emit challenge_needed for normal pages."""
 	import moviemanager.ui.imdb_browser_transport
 	cls = moviemanager.ui.imdb_browser_transport.ImdbBrowserTransport

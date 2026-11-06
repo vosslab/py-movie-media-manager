@@ -20,7 +20,7 @@ class StatusIconDelegate(PySide6.QtWidgets.QStyledItemDelegate):
 	"""
 
 	#============================================
-	def paint(self, painter, option, index) -> None:
+	def paint(self, painter: object, option: object, index: object) -> None:
 		"""Paint status icon as a colored filled circle.
 
 		Args:
@@ -59,7 +59,7 @@ class StatusIconDelegate(PySide6.QtWidgets.QStyledItemDelegate):
 		painter.restore()
 
 	#============================================
-	def sizeHint(self, option, index) -> PySide6.QtCore.QSize:
+	def sizeHint(self, option: object, index: object) -> PySide6.QtCore.QSize:
 		"""Return compact size hint for a single icon column.
 
 		Args:
@@ -93,7 +93,7 @@ class SeverityDelegate(PySide6.QtWidgets.QStyledItemDelegate):
 	"""
 
 	#============================================
-	def paint(self, painter, option, index) -> None:
+	def paint(self, painter: object, option: object, index: object) -> None:
 		"""Paint severity indicator as a colored filled circle.
 
 		Args:
@@ -125,7 +125,7 @@ class SeverityDelegate(PySide6.QtWidgets.QStyledItemDelegate):
 		painter.restore()
 
 	#============================================
-	def sizeHint(self, option, index) -> PySide6.QtCore.QSize:
+	def sizeHint(self, option: object, index: object) -> PySide6.QtCore.QSize:
 		"""Return compact size hint for severity icon column.
 
 		Args:

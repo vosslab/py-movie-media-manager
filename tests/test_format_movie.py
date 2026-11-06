@@ -31,21 +31,21 @@ class FakeMovie:
 
 
 #============================================
-def test_format_rating_with_value():
+def test_format_rating_with_value() -> None:
 	"""Rating formats as value/10."""
 	result = moviemanager.ui.format_movie.format_rating(7.3)
 	assert result == "7.3/10"
 
 
 #============================================
-def test_format_rating_zero():
+def test_format_rating_zero() -> None:
 	"""Zero rating returns empty string."""
 	result = moviemanager.ui.format_movie.format_rating(0.0)
 	assert result == ""
 
 
 #============================================
-def test_format_genres_multiple():
+def test_format_genres_multiple() -> None:
 	"""Multiple genres join with comma-space."""
 	result = moviemanager.ui.format_movie.format_genres(
 		["Action", "Drama", "Thriller"]
@@ -54,56 +54,56 @@ def test_format_genres_multiple():
 
 
 #============================================
-def test_format_genres_empty():
+def test_format_genres_empty() -> None:
 	"""Empty genre list returns empty string."""
 	result = moviemanager.ui.format_movie.format_genres([])
 	assert result == ""
 
 
 #============================================
-def test_format_runtime_with_value():
+def test_format_runtime_with_value() -> None:
 	"""Runtime formats as minutes."""
 	result = moviemanager.ui.format_movie.format_runtime(142)
 	assert result == "142 min"
 
 
 #============================================
-def test_format_runtime_zero():
+def test_format_runtime_zero() -> None:
 	"""Zero runtime returns empty string."""
 	result = moviemanager.ui.format_movie.format_runtime(0)
 	assert result == ""
 
 
 #============================================
-def test_format_ids_both():
+def test_format_ids_both() -> None:
 	"""Both IMDB and TMDB IDs are shown."""
 	result = moviemanager.ui.format_movie.format_ids("tt1234567", 155)
 	assert result == "IMDB: tt1234567  TMDB: 155"
 
 
 #============================================
-def test_format_ids_imdb_only():
+def test_format_ids_imdb_only() -> None:
 	"""Only IMDB ID when TMDB is zero."""
 	result = moviemanager.ui.format_movie.format_ids("tt0000001", 0)
 	assert result == "IMDB: tt0000001"
 
 
 #============================================
-def test_format_ids_tmdb_only():
+def test_format_ids_tmdb_only() -> None:
 	"""Only TMDB ID when IMDB is empty."""
 	result = moviemanager.ui.format_movie.format_ids("", 42)
 	assert result == "TMDB: 42"
 
 
 #============================================
-def test_format_ids_none():
+def test_format_ids_none() -> None:
 	"""No IDs returns empty string."""
 	result = moviemanager.ui.format_movie.format_ids("", 0)
 	assert result == ""
 
 
 #============================================
-def test_format_movie_fields_full():
+def test_format_movie_fields_full() -> None:
 	"""All fields populate correctly from a fully-set movie."""
 	movie = FakeMovie(
 		title="The Dark Knight",
@@ -130,7 +130,7 @@ def test_format_movie_fields_full():
 
 
 #============================================
-def test_format_movie_fields_empty():
+def test_format_movie_fields_empty() -> None:
 	"""Empty movie returns all empty strings."""
 	movie = FakeMovie()
 	fields = moviemanager.ui.format_movie.format_movie_fields(movie)
@@ -146,7 +146,7 @@ def test_format_movie_fields_empty():
 
 
 #============================================
-def test_format_movie_fields_partial_ids():
+def test_format_movie_fields_partial_ids() -> None:
 	"""Partial IDs show only available identifiers."""
 	movie = FakeMovie(
 		title="Test Movie",

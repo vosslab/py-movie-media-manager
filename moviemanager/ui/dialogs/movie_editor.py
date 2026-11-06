@@ -17,7 +17,7 @@ import moviemanager.ui.movies.status_delegate
 class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 	"""Dialog for editing movie metadata."""
 
-	def __init__(self, movie, parent=None):
+	def __init__(self, movie: object, parent: object=None) -> object:
 		super().__init__(parent)
 		self._movie = movie
 		self.setWindowTitle(f"Edit - {movie.title}")
@@ -32,7 +32,7 @@ class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 		self._connect_dirty_signals()
 
 	#============================================
-	def _setup_ui(self):
+	def _setup_ui(self) -> object:
 		"""Build the scrollable form with poster and buttons."""
 		layout = PySide6.QtWidgets.QVBoxLayout(self)
 		# top section: poster on left, form on right
@@ -298,7 +298,7 @@ class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 		super().reject()
 
 	#============================================
-	def _load_movie(self):
+	def _load_movie(self) -> object:
 		"""Populate form fields and poster from movie."""
 		m = self._movie
 		# load poster image
@@ -330,7 +330,7 @@ class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 		self._load_parental_guide(m)
 
 	#============================================
-	def _load_poster(self, movie) -> None:
+	def _load_poster(self, movie: object) -> None:
 		"""Load and display the poster image for the movie.
 
 		Checks poster_url from NFO/scanner, then falls back to
@@ -363,7 +363,7 @@ class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 		self._poster_label.setPixmap(scaled)
 
 	#============================================
-	def _load_parental_guide(self, movie) -> None:
+	def _load_parental_guide(self, movie: object) -> None:
 		"""Set parental guide circle colors from movie data.
 
 		Args:
@@ -393,7 +393,7 @@ class MovieEditorDialog(PySide6.QtWidgets.QDialog):
 			self._pg_date_label.setText("")
 
 	#============================================
-	def _save(self):
+	def _save(self) -> object:
 		"""Save edited fields back to movie and write NFO."""
 		m = self._movie
 		m.title = self._title_edit.text()

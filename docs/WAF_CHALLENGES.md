@@ -171,4 +171,4 @@ directory resets the WAF immunity tokens and forces re-challenge on the next
 request.
 
 The custom User-Agent string is defined in
-[moviemanager/ui/imdb_browser_transport.py](moviemanager/ui/imdb_browser_transport.py).
+[moviemanager/ui/imdb_browser_transport.py](../moviemanager/ui/imdb_browser_transport.py).

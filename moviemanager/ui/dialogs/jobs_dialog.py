@@ -18,7 +18,7 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 	when the TaskAPI emits job_list_changed.
 	"""
 
-	def __init__(self, task_api, parent=None):
+	def __init__(self, task_api: object, parent: object=None) -> object:
 		"""Initialize the jobs dialog.
 
 		Args:
@@ -263,19 +263,19 @@ class JobsDialog(PySide6.QtWidgets.QDialog):
 		return text
 
 	#============================================
-	def showEvent(self, event) -> None:
+	def showEvent(self, event: object) -> None:
 		"""Start the refresh timer when the dialog becomes visible."""
 		super().showEvent(event)
 		self._tick_timer.start()
 
 	#============================================
-	def hideEvent(self, event) -> None:
+	def hideEvent(self, event: object) -> None:
 		"""Stop the refresh timer when the dialog is hidden."""
 		self._tick_timer.stop()
 		super().hideEvent(event)
 
 	#============================================
-	def closeEvent(self, event) -> None:
+	def closeEvent(self, event: object) -> None:
 		"""Stop the refresh timer when the dialog is closed."""
 		self._tick_timer.stop()
 		super().closeEvent(event)

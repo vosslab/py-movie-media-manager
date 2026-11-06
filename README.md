@@ -1,9 +1,8 @@
 # py-movie-media-manager
 
-A Python movie media manager inspired by [tinyMediaManager](https://www.tinymediamanager.org/).
-Scan a local movie collection, match movies to IMDB or TMDB, scrape metadata into
-Kodi-compatible NFO files, download artwork and trailers, and rename or organize folders.
-Provides both a PySide6 GUI and a CLI.
+A Python movie media manager for scanning local collections, matching IMDB or TMDB metadata,
+writing Kodi-compatible NFO files, downloading artwork and trailers, and organizing folders
+through a PySide6 GUI or CLI.
 
 ## Quick start
 
@@ -42,7 +41,7 @@ source source_me.sh && python3 -m pytest tests/
 
 ## License
 
-GPL-3.0-or-later. See [LICENSE](LICENSE).
+AGPL-3.0-or-later. See [LICENSE.AGPL-3.0](LICENSE.AGPL-3.0).
 
 ## Maintainer
 

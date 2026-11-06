@@ -3,6 +3,7 @@
 # Standard Library
 import io
 import traceback
+import collections.abc
 
 # PIP3 modules
 import requests
@@ -35,7 +36,12 @@ class Worker(PySide6.QtCore.QRunnable):
 		kwargs: Keyword arguments for fn.
 	"""
 
-	def __init__(self, fn, *args, **kwargs):
+	def __init__(
+		self,
+		fn: collections.abc.Callable[..., object],
+		*args,
+		**kwargs,
+	) -> None:
 		super().__init__()
 		self.fn = fn
 		self.args = args
@@ -72,11 +78,6 @@ class Worker(PySide6.QtCore.QRunnable):
 			pass
 		try:
 			result = self.fn(*self.args, **self.kwargs)
-			if not self._cancelled:
-				self.signals.finished.emit(result)
-		except RuntimeError:
-			# signal receiver was deleted; silently ignore
-			pass
 		except Exception as exc:
 			if not self._cancelled:
 				# capture full traceback for debugging
@@ -91,6 +92,12 @@ class Worker(PySide6.QtCore.QRunnable):
 					self.signals.error.emit(error_text)
 				except RuntimeError:
 					pass
+			return
+		if not self._cancelled:
+			try:
+				self.signals.finished.emit(result)
+			except RuntimeError:
+				pass
 
 
 #============================================
@@ -130,77 +137,3 @@ def download_image_bytes(url: str, timeout: int = 15) -> bytes:
 
 
 #============================================
-class ImageDownloadWorker(PySide6.QtCore.QRunnable):
-	"""Worker that downloads an image from a URL and emits the bytes.
-
-	Args:
-		url: The image URL to download.
-		timeout: HTTP request timeout in seconds.
-	"""
-
-	def __init__(self, url: str, timeout: int = 15):
-		super().__init__()
-		self._url = url
-		self._timeout = timeout
-		self.signals = WorkerSignals()
-		self._cancelled = False
-		self.setAutoDelete(True)
-
-	#============================================
-	def cancel(self) -> None:
-		"""Request cancellation of this worker."""
-		self._cancelled = True
-
-	#============================================
-	def run(self) -> None:
-		"""Download the image and emit raw bytes or error.
-
-		Guards signal emission against RuntimeError in case the
-		receiver has been deleted (e.g., dialog closed while worker
-		is still running in the thread pool).
-		"""
-		if self._cancelled:
-			return
-		try:
-			# use browser-like User-Agent to avoid CDN rejections
-			headers = {
-				"User-Agent": (
-					"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-					"AppleWebKit/537.36 (KHTML, like Gecko) "
-					"Chrome/120.0.0.0 Safari/537.36"
-				),
-			}
-			response = requests.get(
-				self._url, timeout=self._timeout,
-				headers=headers,
-			)
-			if self._cancelled:
-				return
-			if response.status_code == 200:
-				# verify response contains image data, not HTML
-				content_type = response.headers.get(
-					"Content-Type", ""
-				)
-				if "image" in content_type or not content_type:
-					self.signals.finished.emit(response.content)
-				else:
-					error_msg = (
-						f"Non-image response ({content_type}) "
-						f"from {self._url}"
-					)
-					self.signals.error.emit(error_msg)
-			else:
-				error_msg = (
-					f"HTTP {response.status_code} "
-					f"downloading {self._url}"
-				)
-				self.signals.error.emit(error_msg)
-		except RuntimeError:
-			# signal source was deleted; silently ignore
-			pass
-		except Exception:
-			if not self._cancelled:
-				try:
-					self.signals.error.emit(traceback.format_exc())
-				except RuntimeError:
-					pass

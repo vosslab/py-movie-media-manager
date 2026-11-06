@@ -32,7 +32,7 @@ import moviemanager.ui.widgets.status_bar
 class MainWindow(PySide6.QtWidgets.QMainWindow):
 	"""Main application window with menu, movie panel, and status bar."""
 
-	def __init__(self, settings, directory: str = "", parent=None):
+	def __init__(self, settings: object, directory: str = "", parent: object=None) -> object:
 		super().__init__(parent)
 		self._settings = settings
 		self._api = moviemanager.api.movie_api.MovieAPI(settings)
@@ -188,14 +188,14 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 	#============================================
 
 	#============================================
-	def _setup_menus(self):
+	def _setup_menus(self) -> object:
 		"""Create menu bar from YAML configuration."""
 		stored = moviemanager.ui.menu_builder.build_menus(self)
 		self._undo_rename_action = stored.get("undo_rename_action")
 		self._dark_mode_action = stored.get("dark_mode_action")
 
 	#============================================
-	def _setup_toolbar(self):
+	def _setup_toolbar(self) -> object:
 		"""Create toolbar with labeled icons via toolbar_builder."""
 		refs = moviemanager.ui.toolbar_builder.build_toolbar(self)
 		self._match_btn = refs["match_btn"]
@@ -208,7 +208,7 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 	#============================================
 
 	#============================================
-	def _open_directory(self):
+	def _open_directory(self) -> object:
 		"""Open a directory chooser and scan."""
 		directory = (
 			PySide6.QtWidgets.QFileDialog
@@ -220,7 +220,7 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			self._scan_directory(directory)
 
 	#============================================
-	def _scan_directory(self, directory: str):
+	def _scan_directory(self, directory: str) -> object:
 		"""Start a directory scan via the scan controller.
 
 		Args:
@@ -242,35 +242,35 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._scan_ctrl.scan_directory(directory)
 
 	#============================================
-	def _scrape_selected(self):
+	def _scrape_selected(self) -> object:
 		"""Scrape metadata for selected or checked movies."""
 		self._match_ctrl.scrape_selected(
 			self._movie_panel, self
 		)
 
 	#============================================
-	def _rename_selected(self):
+	def _rename_selected(self) -> object:
 		"""Organize selected movie files into folders."""
 		self._rename_ctrl.rename_selected(
 			self._movie_panel, self
 		)
 
 	#============================================
-	def _download_content(self):
+	def _download_content(self) -> object:
 		"""Download artwork, trailers, and subtitles."""
 		self._download_ctrl.download_content(
 			self._movie_panel, self
 		)
 
 	#============================================
-	def _refresh_metadata(self):
+	def _refresh_metadata(self) -> object:
 		"""Re-fetch metadata from IMDB/TMDB for matched movies."""
 		self._match_ctrl.refresh_metadata(
 			self._movie_panel, self
 		)
 
 	#============================================
-	def _fetch_parental_guides(self):
+	def _fetch_parental_guides(self) -> object:
 		"""Fetch parental guide data from IMDB."""
 		self._match_ctrl.fetch_parental_guides(
 			self._movie_panel, self
@@ -282,7 +282,7 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 		self._scan_ctrl.start_media_probe()
 
 	#============================================
-	def _edit_selected(self):
+	def _edit_selected(self) -> object:
 		"""Edit metadata for selected movie."""
 		movie = self._movie_panel.get_selected_movie()
 		if not movie:
@@ -301,7 +301,7 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			self._status.showMessage("Metadata saved", 3000)
 
 	#============================================
-	def _show_settings(self):
+	def _show_settings(self) -> object:
 		"""Show settings dialog."""
 		dialog = (
 			moviemanager.ui.dialogs.settings_dialog
@@ -324,7 +324,7 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			self._movie_panel.set_settings(self._settings)
 
 	#============================================
-	def _show_about(self):
+	def _show_about(self) -> object:
 		"""Show about dialog with version, author, and license."""
 		try:
 			version = importlib.metadata.version(
@@ -690,7 +690,7 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 
 	#============================================
 	def _on_context_action(
-		self, action: str, movie,
+		self, action: str, movie: object,
 	) -> None:
 		"""Handle context menu actions from the movie panel."""
 		if action == "scrape":
@@ -745,13 +745,13 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 	#============================================
 
 	#============================================
-	def dragEnterEvent(self, event) -> None:
+	def dragEnterEvent(self, event: object) -> None:
 		"""Accept directory drag events (#19)."""
 		if event.mimeData().hasUrls():
 			event.acceptProposedAction()
 
 	#============================================
-	def dropEvent(self, event) -> None:
+	def dropEvent(self, event: object) -> None:
 		"""Handle directory drop events (#19)."""
 		urls = event.mimeData().urls()
 		if not urls:
@@ -766,7 +766,7 @@ class MainWindow(PySide6.QtWidgets.QMainWindow):
 			)
 
 	#============================================
-	def closeEvent(self, event) -> None:
+	def closeEvent(self, event: object) -> None:
 		"""Save window state on close, warn if jobs running."""
 		if self._task_api.active_count > 0:
 			reply = PySide6.QtWidgets.QMessageBox.question(

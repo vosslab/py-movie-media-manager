@@ -1,6 +1,11 @@
+import os
 import sys
 
 import file_utils
+
+# Qt needs a display backend before pytest-qt creates QApplication. The fast
+# lane renders widgets offscreen so it can run consistently on developer Macs.
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 # Insert the repo root onto sys.path so top-level modules import from any test
 # file without installing the package first. file_utils.get_repo_root() uses

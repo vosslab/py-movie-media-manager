@@ -113,18 +113,26 @@ Generic `QRunnable` that executes a callable and emits signals:
 | `partial_result` | `(result: object)` | Streaming/incremental data |
 | `started` | (none) | Worker dequeued from pool |
 
-Workers guard all signal emissions against `RuntimeError` in case the receiver
-widget was deleted while the worker was still running.
-
-### ImageDownloadWorker
-
-Specialized worker for downloading images with browser-like headers.
-Emits `finished` with raw `bytes` on success.
+Workers report callable failures through `error`. They only suppress a `RuntimeError`
+when emitting a signal after its receiver has been deleted.
 
 ### download_image_bytes()
 
 Standalone helper that downloads image bytes synchronously. Used by callers
 that manage their own threading.
+
+## Match failure state
+
+`MovieAPI.get_failed_parental_guide_count()` reports the number of parental-guide
+requests available for retry. Controllers use this public count instead of reaching
+into service state.
+
+## Match preview ownership
+
+`MovieChooserDialog` owns prematch decisions, batch navigation, and scraping.
+`MovieSearchPane` owns the query controls, background search, result table, and its
+`SearchResultPreview`. `MovieSearchPrefetch` owns the next-movie result and poster
+caches. Both cancel their outstanding `TaskAPI` work when the dialog closes.
 
 ## Download error categories
 

@@ -35,7 +35,7 @@ DURATION_COLUMN = 4
 
 
 #============================================
-def _get_enabled_artwork_types(settings) -> set:
+def _get_enabled_artwork_types(settings: object) -> set:
 	"""Return set of artwork type names enabled in settings.
 
 	Args:
@@ -64,7 +64,7 @@ def _get_enabled_artwork_types(settings) -> set:
 
 
 #============================================
-def _get_duration_minutes(movie) -> int:
+def _get_duration_minutes(movie: object) -> int:
 	"""Return the movie duration in minutes.
 
 	Prefers actual file duration from media probe, falls back to
@@ -94,7 +94,7 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 	# emitted when check state changes (checked_count, total_count)
 	checked_changed = PySide6.QtCore.Signal(int, int)
 
-	def __init__(self, parent=None):
+	def __init__(self, parent: object=None) -> object:
 		super().__init__(parent)
 		self._movies = []
 		self._filtered = []
@@ -108,7 +108,7 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 		self._settings = None
 
 	#============================================
-	def set_settings(self, settings) -> None:
+	def set_settings(self, settings: object) -> None:
 		"""Set the application settings for artwork completeness checks.
 
 		Args:
@@ -166,7 +166,7 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 		self.endInsertRows()
 
 	#============================================
-	def _matches_filter(self, movie) -> bool:
+	def _matches_filter(self, movie: object) -> bool:
 		"""Check if a movie matches the current filter text.
 
 		Args:
@@ -247,7 +247,7 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 		self._filtered.sort(key=key_func, reverse=reverse)
 
 	#============================================
-	def sort(self, column: int, order=None) -> None:
+	def sort(self, column: int, order: object=None) -> None:
 		"""Sort by the given column and order.
 
 		Args:
@@ -263,7 +263,7 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 		self.endResetModel()
 
 	#============================================
-	def get_movie(self, row: int):
+	def get_movie(self, row: int) -> object:
 		"""Get Movie object at row index."""
 		if 0 <= row < len(self._filtered):
 			return self._filtered[row]
@@ -400,17 +400,17 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 		return len(self._checked)
 
 	#============================================
-	def rowCount(self, parent=None) -> int:
+	def rowCount(self, parent: object=None) -> int:
 		"""Return number of rows."""
 		return len(self._filtered)
 
 	#============================================
-	def columnCount(self, parent=None) -> int:
+	def columnCount(self, parent: object=None) -> int:
 		"""Return number of columns."""
 		return len(COLUMNS)
 
 	#============================================
-	def headerData(self, section, orientation, role=None):
+	def headerData(self, section: object, orientation: object, role: object=None) -> object:
 		"""Return header data for the given section."""
 		if role is None:
 			role = PySide6.QtCore.Qt.ItemDataRole.DisplayRole
@@ -428,7 +428,7 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 		return None
 
 	#============================================
-	def flags(self, index):
+	def flags(self, index: object) -> object:
 		"""Return item flags; checkbox column is user-checkable."""
 		base_flags = super().flags(index)
 		if index.column() == 0:
@@ -440,7 +440,7 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 		return base_flags
 
 	#============================================
-	def data(self, index, role=None):
+	def data(self, index: object, role: object=None) -> object:
 		"""Return data for the given index and role."""
 		if role is None:
 			role = PySide6.QtCore.Qt.ItemDataRole.DisplayRole
@@ -533,7 +533,7 @@ class MovieTableModel(PySide6.QtCore.QAbstractTableModel):
 		return None
 
 	#============================================
-	def setData(self, index, value, role=None):
+	def setData(self, index: object, value: object, role: object=None) -> object:
 		"""Handle checkbox toggle."""
 		if role is None:
 			role = PySide6.QtCore.Qt.ItemDataRole.EditRole

@@ -21,7 +21,7 @@ import moviemanager.ui.workers
 class ImageChooserDialog(PySide6.QtWidgets.QDialog):
 	"""Dialog for browsing and downloading artwork."""
 
-	def __init__(self, movie, artwork_urls: dict, task_api, parent=None):
+	def __init__(self, movie: object, artwork_urls: dict, task_api: object, parent: object=None) -> object:
 		"""Initialize the artwork chooser dialog.
 
 		Args:
@@ -40,7 +40,7 @@ class ImageChooserDialog(PySide6.QtWidgets.QDialog):
 		self._load_artwork_list()
 
 	#============================================
-	def _setup_ui(self):
+	def _setup_ui(self) -> object:
 		"""Build the type selector, URL list, and preview."""
 		layout = PySide6.QtWidgets.QHBoxLayout(self)
 		# left: artwork type list and URL list
@@ -73,7 +73,7 @@ class ImageChooserDialog(PySide6.QtWidgets.QDialog):
 		layout.addWidget(self._preview, 2)
 
 	#============================================
-	def _load_artwork_list(self):
+	def _load_artwork_list(self) -> object:
 		"""Populate type combo from artwork_urls keys."""
 		for art_type in sorted(self._artwork_urls.keys()):
 			urls = self._artwork_urls[art_type]
@@ -205,7 +205,7 @@ class ImageChooserDialog(PySide6.QtWidgets.QDialog):
 		return output_name
 
 	#============================================
-	def _on_download_done(self, output_name) -> None:
+	def _on_download_done(self, output_name: object) -> None:
 		"""Handle successful download."""
 		self.unsetCursor()
 		self._download_btn.setEnabled(True)

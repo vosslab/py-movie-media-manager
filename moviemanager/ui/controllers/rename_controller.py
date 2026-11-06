@@ -32,7 +32,7 @@ class RenameController(PySide6.QtCore.QObject):
 	rename_error = PySide6.QtCore.Signal(str)
 	undo_completed = PySide6.QtCore.Signal(int)
 
-	def __init__(self, api, task_api, parent=None):
+	def __init__(self, api: object, task_api: object, parent: object=None) -> object:
 		"""Initialize the rename controller.
 
 		Args:
@@ -72,7 +72,7 @@ class RenameController(PySide6.QtCore.QObject):
 		return bool(self._rename_history)
 
 	#============================================
-	def set_api(self, api) -> None:
+	def set_api(self, api: object) -> None:
 		"""Replace the MovieAPI instance (after settings change).
 
 		Args:
@@ -87,7 +87,7 @@ class RenameController(PySide6.QtCore.QObject):
 
 	#============================================
 	def rename_selected(
-		self, movie_panel, main_window,
+		self, movie_panel: object, main_window: object,
 	) -> None:
 		"""Organize selected movie files into proper folder structure.
 
@@ -124,7 +124,7 @@ class RenameController(PySide6.QtCore.QObject):
 
 	#============================================
 	def on_rename_preview_done(
-		self, pairs: list, main_window,
+		self, pairs: list, main_window: object,
 	) -> None:
 		"""Show rename preview dialog after background dry-run.
 
@@ -174,7 +174,7 @@ class RenameController(PySide6.QtCore.QObject):
 		self.rename_error.emit(error_text)
 
 	#============================================
-	def on_rename_exec_done(self, result) -> None:
+	def on_rename_exec_done(self, result: object) -> None:
 		"""Handle rename execution completion.
 
 		Args:
@@ -202,7 +202,7 @@ class RenameController(PySide6.QtCore.QObject):
 
 	#============================================
 	def _rename_batch(
-		self, movies: list, main_window,
+		self, movies: list, main_window: object,
 	) -> None:
 		"""Organize multiple movies in batch with a combined preview.
 
@@ -251,7 +251,7 @@ class RenameController(PySide6.QtCore.QObject):
 
 	#============================================
 	def on_batch_rename_preview_done(
-		self, result: dict, main_window,
+		self, result: dict, main_window: object,
 	) -> None:
 		"""Show combined preview dialog after batch dry-run.
 
@@ -315,7 +315,7 @@ class RenameController(PySide6.QtCore.QObject):
 
 	#============================================
 	def on_batch_rename_exec_done(
-		self, errors: list, main_window,
+		self, errors: list, main_window: object,
 	) -> None:
 		"""Handle batch rename execution completion.
 
@@ -336,7 +336,7 @@ class RenameController(PySide6.QtCore.QObject):
 			self.rename_completed.emit(len(pairs))
 
 	#============================================
-	def undo_last_rename(self, main_window) -> None:
+	def undo_last_rename(self, main_window: object) -> None:
 		"""Undo the last rename batch by reversing file moves.
 
 		Args:

@@ -14,7 +14,7 @@ import moviemanager.scraper.types
 #============================================
 @unittest.mock.patch("moviemanager.scraper.fanart_scraper.time.sleep")
 @unittest.mock.patch("moviemanager.scraper.fanart_scraper.requests.get")
-def test_get_artwork_returns_urls(mock_get, mock_sleep):
+def test_get_artwork_returns_urls(mock_get: object, mock_sleep: object) -> None:
 	"""Verify artwork JSON is mapped to correct type names and URLs."""
 	# mock a successful JSON response
 	mock_response = unittest.mock.MagicMock()
@@ -54,7 +54,7 @@ def test_get_artwork_returns_urls(mock_get, mock_sleep):
 #============================================
 @unittest.mock.patch("moviemanager.scraper.fanart_scraper.time.sleep")
 @unittest.mock.patch("moviemanager.scraper.fanart_scraper.requests.get")
-def test_get_artwork_empty_response(mock_get, mock_sleep):
+def test_get_artwork_empty_response(mock_get: object, mock_sleep: object) -> None:
 	"""Verify empty JSON response returns empty dict."""
 	mock_response = unittest.mock.MagicMock()
 	mock_response.json.return_value = {}
@@ -70,7 +70,7 @@ def test_get_artwork_empty_response(mock_get, mock_sleep):
 #============================================
 @unittest.mock.patch("moviemanager.scraper.fanart_scraper.time.sleep")
 @unittest.mock.patch("moviemanager.scraper.fanart_scraper.requests.get")
-def test_get_artwork_request_error(mock_get, mock_sleep):
+def test_get_artwork_request_error(mock_get: object, mock_sleep: object) -> None:
 	"""Verify request errors return empty dict gracefully."""
 	mock_get.side_effect = requests.RequestException("Connection failed")
 	scraper = moviemanager.scraper.fanart_scraper.FanartScraper(
@@ -83,7 +83,7 @@ def test_get_artwork_request_error(mock_get, mock_sleep):
 #============================================
 @unittest.mock.patch("moviemanager.scraper.fanart_scraper.requests.get")
 @unittest.mock.patch("moviemanager.scraper.fanart_scraper.time.sleep")
-def test_sleep_between_calls(mock_sleep, mock_get):
+def test_sleep_between_calls(mock_sleep: object, mock_get: object) -> None:
 	"""Verify time.sleep is called for rate limiting."""
 	mock_response = unittest.mock.MagicMock()
 	mock_response.json.return_value = {}

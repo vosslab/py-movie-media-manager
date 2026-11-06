@@ -44,7 +44,7 @@ class FanartScraper(moviemanager.scraper.interfaces.ArtworkProvider):
 	requires_keys = ["fanart_api_key"]
 
 	#============================================
-	def __init__(self, api_key: str):
+	def __init__(self, api_key: str) -> None:
 		"""Initialize the Fanart.tv scraper with an API key.
 
 		Args:

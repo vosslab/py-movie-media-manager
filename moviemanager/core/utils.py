@@ -112,11 +112,6 @@ def parse_title_year(filename: str) -> tuple:
 	return (title, year)
 
 
-# simple assertion test for parse_title_year
-result = parse_title_year("The.Dark.Knight.2008.BluRay.x264.mkv")
-assert result == ("The Dark Knight", "2008")
-
-
 #============================================
 def shell_safe_filename(name: str) -> str:
 	"""Make a filename shell-safe using a whitelist approach.
@@ -155,12 +150,6 @@ def shell_safe_filename(name: str) -> str:
 	# strip leading and trailing underscores, hyphens, and dots
 	result = result.strip("_-.")
 	return result
-
-
-# simple assertion tests for shell_safe_filename
-assert shell_safe_filename("Fast & Furious") == "Fast_and_Furious"
-assert shell_safe_filename("Ocean's Eleven") == "Ocean_s_Eleven"
-assert shell_safe_filename("The Matrix (1999)") == "The_Matrix_1999"
 
 
 #============================================

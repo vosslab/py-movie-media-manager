@@ -15,9 +15,9 @@ import moviemanager.ui.workers
 
 #============================================
 def _run_batch_download(
-	movies: list, api, settings,
+	movies: list, api: object, settings: object,
 	download_artwork: bool, download_trailers: bool,
-	download_subs: bool, worker=None,
+	download_subs: bool, worker: object=None,
 ) -> dict:
 	"""Execute batch download loop in a background thread.
 
@@ -122,7 +122,7 @@ class DownloadDialog(PySide6.QtWidgets.QDialog):
 		parent: Parent widget.
 	"""
 
-	def __init__(self, movies: list, api, settings, task_api, parent=None):
+	def __init__(self, movies: list, api: object, settings: object, task_api: object, parent: object=None) -> object:
 		"""Initialize the batch download dialog.
 
 		Args:

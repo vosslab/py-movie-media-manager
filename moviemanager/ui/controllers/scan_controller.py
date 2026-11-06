@@ -42,7 +42,7 @@ class ScanController(PySide6.QtCore.QObject):
 	probe_completed = PySide6.QtCore.Signal()
 	probe_error = PySide6.QtCore.Signal(str)
 
-	def __init__(self, api, task_api, parent=None):
+	def __init__(self, api: object, task_api: object, parent: object=None) -> object:
 		"""Initialize the scan controller.
 
 		Args:
@@ -86,7 +86,7 @@ class ScanController(PySide6.QtCore.QObject):
 		return self._badge_task_id
 
 	#============================================
-	def set_api(self, api) -> None:
+	def set_api(self, api: object) -> None:
 		"""Replace the MovieAPI instance (after settings change).
 
 		Args:
@@ -147,7 +147,7 @@ class ScanController(PySide6.QtCore.QObject):
 				worker.signals.progress.emit(current, 0, message)
 
 	#============================================
-	def _on_movie_found_callback(self, movie) -> None:
+	def _on_movie_found_callback(self, movie: object) -> None:
 		"""Callback invoked from worker thread when a movie is discovered.
 
 		Emits partial_result signal to marshal delivery to the main thread.
@@ -163,7 +163,7 @@ class ScanController(PySide6.QtCore.QObject):
 				worker.signals.partial_result.emit(movie)
 
 	#============================================
-	def _on_scan_partial(self, movie) -> None:
+	def _on_scan_partial(self, movie: object) -> None:
 		"""Buffer incremental movie delivery and flush in batches.
 
 		Args:
@@ -215,7 +215,7 @@ class ScanController(PySide6.QtCore.QObject):
 			)
 
 	#============================================
-	def on_scan_done(self, movies) -> None:
+	def on_scan_done(self, movies: object) -> None:
 		"""Handle scan completion with final cleanup.
 
 		Movies were already delivered incrementally via partial_result,
@@ -312,7 +312,7 @@ class ScanController(PySide6.QtCore.QObject):
 
 	#============================================
 	def on_probe_task_finished(
-		self, task_id: int, result,
+		self, task_id: int, result: object,
 	) -> None:
 		"""Handle probe completion: emit signal and clear task ID.
 
@@ -378,7 +378,7 @@ class ScanController(PySide6.QtCore.QObject):
 
 	#============================================
 	def on_badge_task_finished(
-		self, task_id: int, result,
+		self, task_id: int, result: object,
 	) -> None:
 		"""Handle badge computation completion.
 

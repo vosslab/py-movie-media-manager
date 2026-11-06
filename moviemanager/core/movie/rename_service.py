@@ -12,26 +12,6 @@ import moviemanager.core.movie.template_engine
 
 
 #============================================
-def _collect_artwork_files(directory: str, video_basename: str = "") -> list:
-	"""Find artwork files in a movie directory.
-
-	Delegates to moviemanager.core.file.collector.collect_artwork_file_paths().
-
-	Args:
-		directory: path to the movie directory.
-		video_basename: video filename without extension, used to
-			match prefixed artwork (e.g. 'Movie.Name').
-
-	Returns:
-		List of full paths to artwork files that exist on disk.
-	"""
-	artwork_paths = moviemanager.core.file.collector.collect_artwork_file_paths(
-		directory, video_basename=video_basename,
-	)
-	return artwork_paths
-
-
-#============================================
 def rename_movie(
 	movie: moviemanager.core.models.movie.Movie,
 	path_template: str,
@@ -98,7 +78,9 @@ def rename_movie(
 	video_basename = ""
 	if movie.video_file:
 		video_basename = os.path.splitext(movie.video_file.filename)[0]
-	artwork_files = _collect_artwork_files(movie.path, video_basename)
+	artwork_files = moviemanager.core.file.collector.collect_artwork_file_paths(
+		movie.path, video_basename=video_basename,
+	)
 	for art_path in artwork_files:
 		# keep original artwork filename in the new directory
 		art_name = os.path.basename(art_path)

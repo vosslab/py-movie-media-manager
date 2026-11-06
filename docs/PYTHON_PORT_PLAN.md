@@ -285,7 +285,7 @@ Streams A and B can run fully in parallel. Stream C starts once models land.
 | --- | --- | --- |
 | `tmdbv3api` lacks needed endpoints | Medium | Fall back to raw `requests` calls |
 | `cinemagoer` rate-limited or unstable | Medium | Add `time.sleep(random.random())` |
-| `pymediainfo` requires system lib | Low | Document in [docs/INSTALL.md](docs/INSTALL.md) |
+| `pymediainfo` requires system lib | Low | Document in [docs/INSTALL.md](INSTALL.md) |
 | PySide6 packaging on macOS | Medium | Test early in M5, use `pyinstaller` if needed |
 | NFO format edge cases | Low | Test against real NFO files from tinyMediaManager |
 

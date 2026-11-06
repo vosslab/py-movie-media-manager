@@ -40,7 +40,7 @@ def _scale_size_to_max_dimension(
 class ImageLabel(PySide6.QtWidgets.QLabel):
 	"""QLabel subclass that displays images with aspect-ratio scaling."""
 
-	def __init__(self, parent=None):
+	def __init__(self, parent: PySide6.QtWidgets.QWidget | None = None) -> None:
 		super().__init__(parent)
 		self._pixmap = None
 		self.setMinimumSize(100, 150)
@@ -126,7 +126,7 @@ class ImageLabel(PySide6.QtWidgets.QLabel):
 		return pixmap
 
 	#============================================
-	def resizeEvent(self, event):
+	def resizeEvent(self, event: PySide6.QtGui.QResizeEvent) -> None:
 		"""Re-scale image on resize."""
 		self._update_scaled()
 		super().resizeEvent(event)

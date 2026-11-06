@@ -112,7 +112,7 @@ def _make_images_result() -> types.SimpleNamespace:
 #============================================
 @unittest.mock.patch("tmdbv3api.TMDb")
 @unittest.mock.patch("tmdbv3api.Movie")
-def test_search_returns_results(mock_movie_cls, mock_tmdb_cls):
+def test_search_returns_results(mock_movie_cls: object, mock_tmdb_cls: object) -> None:
 	"""Verify search maps tmdbv3api results to SearchResult dataclasses."""
 	fake_result = _make_search_result()
 	mock_movie_instance = mock_movie_cls.return_value
@@ -135,7 +135,7 @@ def test_search_returns_results(mock_movie_cls, mock_tmdb_cls):
 #============================================
 @unittest.mock.patch("tmdbv3api.TMDb")
 @unittest.mock.patch("tmdbv3api.Movie")
-def test_search_empty(mock_movie_cls, mock_tmdb_cls):
+def test_search_empty(mock_movie_cls: object, mock_tmdb_cls: object) -> None:
 	"""Verify search returns empty list when no results found."""
 	mock_movie_instance = mock_movie_cls.return_value
 	mock_movie_instance.search.return_value = []
@@ -149,7 +149,7 @@ def test_search_empty(mock_movie_cls, mock_tmdb_cls):
 #============================================
 @unittest.mock.patch("tmdbv3api.TMDb")
 @unittest.mock.patch("tmdbv3api.Movie")
-def test_get_metadata_basic(mock_movie_cls, mock_tmdb_cls):
+def test_get_metadata_basic(mock_movie_cls: object, mock_tmdb_cls: object) -> None:
 	"""Verify get_metadata maps detail response to MediaMetadata."""
 	fake_detail = _make_detail_result()
 	mock_movie_instance = mock_movie_cls.return_value
@@ -176,7 +176,7 @@ def test_get_metadata_basic(mock_movie_cls, mock_tmdb_cls):
 #============================================
 @unittest.mock.patch("tmdbv3api.TMDb")
 @unittest.mock.patch("tmdbv3api.Movie")
-def test_get_metadata_extracts_director(mock_movie_cls, mock_tmdb_cls):
+def test_get_metadata_extracts_director(mock_movie_cls: object, mock_tmdb_cls: object) -> None:
 	"""Verify director is extracted from crew list."""
 	fake_detail = _make_detail_result()
 	mock_movie_instance = mock_movie_cls.return_value
@@ -192,7 +192,7 @@ def test_get_metadata_extracts_director(mock_movie_cls, mock_tmdb_cls):
 #============================================
 @unittest.mock.patch("tmdbv3api.TMDb")
 @unittest.mock.patch("tmdbv3api.Movie")
-def test_get_metadata_extracts_actors(mock_movie_cls, mock_tmdb_cls):
+def test_get_metadata_extracts_actors(mock_movie_cls: object, mock_tmdb_cls: object) -> None:
 	"""Verify actors are mapped to CastMember dataclasses."""
 	fake_detail = _make_detail_result()
 	mock_movie_instance = mock_movie_cls.return_value
@@ -212,7 +212,7 @@ def test_get_metadata_extracts_actors(mock_movie_cls, mock_tmdb_cls):
 #============================================
 @unittest.mock.patch("tmdbv3api.TMDb")
 @unittest.mock.patch("tmdbv3api.Movie")
-def test_get_artwork_returns_urls(mock_movie_cls, mock_tmdb_cls):
+def test_get_artwork_returns_urls(mock_movie_cls: object, mock_tmdb_cls: object) -> None:
 	"""Verify get_artwork returns poster and fanart URL lists."""
 	fake_images = _make_images_result()
 	mock_movie_instance = mock_movie_cls.return_value
@@ -233,7 +233,7 @@ def test_get_artwork_returns_urls(mock_movie_cls, mock_tmdb_cls):
 #============================================
 @unittest.mock.patch("tmdbv3api.TMDb")
 @unittest.mock.patch("tmdbv3api.Movie")
-def test_sleep_between_calls(mock_movie_cls, mock_tmdb_cls):
+def test_sleep_between_calls(mock_movie_cls: object, mock_tmdb_cls: object) -> None:
 	"""Verify time.sleep is called before API requests."""
 	mock_movie_instance = mock_movie_cls.return_value
 	mock_movie_instance.search.return_value = []
@@ -258,8 +258,8 @@ def test_sleep_between_calls(mock_movie_cls, mock_tmdb_cls):
 @unittest.mock.patch("tmdbv3api.Movie")
 @unittest.mock.patch("tmdbv3api.Find")
 def test_get_metadata_resolves_tmdb_id_from_imdb_id(
-	mock_find_cls, mock_movie_cls, mock_tmdb_cls,
-):
+	mock_find_cls: object, mock_movie_cls: object, mock_tmdb_cls: object,
+) -> None:
 	"""Verify get_metadata resolves tmdb_id via find_by_imdb_id when missing."""
 	# set up find_by_imdb_id to return a tmdb_id
 	fake_match = types.SimpleNamespace(id=155, poster_path="/dk.jpg")
@@ -290,8 +290,8 @@ def test_get_metadata_resolves_tmdb_id_from_imdb_id(
 @unittest.mock.patch("tmdbv3api.Movie")
 @unittest.mock.patch("tmdbv3api.Find")
 def test_get_metadata_returns_empty_when_no_ids(
-	mock_find_cls, mock_movie_cls, mock_tmdb_cls,
-):
+	mock_find_cls: object, mock_movie_cls: object, mock_tmdb_cls: object,
+) -> None:
 	"""Verify get_metadata returns empty metadata when no IDs provided."""
 	scraper = moviemanager.scraper.tmdb_scraper.TmdbScraper(api_key="fake")
 	with unittest.mock.patch("time.sleep"):
@@ -306,8 +306,8 @@ def test_get_metadata_returns_empty_when_no_ids(
 @unittest.mock.patch("tmdbv3api.Movie")
 @unittest.mock.patch("tmdbv3api.Find")
 def test_find_by_imdb_id_returns_tmdb_id_and_poster(
-	mock_find_cls, mock_movie_cls, mock_tmdb_cls
-):
+	mock_find_cls: object, mock_movie_cls: object, mock_tmdb_cls: object
+) -> None:
 	"""Verify imdb_id lookup returns TMDB id and poster URL."""
 	fake_match = types.SimpleNamespace(id=155, poster_path="/dk.jpg")
 	fake_find_result = types.SimpleNamespace(movie_results=[fake_match])
@@ -326,8 +326,8 @@ def test_find_by_imdb_id_returns_tmdb_id_and_poster(
 @unittest.mock.patch("tmdbv3api.Movie")
 @unittest.mock.patch("tmdbv3api.Find")
 def test_find_by_imdb_id_empty_returns_defaults(
-	mock_find_cls, mock_movie_cls, mock_tmdb_cls
-):
+	mock_find_cls: object, mock_movie_cls: object, mock_tmdb_cls: object
+) -> None:
 	"""Verify imdb_id lookup handles no TMDB match."""
 	fake_find_result = types.SimpleNamespace(movie_results=[])
 	mock_find_instance = mock_find_cls.return_value

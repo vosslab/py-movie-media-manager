@@ -16,7 +16,7 @@ class StatusBar(PySide6.QtWidgets.QStatusBar):
 	# emitted when the user toggles the Pause button (True = paused)
 	pause_toggled = PySide6.QtCore.Signal(bool)
 
-	def __init__(self, parent=None):
+	def __init__(self, parent: PySide6.QtWidgets.QWidget | None = None) -> None:
 		super().__init__(parent)
 		# jobs button (permanent widget on the right)
 		self._jobs_btn = PySide6.QtWidgets.QPushButton("Jobs: 0")
