@@ -1,5 +1,10 @@
 # tinyMediaManager Python port -- implementation plan
 
+> Historical planning record. This document describes the original port plan
+> and its then-proposed dependencies and file layout; it is not a current
+> roadmap or an authoritative description of the implemented application.
+> Use the maintained user and architecture documentation for current behavior.
+
 ## Context
 
 tinyMediaManager is a Java/Swing desktop app for managing movie and TV show media

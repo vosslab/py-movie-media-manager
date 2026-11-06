@@ -35,6 +35,11 @@ Hover over any error row to see the full traceback in a tooltip.
 
 ### Buttons
 
+- **Cancel Job** -- requests cancellation of the selected job. A job that has
+  not started does not run; a job already inside an external download or
+  network request may finish that request before it stops reporting results.
+- **Pause All** / **Resume All** -- holds newly submitted jobs in the queue.
+  Jobs already running continue; choose Resume All to start the held jobs.
 - **Error Summary** -- shows a popup with error counts grouped by category
 - **Clear Completed** -- removes all finished (done and error) jobs from the list
 - **Close** -- closes the dialog (jobs keep running)

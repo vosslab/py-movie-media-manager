@@ -33,6 +33,10 @@ Higher values run first when the thread pool queue is congested.
 | `active_count` (property) | `int` | Count of queued or running jobs |
 | `all_jobs` (property) | `list` | Job metadata dicts, newest first |
 | `clear_completed()` | None | Remove all done/error jobs |
+| `pause()` | None | Hold subsequently submitted workers; running work continues |
+| `resume()` | None | Start workers held while the queue was paused |
+| `is_paused` (property) | `bool` | Whether new workers are being held |
+| `pending_count` (property) | `int` | Workers held while paused |
 | `is_running(task_id)` | `bool` | True if task has not finished |
 | `is_done(task_id)` | `bool` | True if task has a result or error |
 | `cancel(task_id)` | None | Request cancellation |
@@ -66,6 +70,13 @@ Each `submit_job()` call creates a metadata dict:
 ```
 
 The `all_jobs` property adds `"task_id": int` to each dict.
+
+## Queue control
+
+`pause()` prevents newly submitted workers from entering Qt's thread pool. It
+does not interrupt workers that already started. `resume()` starts the held
+workers in their submitted order, preserving each worker's priority. The jobs
+dialog displays queued jobs as **Paused** while this state is active.
 
 ## Error categorization
 

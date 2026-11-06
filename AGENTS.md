@@ -1,12 +1,18 @@
-## Coding Style
-See Python coding style in docs/PYTHON_STYLE.md.
-See Markdown style in docs/MARKDOWN_STYLE.md.
-See repo style in docs/REPO_STYLE.md.
-When making edits, document them in docs/CHANGELOG.md.
-Record human-stated guidance in docs/HUMAN_GUIDANCE.md; record design decisions in docs/DESIGN_DECISIONS.md.
+## Repository guidance
 
-## Python Environment
-AI agents (Codex/Claude) must run Python using `source source_me.sh && python3`
-If additional PYTHONPATH paths are needed add them to source_me.sh
-(Prefer using the system python, use Python 3.12 for macOS and 3.13 for debian13; venv only as a last resort.).
-On this user's macOS (Homebrew Python 3.12), Python modules are installed to `/opt/homebrew/lib/python3.12/site-packages/`. Debian will likely be in `/home/vosslab/.local/lib/python3.1x/site-packages/`
+- docs/REPO_STYLE.md
+- docs/PYTHON_STYLE.md
+- docs/MARKDOWN_STYLE.md
+- docs/PYTEST_STYLE.md
+- docs/CHANGELOG.md
+- docs/HUMAN_GUIDANCE.md
+- docs/DESIGN_DECISIONS.md
+- When in doubt, implement the changes the user asked for rather than waiting for a response.
+- Run focused pytest checks for changed code; use `-k` to narrow test selection when useful.
+
+## Python environment
+
+- AI agents run Python with `source source_me.sh && python3`.
+- Add required PYTHONPATH entries to source_me.sh.
+- Prefer the system Python; use Python 3.12 on macOS and 3.13 on Debian. Use a venv only as a last resort.
+- macOS modules: `/opt/homebrew/lib/python3.12/site-packages/`; Debian modules: `/home/vosslab/.local/lib/python3.1x/site-packages/`.

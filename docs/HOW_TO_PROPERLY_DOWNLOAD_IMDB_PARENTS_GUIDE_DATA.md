@@ -128,7 +128,7 @@ full WAF documentation.
 ## Implementation in this project
 
 The parental guide fetch is implemented in
-[moviemanager/scraper/imdb_scraper.py](../moviemanager/scraper/imdb_scraper.py):
+[moviemanager/scraper/imdb_parental_guide_scraper.py](../moviemanager/scraper/imdb_parental_guide_scraper.py):
 
 - `_fetch_parental_guide_graphql()` -- primary transport via IMDB GraphQL API
 - `get_parental_guide()` -- tries GraphQL first, falls back to browser transport

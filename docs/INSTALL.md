@@ -1,66 +1,70 @@
 # Install
 
-Install py-movie-media-manager so that the `movie-organizer` CLI and PySide6 GUI
-are available on your system.
+Run the PySide6 desktop application and its command-line helper from a source
+checkout. This repository is a desktop application, not a published PyPI
+package. The verified CLI invocation is `python3 movie_organizer.py` from that
+checkout.
 
 ## Requirements
 
-- Python 3.12 or later.
-- `pip` for installing Python packages.
-- The MediaInfo library for codec detection. Supported `pymediainfo` wheels bundle it;
-  source installations need a system copy.
-- `yt-dlp` and FFmpeg for trailer downloading and merging video/audio streams.
+- Python 3.12. The project bootstrap commands use that interpreter.
+- Git to obtain the source.
+- MediaInfo for media probing. `pymediainfo` supplies the Python interface; the
+  Homebrew `media-info` formula supplies the `mediainfo` command and library.
+- `yt-dlp` and FFmpeg only when downloading trailers; FFmpeg merges separately
+  downloaded video and audio streams.
 
-On macOS, install the system tools from [Brewfile](../Brewfile):
+On macOS, [Brewfile](../Brewfile) installs the supported system tools:
 
 ```bash
 brew bundle
 ```
 
-The `media-info` formula installs the `mediainfo` command and depends on `libmediainfo`.
-See the [Homebrew formula](https://formulae.brew.sh/formula/media-info) and
-[pymediainfo installation notes](https://pymediainfo.readthedocs.io/en/stable/introduction.html#installation).
-On other platforms, install the MediaInfo library when needed and install `yt-dlp` and FFmpeg
-through your package manager. Scanning and metadata editing do not require the trailer tools.
+`imagemagick` and `webp` in that Brewfile support the repository's screenshot
+maintenance script. They are not needed to scan, match, organize, or use the GUI.
+On other platforms, install MediaInfo through the system package manager when it
+is not provided by the `pymediainfo` wheel. Install `yt-dlp` and FFmpeg only for
+trailer downloads.
 
-## Install steps
-
-1. Clone the repository:
+## Install from source
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/vosslab/py-movie-media-manager.git
 cd py-movie-media-manager
+source ./source_me.sh
+python3 -m pip install -r pip_requirements.txt
 ```
 
-2. Install runtime dependencies:
+For tests and development checks, add the optional development dependencies:
 
 ```bash
-source source_me.sh
-pip install -r pip_requirements.txt
+source ./source_me.sh
+python3 -m pip install -r pip_requirements-dev.txt
 ```
 
-3. Install the package in editable mode:
+## Configure metadata services
 
-```bash
-pip install -e .
-```
-
-4. Install dev dependencies (optional, for testing):
-
-```bash
-pip install -r pip_requirements-dev.txt
-```
-
-## Configuration
-
-API keys and settings are stored in `~/.config/movie_organizer.yaml`.
-The file is created automatically on first run. Add your TMDB API key there
-if you want TMDB scraping (IMDB works without a key).
+Open **Settings** in the GUI and save the appropriate credentials. Settings are
+stored in `~/.config/movie_organizer.yaml` when saved. IMDB is the default
+scraper; add a TMDB API key before selecting TMDB. Optional Fanart.tv artwork
+uses its own API key. Subtitle downloads require an OpenSubtitles API key,
+username, and password. Trailer downloads use `yt-dlp`; they do not require a
+provider API key.
 
 ## Verify install
 
+From the source checkout, either command should print usage rather than an
+import error:
+
 ```bash
-source source_me.sh && python3 movie_organizer.py --help
+source ./source_me.sh && python3 movie_organizer.py --help
+source ./source_me.sh && python3 movie_organizer_gui.py --help
 ```
 
-This prints the CLI usage and available subcommands.
+These commands verify the local CLI and GUI launch arguments. They do not verify
+an API key, network access, or a live metadata provider.
+
+## Known gaps
+
+- [ ] Verify package-manager instructions for each non-macOS platform before
+  adding platform-specific installation commands.

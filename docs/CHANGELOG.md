@@ -18,6 +18,9 @@
 - Split movie matching by responsibility: `MovieChooserDialog` now coordinates prematch,
   navigation, and scraping; `MovieSearchPane` owns query, result, and preview state; and
   `MovieSearchPrefetch` owns cancellable next-movie caches.
+- Refreshed the remaining documentation audit: documented jobs queue control, corrected
+  the parental-guide scraper reference, and labeled the original Python port plan as
+  historical context rather than a current roadmap.
 
 ## 2026-03-04
 
