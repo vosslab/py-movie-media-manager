@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "movie-media-manager"
-version = "26.02b1"
+version = "26.11"
 description = "Python movie media manager inspired by tinyMediaManager"
 requires-python = ">=3.12"
 license = "GPL-3.0-or-later"
